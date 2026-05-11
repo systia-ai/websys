@@ -53,7 +53,7 @@ body {
       rgba(13, 71, 161, 0.55) 40%,
       rgba(15, 23, 42, 0.88) 100%
     ),
-    url('/assets/home-repair-bg.png') center / cover no-repeat;
+    var(--bg-home-repair) center / cover no-repeat;
 }
 
 .home-page-inner {

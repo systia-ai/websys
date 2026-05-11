@@ -163,7 +163,7 @@ function App() {
             <div className="home-header-brand">
               <img
                 className="home-logo-sistebit"
-                src="/assets/sistebit-logo.png"
+                src={`${import.meta.env.BASE_URL}assets/sistebit-logo.png`}
                 alt="Sistebit"
                 decoding="async"
                 fetchPriority="high"
