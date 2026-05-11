@@ -5,6 +5,29 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>cwebfix</title>
+
+    <style>
+      /* Bloqueo visual inmediato antes de que cargue React/Vite */
+      body { display: none !important; }
+    </style>
+
+    <script>
+      (function() {
+        // --- CONFIGURA TU CONTRASEÑA AQUÍ ---
+        const claveCorrecta = "Systia1723*"; 
+        
+        const pass = prompt("Acceso restringido. Introduce la contraseña para entrar:");
+
+        if (pass === claveCorrecta) {
+          // Si es correcta, permitimos que el cuerpo se vea
+          document.write('<style>body { display: block !important; }</style>');
+        } else {
+          // Si es incorrecta, lo sacamos de la página
+          alert("Contraseña incorrecta.");
+          window.location.href = "https://www.google.com";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
