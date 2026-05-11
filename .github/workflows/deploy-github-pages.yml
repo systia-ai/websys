@@ -30,8 +30,22 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # Vite incrusta VITE_* en el JS en tiempo de build; sin esto el sitio usa localStorage vacío.
+      - name: Comprobar secretos de Supabase
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Agrega en el repo (Settings → Secrets and variables → Actions) los secretos VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY con los mismos valores que en tu archivo .env local."
+            exit 1
+          fi
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
       - name: Build (Vite → dist)
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Subir artefacto de Pages
         uses: actions/upload-pages-artifact@v4
