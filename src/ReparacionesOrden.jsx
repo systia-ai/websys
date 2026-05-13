@@ -4,6 +4,7 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
+import { abrirWhatsAppOrden } from './whatsappUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -626,6 +627,26 @@ export default function ReparacionesOrden({
     }
   }
 
+  function enviarWhatsAppOrden() {
+    const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
+    if (!ord) {
+      onError('Primero registra la orden de servicio para enviar el mensaje.')
+      return
+    }
+    const res = abrirWhatsAppOrden({ telefono: telClienteUi, numeroOrden: ord })
+    if (res.ok) {
+      onNotice('Mensaje listo en WhatsApp. Pulsa enviar para que llegue al cliente.')
+      return
+    }
+    if (res.motivo === 'sin-telefono') {
+      onError('El cliente no tiene un teléfono registrado.')
+    } else if (res.motivo === 'telefono-invalido') {
+      onError(`El teléfono "${telClienteUi}" no tiene un formato válido para WhatsApp.`)
+    } else if (res.motivo === 'popup-bloqueado') {
+      onError('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
+    }
+  }
+
   return (
     <div className="rep-root">
       {!omitOuterHeader ? (
@@ -869,6 +890,15 @@ export default function ReparacionesOrden({
           </button>
           <button type="button" className="btn-primary wide" disabled={!puedeAccionesPdf} onClick={enviarOrdenPdf}>
             Enviar orden de servicio
+          </button>
+          <button
+            type="button"
+            className="btn-success wide"
+            disabled={!puedeAccionesPdf || !telClienteUi}
+            onClick={enviarWhatsAppOrden}
+            title={!telClienteUi ? 'El cliente no tiene teléfono registrado' : 'Abrir WhatsApp con un mensaje listo para el cliente'}
+          >
+            📲 Enviar por WhatsApp
           </button>
           <button type="button" className="btn-anticipo wide" onClick={abrirAnticipo}>
             Recibir anticipo
