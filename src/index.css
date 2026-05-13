@@ -1411,10 +1411,25 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   background: #fff;
   cursor: pointer;
   font: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.rep-activa-card:hover {
+.rep-activa-card:hover,
+.rep-activa-card:focus-visible {
   border-color: #1976d2;
+  background: #e3f2fd;
+  color: #0d47a1;
+  outline: none;
+}
+
+.rep-activa-card:hover strong,
+.rep-activa-card:focus-visible strong {
+  color: #0d47a1;
+}
+
+.rep-activa-card:hover .small,
+.rep-activa-card:focus-visible .small {
+  color: #1565c0;
 }
 
 .rep-activa-card .small {
