@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga de reparación existente vía Supabase/local */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { buildEtiquetaQrUrl } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 
@@ -562,12 +563,43 @@ export default function ReparacionesOrden({
     w.print()
   }
 
-  function imprimirEtiquetas() {
+  async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
-    imprimirBorrador(
-      'Etiquetas',
-      `<h2>Etiquetas — Orden ${ord}</h2><p><strong>Cliente:</strong> ${nombreClienteUi}</p><p><strong>Serie:</strong> ${serieEquipo}</p><p><strong>Tipo:</strong> ${tipoEquipo}</p>`,
-    )
+    const nombre = nombreClienteUi || '—'
+    const equipoParts = []
+    if (serieEquipo) equipoParts.push(`Serie: ${serieEquipo}`)
+    if (tipoEquipo) equipoParts.push(`Tipo: ${tipoEquipo}`)
+    if (descripcionEquipo) equipoParts.push(descripcionEquipo)
+    const equipoText = equipoParts.length ? equipoParts.join(' — ') : '—'
+    const etiquetaId =
+      globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    const qrUrl = buildEtiquetaQrUrl({
+      nombre: nombreClienteUi,
+      orden: ord,
+      equipo: equipoText,
+      etiquetaId,
+    })
+    let qrDataUrl
+    try {
+      const QRCode = (await import('qrcode')).default
+      qrDataUrl = await QRCode.toDataURL(qrUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 400,
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+    } catch {
+      onError('No se pudo generar el código QR para la etiqueta.')
+      return
+    }
+
+    try {
+      const { downloadEtiquetaPdf } = await import('./etiquetaPdf.js')
+      downloadEtiquetaPdf({ nombre, orden: ord, qrDataUrl })
+      onNotice('PDF de etiqueta descargado (2×1 in).')
+    } catch (e) {
+      onError(`No se pudo generar el PDF de la etiqueta: ${e?.message ?? e}`)
+    }
   }
 
   function enviarOrdenPdf() {
@@ -825,7 +857,7 @@ export default function ReparacionesOrden({
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
-            Imprimir Etiquetas
+            Imprimir etiqueta (PDF)
           </button>
           <button type="button" className="btn-primary wide" disabled={!puedeAccionesPdf} onClick={enviarOrdenPdf}>
             Enviar orden de servicio

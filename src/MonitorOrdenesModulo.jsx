@@ -58,6 +58,7 @@ const TECNICO_SIN = '__sin_tecnico__'
  * columnas tipo taller (Android).
  */
 export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNotice, onEditarOrden }) {
+  void onNotice
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])

@@ -2446,3 +2446,77 @@ input.full {
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Vista pública al escanear el QR de la etiqueta (#/etiqueta?…) */
+.etiqueta-publica-root {
+  min-height: 100vh;
+  background: #f0f4f8;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.etiqueta-publica-header {
+  padding: 12px 16px;
+  background: #1e3a5f;
+}
+
+.etiqueta-publica-volver {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.etiqueta-publica-volver:hover {
+  text-decoration: underline;
+}
+
+.etiqueta-publica-card {
+  max-width: 520px;
+  margin: 24px auto;
+  padding: 24px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+}
+
+.etiqueta-publica-titulo {
+  margin: 0 0 20px;
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+
+.etiqueta-publica-dl {
+  margin: 0;
+}
+
+.etiqueta-publica-dl > div {
+  margin-bottom: 18px;
+}
+
+.etiqueta-publica-dl dt {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.etiqueta-publica-dl dd {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.etiqueta-publica-equipo {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.etiqueta-publica-vacio {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.5;
+}
