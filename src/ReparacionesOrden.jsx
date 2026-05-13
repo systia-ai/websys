@@ -805,7 +805,13 @@ export default function ReparacionesOrden({
         <div className="rep-block estatus-row">
           <label>Estatus</label>
           <div className="estatus-inner">
-            <input value={estatus} onChange={(e) => setEstatus(e.target.value.toUpperCase())} placeholder="Seleccionar estatus" list="est-opts" />
+            <input
+              value={estatus}
+              readOnly
+              placeholder="Selecciona un estatus →"
+              aria-readonly="true"
+              tabIndex={-1}
+            />
             <select className="estatus-select" value="" onChange={(e) => e.target.value && setEstatus(e.target.value)}>
               <option value="">Seleccionar</option>
               {ESTATUS_ORDEN.map((st) => (
@@ -844,12 +850,6 @@ export default function ReparacionesOrden({
             Puedes asignar uno o dos técnicos. Si necesitas agregar/eliminar técnicos del catálogo, hazlo desde el <strong>Monitor de órdenes → ⚙️ Gestionar</strong>.
           </p>
         </div>
-        <datalist id="est-opts">
-          {ESTATUS_ORDEN.map((st) => (
-            <option key={st} value={st} />
-          ))}
-        </datalist>
-
         {(esOrdenExistente || idReparacion != null) && (
           <div className="rep-block highlight">
             <label>Descripcion de la solucion</label>
