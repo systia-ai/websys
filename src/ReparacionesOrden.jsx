@@ -557,20 +557,6 @@ export default function ReparacionesOrden({
   const correoClienteUi = clienteDesdeBd?.correo || s.clienteCorreo || ''
   const puedeAccionesPdf = ordenRegistrada || idReparacion != null
 
-  function imprimirBorrador(titulo, bodyHtml) {
-    const w = window.open('', '_blank')
-    if (!w) {
-      onError('Permita ventanas emergentes para imprimir.')
-      return
-    }
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>${titulo}</title><style>body{font-family:Arial;padding:16px}</style></head><body>${bodyHtml}</body></html>`,
-    )
-    w.document.close()
-    w.focus()
-    w.print()
-  }
-
   async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nombre = nombreClienteUi || '—'
@@ -607,20 +593,37 @@ export default function ReparacionesOrden({
     }
   }
 
-  function enviarOrdenPdf() {
+  async function enviarOrdenPdf() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nt = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) ?? ''
-    imprimirBorrador(
-      'Orden de servicio',
-      `<h1>Orden de servicio #${ord}</h1>
-      <p><strong>Cliente:</strong> ${nombreClienteUi} — ${telClienteUi}</p>
-      <p><strong>Serie:</strong> ${serieEquipo} &nbsp; <strong>Tipo:</strong> ${tipoEquipo}</p>
-      <p><strong>Tipo reparación:</strong> ${tipoReparacion}</p>
-      <p><strong>Descripción equipo:</strong> ${descripcionEquipo}</p>
-      <p><strong>Problemas:</strong> ${problemasReportados}</p>
-      <p><strong>Niveles tinta:</strong> ${nt}</p>
-      <p><strong>Estatus:</strong> ${estatus}</p>`,
-    )
+    try {
+      const { downloadOrdenServicioPdf } = await import('./ordenServicioPdf.js')
+      downloadOrdenServicioPdf({
+        orden: ord,
+        cliente: {
+          nombre: nombreClienteUi,
+          telefono: telClienteUi,
+          correo: correoClienteUi,
+          domicilio: domClienteUi,
+        },
+        equipo: {
+          serie: serieEquipo,
+          tipo: tipoEquipo,
+          descripcion: descripcionEquipo,
+        },
+        servicio: {
+          tipoReparacion,
+          estatus,
+          tecnico: combinarTecnicos(tecnico1, tecnico2),
+          problemas: problemasReportados,
+          nivelesTinta: nt,
+        },
+        solucion: descripcionSolucion,
+      })
+      onNotice('PDF de orden de servicio descargado.')
+    } catch (e) {
+      onError(`No se pudo generar el PDF de la orden: ${e?.message ?? e}`)
+    }
   }
 
   return (
