@@ -1,6 +1,17 @@
 /**
+ * Texto embebido en el QR de la etiqueta PDF (no es URL).
+ * Al escanear, el lector muestra este texto; no abre la app automáticamente.
+ */
+export function buildEtiquetaQrPlainText({ nombre, orden, equipo }) {
+  const n = (String(nombre ?? '').trim() || '—').toUpperCase()
+  const o = String(orden ?? '').trim() || '—'
+  const e = String(equipo ?? '').trim() || '—'
+  return [`Cliente: ${n}`, `Orden: ${o}`, `Equipo: ${e}`].join('\n')
+}
+
+/**
  * URL de la vista pública de etiqueta (HashRouter: #/etiqueta?…).
- * Compatible con GitHub Pages (base /websys/).
+ * Compatible con GitHub Pages (base /websys/). Útil para enlaces manuales.
  */
 export function buildEtiquetaQrUrl({ nombre, orden, equipo, etiquetaId }) {
   const qs = new URLSearchParams()

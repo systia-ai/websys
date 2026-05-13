@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga de reparación existente vía Supabase/local */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { buildEtiquetaQrUrl } from './etiquetaLink.js'
+import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 
@@ -571,19 +571,16 @@ export default function ReparacionesOrden({
     if (tipoEquipo) equipoParts.push(`Tipo: ${tipoEquipo}`)
     if (descripcionEquipo) equipoParts.push(descripcionEquipo)
     const equipoText = equipoParts.length ? equipoParts.join(' — ') : '—'
-    const etiquetaId =
-      globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
-    const qrUrl = buildEtiquetaQrUrl({
+    const qrText = buildEtiquetaQrPlainText({
       nombre: nombreClienteUi,
       orden: ord,
       equipo: equipoText,
-      etiquetaId,
     })
     let qrDataUrl
     try {
       const QRCode = (await import('qrcode')).default
-      qrDataUrl = await QRCode.toDataURL(qrUrl, {
-        errorCorrectionLevel: 'M',
+      qrDataUrl = await QRCode.toDataURL(qrText, {
+        errorCorrectionLevel: 'L',
         margin: 1,
         width: 400,
         color: { dark: '#000000', light: '#ffffff' },
