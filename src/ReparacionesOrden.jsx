@@ -656,31 +656,83 @@ export default function ReparacionesOrden({
 
         <h2 className="rep-subtitle">Niveles de Tinta</h2>
         <div className="tinta-grid">
-          <div>
-            <label>Black</label>
-            <input value={nivelB} onChange={(e) => setNivelB(e.target.value)} placeholder="Nivel Black" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--black">
+            <span className="tinta-swatch-title">BLACK</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelB}
+              onChange={(e) => setNivelB(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta black, porcentaje"
+            />
           </div>
-          <div>
-            <label>Yellow</label>
-            <input value={nivelY} onChange={(e) => setNivelY(e.target.value)} placeholder="Nivel Yellow" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--yellow">
+            <span className="tinta-swatch-title">YELLOW</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelY}
+              onChange={(e) => setNivelY(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta yellow, porcentaje"
+            />
           </div>
-          <div>
-            <label>Magenta</label>
-            <input value={nivelM} onChange={(e) => setNivelM(e.target.value)} placeholder="Nivel Magenta" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--magenta">
+            <span className="tinta-swatch-title">MAGENTA</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelM}
+              onChange={(e) => setNivelM(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta magenta, porcentaje"
+            />
           </div>
-        </div>
-        <div className="tinta-grid">
-          <div>
-            <label>Cyan</label>
-            <input value={nivelC} onChange={(e) => setNivelC(e.target.value)} placeholder="Nivel Cyan" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--cyan">
+            <span className="tinta-swatch-title">CYAN</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelC}
+              onChange={(e) => setNivelC(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta cyan, porcentaje"
+            />
           </div>
-          <div>
-            <label>magenta light</label>
-            <input value={nivelMlight} onChange={(e) => setNivelMlight(e.target.value)} placeholder="Nivel magenta light" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--magenta-light">
+            <span className="tinta-swatch-title">MAGENTA LIGHT</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelMlight}
+              onChange={(e) => setNivelMlight(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta magenta light, porcentaje"
+            />
           </div>
-          <div>
-            <label>cyan light</label>
-            <input value={nivelClight} onChange={(e) => setNivelClight(e.target.value)} placeholder="Nivel cyan light" list="pct-opts" />
+          <div className="tinta-swatch tinta-swatch--cyan-light">
+            <span className="tinta-swatch-title">CYAN LIGHT</span>
+            <input
+              className="tinta-pct-input"
+              value={nivelClight}
+              onChange={(e) => setNivelClight(e.target.value)}
+              placeholder="%"
+              list="pct-opts"
+              inputMode="numeric"
+              maxLength={5}
+              aria-label="Nivel de tinta cyan light, porcentaje"
+            />
           </div>
         </div>
         <datalist id="pct-opts">
