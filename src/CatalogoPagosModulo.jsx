@@ -168,7 +168,10 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Catálogo de pagos</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">💳</span>
+          Catálogo de pagos
+        </h1>
         <span className="servicios-appbar-placeholder" aria-hidden />
       </header>
 
@@ -203,11 +206,11 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                   <span className="muted small">Cantidad / monto por defecto: ${Number(c.cantidad ?? 0).toFixed(2)}</span>
                 </button>
                 <div className="equipo-card-actions">
-                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(c)} title="Editar">
-                    ✎
+                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(c)} title="Editar" aria-label="Editar">
+                    ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(c)} title="Eliminar">
-                    🗑
+                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(c)} title="Eliminar" aria-label="Eliminar">
+                    🗑️
                   </button>
                 </div>
               </li>

@@ -7,30 +7,84 @@
     <title>cwebfix</title>
 
     <style>
-      /* Bloqueo visual inmediato antes de que cargue React/Vite */
-      body { display: none !important; }
+      /* Ocultamos el contenido de la app inicialmente */
+      #root { display: none; }
+
+      /* Estilos para la pantalla de bloqueo */
+      #lock-screen {
+        position: fixed;
+        inset: 0;
+        background: #1a1a1a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        font-family: sans-serif;
+        color: white;
+      }
+      
+      .login-box {
+        background: #2a2a2a;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        text-align: center;
+      }
+
+      input[type="password"] {
+        padding: 10px;
+        margin: 15px 0;
+        border-radius: 4px;
+        border: none;
+        width: 200px;
+        display: block;
+      }
+
+      button {
+        padding: 10px 20px;
+        background: #646cff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button:hover { background: #535bf2; }
     </style>
+  </head>
+  <body>
+    <div id="lock-screen">
+      <div class="login-box">
+        <h3>Acceso Restringido</h3>
+        <input type="password" id="passInput" placeholder="Introduce la contraseña">
+        <button onclick="verificar()">Entrar</button>
+      </div>
+    </div>
+
+    <div id="root"></div>
 
     <script>
-      (function() {
-        // --- CONFIGURA TU CONTRASEÑA AQUÍ ---
-        const claveCorrecta = "Systia1723*"; 
-        
-        const pass = prompt("Acceso restringido. Introduce la contraseña para entrar:");
+      function verificar() {
+        const claveCorrecta = "Systia1723*";
+        const input = document.getElementById("passInput").value;
 
-        if (pass === claveCorrecta) {
-          // Si es correcta, permitimos que el cuerpo se vea
-          document.write('<style>body { display: block !important; }</style>');
+        if (input === claveCorrecta) {
+          // Si es correcta, quitamos el bloqueo y mostramos la app
+          document.getElementById("lock-screen").style.display = "none";
+          document.getElementById("root").style.display = "block";
         } else {
-          // Si es incorrecta, lo sacamos de la página
           alert("Contraseña incorrecta.");
           window.location.href = "https://www.google.com";
         }
-      })();
+      }
+
+      // Permitir dar "Enter" para entrar
+      document.getElementById("passInput").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") verificar();
+      });
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

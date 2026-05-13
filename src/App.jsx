@@ -336,6 +336,11 @@ function App() {
             setError(msg)
             setTimeout(() => setError(''), 6000)
           }}
+          onNotice={(msg) => {
+            setNotice(msg)
+            setTimeout(() => setNotice(''), 4000)
+          }}
+          onEditarOrden={(payload) => openReparacionesFromServicios(payload)}
         />
       </main>
     )

@@ -273,7 +273,10 @@ p{margin:0 0 16px;line-height:1.5}
           <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
             ←
           </button>
-          <h1 className="servicios-appbar-title">Reportes</h1>
+          <h1 className="servicios-appbar-title">
+            <span className="appbar-title-emoji" aria-hidden="true">📊</span>
+            Reportes
+          </h1>
           <span className="servicios-appbar-placeholder" aria-hidden />
         </header>
         <div className="servicios-body">
@@ -323,7 +326,10 @@ p{margin:0 0 16px;line-height:1.5}
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Reportes</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">📊</span>
+          Reportes
+        </h1>
         <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={volverAElegirFechas}>
           Periodo
         </button>

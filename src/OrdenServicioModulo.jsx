@@ -37,7 +37,10 @@ export default function OrdenServicioModulo({
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Orden de servicio</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">📝</span>
+          Orden de servicio
+        </h1>
         <div className="appbar-actions-cluster">
           {mostrarFormulario ? (
             <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onClearOrdenSession}>

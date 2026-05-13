@@ -378,7 +378,10 @@ export default function ClientesModulo({
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Clientes</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">👥</span>
+          Clientes
+        </h1>
         {onIrEquipos || onIrAOrdenServicio ? (
           <div className="appbar-actions-cluster">
             {onIrEquipos ? (
@@ -437,11 +440,11 @@ export default function ClientesModulo({
                     {row.correo ? <span className="muted small">✉️ {row.correo}</span> : null}
                   </button>
                   <div className="equipo-card-actions">
-                    <button type="button" className="btn-icon edit" onClick={() => abrirEditar(row)} title="Editar">
-                      ✎
+                    <button type="button" className="btn-icon edit" onClick={() => abrirEditar(row)} title="Editar" aria-label="Editar">
+                      ✏️
                     </button>
-                    <button type="button" className="btn-icon danger" onClick={() => eliminarCliente(row)} title="Eliminar">
-                      🗑
+                    <button type="button" className="btn-icon danger" onClick={() => eliminarCliente(row)} title="Eliminar" aria-label="Eliminar">
+                      🗑️
                     </button>
                   </div>
                 </li>

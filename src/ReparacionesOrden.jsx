@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
+import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -91,6 +92,9 @@ export default function ReparacionesOrden({
   const [estatus, setEstatus] = useState('INGRESADO')
   const [descripcionEquipo, setDescripcionEquipo] = useState(() => s.equipoDescripcion ?? '')
   const [problemasReportados, setProblemasReportados] = useState('')
+  const [tecnico1, setTecnico1] = useState('')
+  const [tecnico2, setTecnico2] = useState('')
+  const [tecnicosCatalogo] = useState(() => leerTecnicos())
   const [nivelB, setNivelB] = useState('')
   const [nivelY, setNivelY] = useState('')
   const [nivelM, setNivelM] = useState('')
@@ -107,6 +111,10 @@ export default function ReparacionesOrden({
 
   const [dialogExito, setDialogExito] = useState(false)
   const [msgExito, setMsgExito] = useState('')
+
+  const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
+  const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
+  const [eliminandoOrden, setEliminandoOrden] = useState(false)
 
   const [pagoModal, setPagoModal] = useState(false)
   const [catalogo, setCatalogo] = useState([])
@@ -136,6 +144,9 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        const [t1, t2] = separarTecnicos(data.tecnico)
+        setTecnico1(t1)
+        setTecnico2(t2)
         setIdReparacion(data.id)
         setOrdenRegistrada(true)
         setClienteIdNum(data.cliente_id ?? null)
@@ -169,6 +180,9 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        const [t1, t2] = separarTecnicos(data.tecnico)
+        setTecnico1(t1)
+        setTecnico2(t2)
         setIdReparacion(data.id)
         setOrdenRegistrada(true)
         setClienteIdNum(data.cliente_id ?? null)
@@ -265,7 +279,7 @@ export default function ReparacionesOrden({
       const row = {
         equipo_id: eid,
         cliente_id: cid,
-        tecnico: '',
+        tecnico: combinarTecnicos(tecnico1, tecnico2),
         estatus,
         descripcion_equipo: descripcionEquipo || null,
         problemas_reportados: problemasReportados || null,
@@ -324,9 +338,10 @@ export default function ReparacionesOrden({
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const patch = {
       estatus,
+      tecnico: combinarTecnicos(tecnico1, tecnico2),
       descripcion_equipo: descripcionEquipo || null,
       problemas_reportados: problemasReportados || null,
-      descripcion_solucion: descripcionSolucion || null,
+      descripcion_solucion: descripcionSolucion ? descripcionSolucion.toUpperCase() : null,
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
@@ -342,11 +357,91 @@ export default function ReparacionesOrden({
           all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         )
       }
+
+      const tipoEquipoNuevo = String(tipoEquipo).trim()
+      if (tipoEquipoNuevo) {
+        const eid = await resolverEquipoId()
+        if (eid != null) {
+          if (supabase) {
+            const { error: eqErr } = await supabase
+              .from('equipos')
+              .update({ tipo_equipo: tipoEquipoNuevo })
+              .eq('id', eid)
+            if (eqErr) console.warn('No se pudo actualizar tipo_equipo del equipo:', eqErr.message)
+          } else {
+            const allEq = readLs(LS_EQUIPOS, [])
+            writeLs(
+              LS_EQUIPOS,
+              allEq.map((e) => (sameId(e.id, eid) ? { ...e, tipo_equipo: tipoEquipoNuevo } : e)),
+            )
+          }
+        }
+      }
+
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
       setDialogExito(true)
     } catch (e) {
       onError(`Error al actualizar: ${e.message}`)
+    }
+  }
+
+  async function eliminarOrden() {
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) {
+      onError('No hay orden para eliminar')
+      return
+    }
+    setEliminandoOrden(true)
+    try {
+      let cuentasIds = []
+      if (supabase) {
+        const { data: cu, error: eCu } = await supabase
+          .from('cuentas')
+          .select('id')
+          .eq('repara_id', id)
+        if (eCu) throw eCu
+        cuentasIds = (cu ?? []).map((c) => c.id)
+        if (cuentasIds.length > 0) {
+          const { error: ePag } = await supabase
+            .from('pagosclientes')
+            .delete()
+            .in('cuenta_id', cuentasIds)
+          if (ePag) throw ePag
+          const { error: eCuDel } = await supabase
+            .from('cuentas')
+            .delete()
+            .eq('repara_id', id)
+          if (eCuDel) throw eCuDel
+        }
+        const { error: eRep } = await supabase.from('reparaciones').delete().eq('id', id)
+        if (eRep) throw eRep
+      } else {
+        cuentasIds = readLs(LS_CUENTAS, [])
+          .filter((c) => Number(c.repara_id) === Number(id))
+          .map((c) => c.id)
+        if (cuentasIds.length > 0) {
+          writeLs(
+            LS_PAGOS,
+            readLs(LS_PAGOS, []).filter((p) => !cuentasIds.some((cid) => sameId(cid, p.cuenta_id))),
+          )
+          writeLs(
+            LS_CUENTAS,
+            readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) !== Number(id)),
+          )
+        }
+        writeLs(
+          LS_REP,
+          readLs(LS_REP, []).filter((r) => Number(r.id) !== Number(id)),
+        )
+      }
+      setEliminarConfirmAbierto(false)
+      onNotice(`Orden #${id} eliminada correctamente`)
+      onSalir?.()
+    } catch (e) {
+      onError(`Error al eliminar orden: ${e.message}`)
+    } finally {
+      setEliminandoOrden(false)
     }
   }
 
@@ -364,27 +459,30 @@ export default function ReparacionesOrden({
     try {
       let cuenta
       if (supabase) {
-        const { data, error } = await supabase.from('cuentas').select('*')
-        if (error) throw error
-        cuenta = (data ?? []).find((c) => Number(c.repara_id) === Number(rid))
+        const { data, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid).maybeSingle()
+        if (error && error.code !== 'PGRST116') throw error
+        cuenta = data ?? null
       } else {
-        cuenta = readLs(LS_CUENTAS, []).find((c) => Number(c.repara_id) === Number(rid))
+        cuenta = readLs(LS_CUENTAS, []).find((c) => Number(c.repara_id) === Number(rid)) ?? null
       }
       if (!cuenta?.id) {
-        onError('No se encontró cuenta para esta reparación')
-        return
-      }
-      let pagos = []
-      if (supabase) {
-        const { data, error } = await supabase.from('pagosclientes').select('*').eq('cuenta_id', cuenta.id)
-        if (error) throw error
-        pagos = data ?? []
-      } else {
-        pagos = readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) === Number(cuenta.id))
-      }
-      if (pagos.length > 0) {
-        onNotice('Ya existe un pago para esta cuenta.')
-        return
+        const nueva = {
+          cliente_id: cid,
+          repara_id: Number(rid),
+          total: 0,
+          estatus: 'PENDIENTE',
+          tipo_pago: 'EFECTIVO',
+        }
+        if (supabase) {
+          const { data, error } = await supabase.from('cuentas').insert(nueva).select('*').single()
+          if (error) throw error
+          cuenta = data
+        } else {
+          const id = nextLocalId()
+          cuenta = { id, ...nueva }
+          const all = readLs(LS_CUENTAS, [])
+          writeLs(LS_CUENTAS, [cuenta, ...all])
+        }
       }
       setCuentaIdPago(cuenta.id)
       if (supabase) {
@@ -401,7 +499,7 @@ export default function ReparacionesOrden({
       setFormaPago('EFECTIVO')
       setPagoModal(true)
     } catch (e) {
-      onError(`Error: ${e.message}`)
+      onError(`Error al abrir anticipo: ${e.message}`)
     }
   }
 
@@ -432,9 +530,9 @@ export default function ReparacionesOrden({
         writeLs(LS_PAGOS, [{ id: nextLocalId(), ...row }, ...all])
       }
       setPagoModal(false)
-      onNotice('Pago registrado')
+      onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago})`)
     } catch (e) {
-      onError(`Error al registrar pago: ${e.message}`)
+      onError(`Error al registrar anticipo: ${e.message}`)
     }
   }
 
@@ -514,7 +612,7 @@ export default function ReparacionesOrden({
 
         <div className="rep-block">
           <label>Tipo Equipo</label>
-          <select value={tipoEquipo} onChange={(e) => setTipoEquipo(e.target.value)} disabled={ordenRegistrada && esOrdenExistente}>
+          <select value={tipoEquipo} onChange={(e) => setTipoEquipo(e.target.value)}>
             <option value="">Seleccionar tipo</option>
             {TIPOS_EQUIPO_REPARACION.map((t) => (
               <option key={t} value={t}>
@@ -605,6 +703,34 @@ export default function ReparacionesOrden({
             </select>
           </div>
         </div>
+
+        <div className="rep-block tecnicos-row">
+          <label>Técnico(s) asignado(s)</label>
+          <div className="tecnicos-selects">
+            <select value={tecnico1} onChange={(e) => setTecnico1(e.target.value)}>
+              <option value="">— Técnico 1 —</option>
+              {tecnicosCatalogo.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <span className="tecnicos-amp" aria-hidden="true">&amp;</span>
+            <select value={tecnico2} onChange={(e) => setTecnico2(e.target.value)}>
+              <option value="">— Técnico 2 (opcional) —</option>
+              {tecnicosCatalogo
+                .filter((t) => t !== tecnico1)
+                .map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>
+            Puedes asignar uno o dos técnicos. Si necesitas agregar/eliminar técnicos del catálogo, hazlo desde el <strong>Monitor de órdenes → ⚙️ Gestionar</strong>.
+          </p>
+        </div>
         <datalist id="est-opts">
           {ESTATUS_ORDEN.map((st) => (
             <option key={st} value={st} />
@@ -617,8 +743,9 @@ export default function ReparacionesOrden({
             <textarea
               rows={3}
               value={descripcionSolucion}
-              onChange={(e) => setDescripcionSolucion(e.target.value.toUpperCase())}
+              onChange={(e) => setDescripcionSolucion(e.target.value)}
               placeholder="Descripcion de la solucion"
+              style={{ textTransform: 'uppercase' }}
             />
           </div>
         )}
@@ -632,7 +759,12 @@ export default function ReparacionesOrden({
         </div>
 
         <div className="rep-actions">
-          <button type="button" className="btn-primary wide" disabled={ordenRegistrada} onClick={insertarReparacion}>
+          <button
+            type="button"
+            className="btn-primary wide"
+            disabled={ordenRegistrada}
+            onClick={() => setConfirmGuardarAbierto(true)}
+          >
             {ordenRegistrada ? 'Orden Registrada' : 'Registrar Orden'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
@@ -649,6 +781,15 @@ export default function ReparacionesOrden({
           <button type="button" className="btn-anticipo wide" onClick={abrirAnticipo}>
             Recibir anticipo
           </button>
+          {(esOrdenExistente || idReparacion != null) && (
+            <button
+              type="button"
+              className="btn-eliminar-orden wide"
+              onClick={() => setEliminarConfirmAbierto(true)}
+            >
+              🗑️ Eliminar orden
+            </button>
+          )}
           <button type="button" className="btn-danger wide" onClick={onSalir}>
             Salir
           </button>
@@ -677,7 +818,10 @@ export default function ReparacionesOrden({
         <div className="modal-backdrop" role="presentation" onClick={() => setPagoModal(false)}>
           <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Seleccionar Pago</h3>
+              <h3>💵 Recibir anticipo</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Seleccione un concepto del catálogo, ajuste el monto y la forma de pago, y registre el anticipo.
+              </p>
             </div>
             <div className="modal-body">
               <input
@@ -730,7 +874,116 @@ export default function ReparacionesOrden({
                 Cancelar
               </button>
               <button type="button" onClick={registrarPago} disabled={!selCat}>
-                Agregar Pago
+                Registrar anticipo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmGuardarAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setConfirmGuardarAbierto(false)}
+        >
+          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📝 ¿Seguro que quieres guardar estos datos?</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Revisa la información antes de registrar la orden de servicio. Una vez guardada podrás editarla, pero el ID quedará asignado.
+              </p>
+            </div>
+            <div className="modal-body">
+              <div className="resumen-orden">
+                <div className="resumen-orden-grupo">
+                  <h4>👥 Cliente</h4>
+                  <p><strong>Nombre:</strong> {nombreClienteUi || '—'}</p>
+                  <p><strong>Teléfono:</strong> {telClienteUi || '—'}</p>
+                  {domClienteUi ? <p><strong>Domicilio:</strong> {domClienteUi}</p> : null}
+                  {correoClienteUi ? <p><strong>Correo:</strong> {correoClienteUi}</p> : null}
+                </div>
+                <div className="resumen-orden-grupo">
+                  <h4>🖨️ Equipo</h4>
+                  <p><strong>Serie:</strong> {serieEquipo || '—'}</p>
+                  <p><strong>Tipo:</strong> {tipoEquipo || '—'}</p>
+                  {descripcionEquipo ? <p><strong>Descripción:</strong> {descripcionEquipo}</p> : null}
+                  <p><strong>Tipo de reparación:</strong> {tipoReparacion || '—'}</p>
+                </div>
+                <div className="resumen-orden-grupo">
+                  <h4>📋 Orden</h4>
+                  <p><strong>Estatus:</strong> {estatus || '—'}</p>
+                  <p><strong>Técnico(s):</strong> {combinarTecnicos(tecnico1, tecnico2) || '— (sin asignar)'}</p>
+                  <p>
+                    <strong>Problemas reportados:</strong>{' '}
+                    {problemasReportados ? problemasReportados : '— (vacío)'}
+                  </p>
+                  <p>
+                    <strong>Niveles de tinta (B/Y/M/C/ML/CL):</strong>{' '}
+                    {combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) || '— (sin definir)'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmGuardarAbierto(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-confirm-guardar"
+                onClick={async () => {
+                  setConfirmGuardarAbierto(false)
+                  await insertarReparacion()
+                }}
+              >
+                ✅ Confirmar y guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {eliminarConfirmAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !eliminandoOrden && setEliminarConfirmAbierto(false)}
+        >
+          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🗑️ Eliminar orden de servicio</h3>
+            </div>
+            <div className="modal-body">
+              <p>
+                ¿Seguro que deseas eliminar la orden{' '}
+                <strong>#{idReparacion ?? numeroOrden ?? '—'}</strong> de{' '}
+                <strong>{nombreClienteUi || 'el cliente'}</strong>?
+              </p>
+              <p className="muted small">
+                Esta acción <strong>no se puede deshacer</strong>. También se eliminarán la cuenta asociada y todos los pagos/anticipos registrados.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setEliminarConfirmAbierto(false)}
+                disabled={eliminandoOrden}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-eliminar-orden"
+                onClick={() => void eliminarOrden()}
+                disabled={eliminandoOrden}
+              >
+                {eliminandoOrden ? 'Eliminando…' : 'Sí, eliminar definitivamente'}
               </button>
             </div>
           </div>

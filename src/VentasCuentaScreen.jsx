@@ -290,6 +290,78 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
   }
 
+  async function pagarAdeudoTotalCuenta() {
+    if (!cuentaId) {
+      onError?.('No hay cuenta para liquidar')
+      return
+    }
+    const monto = Number(totalVenta)
+    if (!Number.isFinite(monto) || monto <= 0.0001) {
+      onError?.('No hay adeudo pendiente en esta cuenta')
+      return
+    }
+    if (!window.confirm(`¿Pagar el adeudo total de $${monto.toFixed(2)} y liquidar esta cuenta?`)) return
+    const row = {
+      cliente_id: cliente.id,
+      cuenta_id: cuentaId,
+      pago: monto,
+      concepto: 'Pago adeudo total',
+      forma_pago: formaPago,
+    }
+    try {
+      let nuevoId
+      if (supabase) {
+        const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
+        if (error) throw error
+        nuevoId = data?.id
+        const { error: eCu } = await supabase
+          .from('cuentas')
+          .update({ total: 0, estatus: 'LIQUIDADA' })
+          .eq('id', cuentaId)
+        if (eCu) throw eCu
+        if (reparaIdCuenta != null) {
+          await supabase.from('reparaciones').update({ estatus: 'ENTREGADA' }).eq('id', reparaIdCuenta)
+        }
+      } else {
+        nuevoId = nextLocalId()
+        const allP = readLs(LS_PAGOS, [])
+        writeLs(LS_PAGOS, [{ id: nuevoId, ...row }, ...allP])
+        const lc = readLs(LS_CUENTAS, [])
+        writeLs(
+          LS_CUENTAS,
+          lc.map((c) => (sameId(c.id, cuentaId) ? { ...c, total: 0, estatus: 'LIQUIDADA' } : c)),
+        )
+        if (reparaIdCuenta != null) {
+          const lr = readLs(LS_REP, [])
+          writeLs(
+            LS_REP,
+            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, estatus: 'ENTREGADA' } : r)),
+          )
+        }
+      }
+      setLineas((prev) => [
+        ...prev,
+        {
+          key: `pago_${nuevoId}`,
+          tipo: 'pago',
+          dbId: nuevoId,
+          producto_id: -1,
+          cantidad: -1,
+          descripcion: `PAGO: ${row.concepto} (${row.forma_pago})`,
+          precioUnitario: monto,
+          subtotal: -monto,
+        },
+      ])
+      setCuentaInfo((prev) =>
+        prev ? { ...prev, total: 0, estatus: 'LIQUIDADA' } : { total: 0, estatus: 'LIQUIDADA' },
+      )
+      setModalPago(false)
+      onNotice?.(`Adeudo total liquidado ($${monto.toFixed(2)})`)
+    } catch (e) {
+      onError?.(`Error al pagar adeudo total: ${e.message}`)
+    }
+  }
+
   async function registrarPago() {
     if (!selCat || !cuentaId) {
       onError?.('Seleccione concepto de pago')
@@ -698,6 +770,26 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <h3>Agregar pago</h3>
             </div>
             <div className="modal-body">
+              <button
+                type="button"
+                className="btn-pagar-adeudo-total"
+                onClick={() => void pagarAdeudoTotalCuenta()}
+                disabled={!esCuentaExistente || Math.abs(totalVenta) <= 0.0001}
+                title={
+                  totalVenta > 0.0001
+                    ? 'Registrar pago por el saldo total y liquidar la cuenta'
+                    : 'No hay adeudo pendiente en esta cuenta'
+                }
+              >
+                <span aria-hidden="true">💵</span>
+                <span>
+                  Pagar adeudo total
+                  {totalVenta > 0.0001 ? <> · <strong>${totalVenta.toFixed(2)}</strong></> : null}
+                </span>
+              </button>
+              <p className="muted small pago-modal-divider">
+                O seleccione un concepto del catálogo para registrar un pago parcial:
+              </p>
               <input className="full" placeholder="Buscar concepto…" value={busqCat} onChange={(e) => setBusqCat(e.target.value)} />
               <ul className="cat-pago-list">
                 {catFiltrado.map((c) => (

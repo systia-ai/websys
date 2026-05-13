@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -56,7 +57,7 @@ const TECNICO_SIN = '__sin_tecnico__'
  * Monitor de órdenes: lista de reparaciones filtrable por estatus, orden por fecha de registro,
  * columnas tipo taller (Android).
  */
-export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
+export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNotice, onEditarOrden }) {
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])
@@ -68,6 +69,13 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
+  /** '' = sin filtro; yyyy-mm-dd = solo órdenes con fecha de ingreso >= este día */
+  const [fechaDesde, setFechaDesde] = useState('')
+
+  /** Catálogo de técnicos (controlado por el usuario). */
+  const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
+  const [gestionTecnicosAbierto, setGestionTecnicosAbierto] = useState(false)
+  const [nuevoTecnico, setNuevoTecnico] = useState('')
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -112,16 +120,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
   }, [equipos])
 
   const tecnicosLista = useMemo(() => {
-    const s = new Set()
-    let haySin = false
-    for (const r of reparaciones) {
-      const t = String(r.tecnico ?? '').trim()
-      if (t) s.add(t)
-      else haySin = true
-    }
-    const lista = [...s].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
-    return { nombres: lista, haySin }
-  }, [reparaciones])
+    const haySin = reparaciones.some((r) => !String(r.tecnico ?? '').trim())
+    const nombres = [...tecnicosCatalogo].sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' }),
+    )
+    return { nombres, haySin }
+  }, [reparaciones, tecnicosCatalogo])
 
   const filasOrdenadas = useMemo(() => {
     const sel = estatusSeleccionados
@@ -132,8 +136,20 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
     if (tecnicoFiltro === TECNICO_SIN) {
       filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
     } else if (tecnicoFiltro !== TECNICO_TODAS) {
-      const want = tecnicoFiltro.trim().toLowerCase()
-      filtradas = filtradas.filter((r) => String(r.tecnico ?? '').trim().toLowerCase() === want)
+      const want = tecnicoFiltro.trim().toUpperCase()
+      filtradas = filtradas.filter((r) => {
+        const t = String(r.tecnico ?? '').trim().toUpperCase()
+        if (!t) return false
+        const partes = t.split(/\s*&\s*/).map((x) => x.trim()).filter(Boolean)
+        return partes.includes(want)
+      })
+    }
+    const desde = String(fechaDesde ?? '').trim()
+    if (desde) {
+      filtradas = filtradas.filter((r) => {
+        const ymd = fechaIngresoYmd(r)
+        return ymd != null && ymd >= desde
+      })
     }
     const conTiempo = filtradas.map((r) => ({
       rep: r,
@@ -150,7 +166,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
       return ordenFecha === 'asc' ? ta - tb : tb - ta
     })
     return conTiempo.map(({ rep, ymd }) => ({ rep, ymd }))
-  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro])
+  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde])
 
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
@@ -169,6 +185,38 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
   function nombreCliente(cid) {
     const c = clientes.find((x) => sameId(x.id, cid))
     return c ? c.nombre || `#${cid}` : cid != null ? `Cliente #${cid}` : '—'
+  }
+
+  function handleAgregarTecnico() {
+    const n = nuevoTecnico.trim()
+    if (!n) return
+    const nueva = agregarTecnico(n)
+    setTecnicosCatalogo(nueva)
+    setNuevoTecnico('')
+  }
+
+  function handleEliminarTecnico(nombre) {
+    if (!window.confirm(`¿Eliminar el técnico "${nombre}" del catálogo?\n\nLas órdenes ya asignadas a este técnico no se modifican; pero no podrás seleccionarlo de nuevo.`)) return
+    const nueva = eliminarTecnico(nombre)
+    setTecnicosCatalogo(nueva)
+    if (tecnicoFiltro === nombre) setTecnicoFiltro(TECNICO_TODAS)
+  }
+
+  function handleEditarOrden(rep) {
+    if (!onEditarOrden) return
+    const c = clientes.find((x) => sameId(x.id, rep.cliente_id)) ?? {}
+    const eq = rep.equipo_id != null ? equipoPorId.get(String(rep.equipo_id)) ?? {} : {}
+    onEditarOrden({
+      clienteNombre: c.nombre ?? '',
+      clienteTelefono: c.telefono ?? '',
+      clienteDomicilio: c.domicilio ?? '',
+      clienteCorreo: c.correo ?? '',
+      equipoSerie: eq.serie ?? '',
+      equipoTipo: eq.tipo_equipo ?? '',
+      equipoDescripcion: rep.descripcion_equipo ?? eq.descripcion ?? '',
+      equipoTipoReparacion: rep.tipo_reparacion ?? eq.tipo_reparacion ?? '',
+      reparacionId: rep.id != null ? String(rep.id) : '',
+    })
   }
 
   function datosEquipo(rep) {
@@ -191,7 +239,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Monitor de órdenes</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">📋</span>
+          Monitor de órdenes
+        </h1>
         <span className="servicios-appbar-placeholder" aria-hidden />
       </header>
 
@@ -207,7 +258,17 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
               </select>
             </label>
             <label className="monitor-ordenes-label-inline">
-              <span>Técnico</span>
+              <span>
+                Técnico{' '}
+                <button
+                  type="button"
+                  className="monitor-ordenes-gestion-tecnicos-btn"
+                  onClick={() => setGestionTecnicosAbierto(true)}
+                  title="Agregar o eliminar técnicos del catálogo"
+                >
+                  ⚙️ Gestionar
+                </button>
+              </span>
               <select value={tecnicoFiltro} onChange={(e) => setTecnicoFiltro(e.target.value)}>
                 <option value={TECNICO_TODAS}>Todas las órdenes</option>
                 {tecnicosLista.haySin ? (
@@ -219,6 +280,27 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="monitor-ordenes-label-inline">
+              <span>Fecha desde (incluye)</span>
+              <div className="monitor-ordenes-fecha-desde">
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                  aria-label="Mostrar órdenes con fecha de ingreso desde este día"
+                />
+                <button
+                  type="button"
+                  className="monitor-ordenes-fecha-clear"
+                  onClick={() => setFechaDesde('')}
+                  disabled={!fechaDesde}
+                  title="Quitar filtro de fecha"
+                  aria-label="Quitar filtro de fecha"
+                >
+                  Limpiar
+                </button>
+              </div>
             </label>
           </div>
           <fieldset className="monitor-ordenes-fieldset">
@@ -246,9 +328,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
           <p className="muted center">Cargando…</p>
         ) : (
           <>
-            <p className="monitor-ordenes-conteo card-pad" role="status">
-              <strong>{filasOrdenadas.length}</strong>{' '}
-              {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales.
+            <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
+              <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
+              <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
+              <span className="monitor-ordenes-conteo-texto">
+                {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales
+              </span>
             </p>
             <div className="monitor-ordenes-tabla-wrap table-wrap">
               <table className="monitor-ordenes-tabla">
@@ -257,16 +342,17 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
                     <th>Fecha de ingreso</th>
                     <th>No. orden</th>
                     <th>Cliente</th>
-                    <th>Técnico</th>
                     <th>Tipo de equipo</th>
                     <th>Descripción</th>
                     <th>Problema reportado</th>
+                    <th>Técnico</th>
+                    <th aria-label="Acciones">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filasOrdenadas.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="monitor-ordenes-vacio">
+                      <td colSpan={8} className="monitor-ordenes-vacio">
                         No hay órdenes con los filtros seleccionados.
                       </td>
                     </tr>
@@ -279,10 +365,21 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
                           <td>{formatearFechaMostrar(ymd)}</td>
                           <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
                           <td>{nombreCliente(rep.cliente_id)}</td>
-                          <td>{tech || '—'}</td>
                           <td>{tipo}</td>
                           <td className="monitor-ordenes-col-texto">{desc}</td>
                           <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
+                          <td>{tech || '—'}</td>
+                          <td className="monitor-ordenes-acciones">
+                            <button
+                              type="button"
+                              className="btn-accion-editar"
+                              onClick={() => handleEditarOrden(rep)}
+                              title="Editar orden"
+                              aria-label={`Editar orden ${rep.id}`}
+                            >
+                              ✏️
+                            </button>
+                          </td>
                         </tr>
                       )
                     })
@@ -293,6 +390,76 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError }) {
           </>
         )}
       </div>
+
+      {gestionTecnicosAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setGestionTecnicosAbierto(false)}
+        >
+          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>⚙️ Gestionar técnicos</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Agrega o elimina técnicos del catálogo. Los nombres se guardan en mayúsculas.
+              </p>
+            </div>
+            <div className="modal-body">
+              <div className="tecnicos-agregar-row">
+                <input
+                  type="text"
+                  placeholder="Nombre del técnico"
+                  value={nuevoTecnico}
+                  onChange={(e) => setNuevoTecnico(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAgregarTecnico()
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-tecnico-agregar"
+                  onClick={handleAgregarTecnico}
+                  disabled={!nuevoTecnico.trim() || tecnicosCatalogo.includes(nuevoTecnico.trim().toUpperCase())}
+                >
+                  ➕ Agregar
+                </button>
+              </div>
+              {tecnicosCatalogo.length === 0 ? (
+                <p className="muted center" style={{ marginTop: 12 }}>
+                  No hay técnicos en el catálogo.
+                </p>
+              ) : (
+                <ul className="tecnicos-lista">
+                  {[...tecnicosCatalogo]
+                    .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+                    .map((t) => (
+                      <li key={t} className="tecnicos-lista-item">
+                        <span>{t}</span>
+                        <button
+                          type="button"
+                          className="btn-icon danger"
+                          onClick={() => handleEliminarTecnico(t)}
+                          title={`Eliminar ${t}`}
+                          aria-label={`Eliminar ${t}`}
+                        >
+                          🗑️
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" onClick={() => setGestionTecnicosAbierto(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

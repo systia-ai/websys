@@ -558,7 +558,10 @@ export default function ServiciosEquipos({
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Equipos</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">🖨️</span>
+          Equipos
+        </h1>
         {onIrAOrdenServicio || onIrAClientes ? (
           <div className="appbar-actions-cluster">
             {onIrAOrdenServicio ? (
@@ -627,11 +630,11 @@ export default function ServiciosEquipos({
                   {eq.tipo_reparacion ? <span className="muted small">Reparación: {eq.tipo_reparacion}</span> : null}
                 </button>
                 <div className="equipo-card-actions">
-                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(eq)} title="Editar">
-                    ✎
+                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(eq)} title="Editar" aria-label="Editar">
+                    ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminarEquipo(eq)} title="Eliminar">
-                    🗑
+                  <button type="button" className="btn-icon danger" onClick={() => setEliminarEquipo(eq)} title="Eliminar" aria-label="Eliminar">
+                    🗑️
                   </button>
                 </div>
               </li>

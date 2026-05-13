@@ -196,7 +196,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
         <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
           ←
         </button>
-        <h1 className="servicios-appbar-title">Inventarios</h1>
+        <h1 className="servicios-appbar-title">
+          <span className="appbar-title-emoji" aria-hidden="true">📦</span>
+          Inventarios
+        </h1>
         <span className="servicios-appbar-placeholder" aria-hidden />
       </header>
 
@@ -237,11 +240,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   </span>
                 </button>
                 <div className="equipo-card-actions">
-                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(p)} title="Editar">
-                    ✎
+                  <button type="button" className="btn-icon edit" onClick={() => abrirEditar(p)} title="Editar" aria-label="Editar">
+                    ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(p)} title="Eliminar">
-                    🗑
+                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(p)} title="Eliminar" aria-label="Eliminar">
+                    🗑️
                   </button>
                 </div>
               </li>
