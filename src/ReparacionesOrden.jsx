@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga de reparación existente vía Supabase/local */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
@@ -116,6 +116,8 @@ export default function ReparacionesOrden({
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
+  const [guardandoOrden, setGuardandoOrden] = useState(false)
+  const guardandoRef = useRef(false)
 
   const [pagoModal, setPagoModal] = useState(false)
   const [catalogo, setCatalogo] = useState([])
@@ -260,6 +262,9 @@ export default function ReparacionesOrden({
   }
 
   async function insertarReparacion() {
+    if (guardandoRef.current) return
+    guardandoRef.current = true
+    setGuardandoOrden(true)
     try {
       const cid = await resolverClienteId()
       const eid = await resolverEquipoId()
@@ -329,6 +334,9 @@ export default function ReparacionesOrden({
     } catch (e) {
       setMsgExito(`Error: ${e.message}`)
       setDialogExito(true)
+    } finally {
+      guardandoRef.current = false
+      setGuardandoOrden(false)
     }
   }
 
@@ -843,7 +851,7 @@ export default function ReparacionesOrden({
           <button
             type="button"
             className="btn-primary wide"
-            disabled={ordenRegistrada}
+            disabled={ordenRegistrada || guardandoOrden}
             onClick={() => setConfirmGuardarAbierto(true)}
           >
             {ordenRegistrada ? 'Orden Registrada' : 'Registrar Orden'}
@@ -966,7 +974,7 @@ export default function ReparacionesOrden({
         <div
           className="modal-backdrop"
           role="presentation"
-          onClick={() => setConfirmGuardarAbierto(false)}
+          onClick={() => !guardandoOrden && setConfirmGuardarAbierto(false)}
         >
           <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -1011,18 +1019,21 @@ export default function ReparacionesOrden({
                 type="button"
                 className="secondary"
                 onClick={() => setConfirmGuardarAbierto(false)}
+                disabled={guardandoOrden}
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 className="btn-confirm-guardar"
+                disabled={guardandoOrden}
                 onClick={async () => {
-                  setConfirmGuardarAbierto(false)
+                  if (guardandoRef.current) return
                   await insertarReparacion()
+                  setConfirmGuardarAbierto(false)
                 }}
               >
-                ✅ Confirmar y guardar
+                {guardandoOrden ? 'Guardando…' : '✅ Confirmar y guardar'}
               </button>
             </div>
           </div>
