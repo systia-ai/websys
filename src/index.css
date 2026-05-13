@@ -1339,6 +1339,54 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   line-height: 1;
 }
 
+.forma-pago-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-forma-pago {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: 1px solid #cfd8dc;
+  background: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+
+.btn-forma-pago span[aria-hidden] {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.btn-forma-pago:hover:not(:disabled),
+.btn-forma-pago:focus-visible {
+  background: #e3f2fd;
+  border-color: #1976d2;
+  color: #0d47a1;
+  outline: none;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+}
+
+.btn-forma-pago:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-forma-pago:disabled {
+  background: #eceff1;
+  color: #90a4ae;
+  cursor: not-allowed;
+}
+
 .pago-modal-divider {
   margin: 14px 0 8px;
   text-align: center;

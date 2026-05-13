@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -105,6 +105,9 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const [cantProd, setCantProd] = useState('')
   const [precioProd, setPrecioProd] = useState('')
   const [productoIdSel, setProductoIdSel] = useState(0)
+  const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
+  const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
+  const pagandoAdeudoRef = useRef(false)
 
   const cuentaId = cuentaInfo?.id ?? cuentaInicial?.id ?? null
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
@@ -290,7 +293,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
   }
 
-  async function pagarAdeudoTotalCuenta() {
+  function pagarAdeudoTotalCuenta() {
     if (!cuentaId) {
       onError?.('No hay cuenta para liquidar')
       return
@@ -300,13 +303,28 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('No hay adeudo pendiente en esta cuenta')
       return
     }
-    if (!window.confirm(`¿Pagar el adeudo total de $${monto.toFixed(2)} y liquidar esta cuenta?`)) return
+    setModalFormaPagoTotal(true)
+  }
+
+  async function ejecutarPagoAdeudoTotal(formaPagoElegida) {
+    if (pagandoAdeudoRef.current) return
+    if (!cuentaId) {
+      onError?.('No hay cuenta para liquidar')
+      return
+    }
+    const monto = Number(totalVenta)
+    if (!Number.isFinite(monto) || monto <= 0.0001) {
+      onError?.('No hay adeudo pendiente en esta cuenta')
+      return
+    }
+    pagandoAdeudoRef.current = true
+    setPagandoAdeudoTotal(true)
     const row = {
       cliente_id: cliente.id,
       cuenta_id: cuentaId,
       pago: monto,
       concepto: 'Pago adeudo total',
-      forma_pago: formaPago,
+      forma_pago: formaPagoElegida,
     }
     try {
       let nuevoId
@@ -355,10 +373,14 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       setCuentaInfo((prev) =>
         prev ? { ...prev, total: 0, estatus: 'LIQUIDADA' } : { total: 0, estatus: 'LIQUIDADA' },
       )
+      setModalFormaPagoTotal(false)
       setModalPago(false)
-      onNotice?.(`Adeudo total liquidado ($${monto.toFixed(2)})`)
+      onNotice?.(`Adeudo total liquidado ($${monto.toFixed(2)}) — ${formaPagoElegida}`)
     } catch (e) {
       onError?.(`Error al pagar adeudo total: ${e.message}`)
+    } finally {
+      pagandoAdeudoRef.current = false
+      setPagandoAdeudoTotal(false)
     }
   }
 
@@ -773,8 +795,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <button
                 type="button"
                 className="btn-pagar-adeudo-total"
-                onClick={() => void pagarAdeudoTotalCuenta()}
-                disabled={!esCuentaExistente || Math.abs(totalVenta) <= 0.0001}
+                onClick={pagarAdeudoTotalCuenta}
+                disabled={!esCuentaExistente || Math.abs(totalVenta) <= 0.0001 || pagandoAdeudoTotal}
                 title={
                   totalVenta > 0.0001
                     ? 'Registrar pago por el saldo total y liquidar la cuenta'
@@ -836,6 +858,66 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <button type="button" onClick={() => void registrarPago()} disabled={!selCat}>
                 Registrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalFormaPagoTotal && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !pagandoAdeudoTotal && setModalFormaPagoTotal(false)}
+        >
+          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>💵 ¿Cómo se realizará el pago?</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Selecciona la forma de pago para liquidar el adeudo total de{' '}
+                <strong>${Number(totalVenta).toFixed(2)}</strong>.
+              </p>
+            </div>
+            <div className="modal-body forma-pago-opciones">
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarPagoAdeudoTotal('EFECTIVO')}
+                disabled={pagandoAdeudoTotal}
+              >
+                <span aria-hidden="true">💵</span>
+                <span>Efectivo</span>
+              </button>
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarPagoAdeudoTotal('TRANSFERENCIA')}
+                disabled={pagandoAdeudoTotal}
+              >
+                <span aria-hidden="true">🏦</span>
+                <span>Transferencia</span>
+              </button>
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarPagoAdeudoTotal('TARJETA')}
+                disabled={pagandoAdeudoTotal}
+              >
+                <span aria-hidden="true">💳</span>
+                <span>Tarjeta de crédito o débito</span>
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setModalFormaPagoTotal(false)}
+                disabled={pagandoAdeudoTotal}
+              >
+                Cancelar
+              </button>
+              {pagandoAdeudoTotal ? (
+                <span className="muted small">Procesando pago…</span>
+              ) : null}
             </div>
           </div>
         </div>
