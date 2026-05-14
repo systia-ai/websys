@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { normalizeClienteRow } from './clienteUtils.js'
 import ServiciosEquipos from './ServiciosEquipos.jsx'
@@ -49,6 +49,12 @@ function App() {
   const [notice, setNotice] = useState('')
   /** Desde ClientesModulo → pantalla Cuentas (VentasScreen.kt). */
   const [ventasContext, setVentasContext] = useState(null)
+  /** Al volver de Ventas → Clientes, reabrir el modal Servicio / Cuentas del mismo cliente. */
+  const [clientesRetornoVentas, setClientesRetornoVentas] = useState(null)
+
+  const limpiarRetornoVentasClientes = useCallback(() => {
+    setClientesRetornoVentas(null)
+  }, [])
   const supabase = useMemo(() => getSupabaseClient(), [])
 
   const activeModuleRef = useRef(activeModule)
@@ -65,6 +71,7 @@ function App() {
       setRepSession(null)
       setVentasContext(null)
       setClienteVinculoServicios(null)
+      setClientesRetornoVentas(null)
       setActiveModule('home')
       setNotice('')
       return
@@ -249,6 +256,8 @@ function App() {
     return (
       <ClientesModulo
         supabase={supabase}
+        retornoVentas={clientesRetornoVentas}
+        onRetornoVentasConsumido={limpiarRetornoVentasClientes}
         onHome={goBack}
         onOpenServiciosConCliente={(row) => {
           const c = normalizeClienteRow(row)
@@ -264,6 +273,10 @@ function App() {
           navigateTo('reparaciones')
         }}
         onOpenVentas={(boot) => {
+          const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+          if (cli?.id != null) {
+            setClientesRetornoVentas({ openAccionesModal: true, cliente: cli })
+          }
           setVentasContext({ ...boot, returnTo: 'clientes' })
           navigateTo('ventas')
         }}

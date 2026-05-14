@@ -42,6 +42,8 @@ export default function ClientesModulo({
   onIrAOrdenServicio,
   onError,
   onNotice,
+  retornoVentas = null,
+  onRetornoVentasConsumido,
 }) {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -206,65 +208,87 @@ export default function ClientesModulo({
     setModalAcciones(true)
   }
 
+  const cargarCuentasParaCliente = useCallback(
+    async (cliente) => {
+      if (!cliente?.id) {
+        onError?.('Cliente sin ID válido')
+        return
+      }
+      const cli = normalizeClienteRow(cliente)
+      setModalAcciones(false)
+      setClienteCuentasPanel(cli)
+      setPanelCuentasAbierto(true)
+      setLoadingCuentas(true)
+      setCuentaTitle(`Cuentas de ${cli.nombre || 'Cliente'}`)
+      setCuentaSubtitle('')
+      try {
+        let todasCuentas = []
+        if (supabase) {
+          const { data, error } = await supabase.from('cuentas').select('*').order('id', { ascending: false })
+          if (error) throw error
+          todasCuentas = data ?? []
+        } else {
+          todasCuentas = readLs(LS_CUENTAS, [])
+        }
+        const cuentasCliente = todasCuentas.filter((cu) => sameId(cu.cliente_id, cli.id))
+        const ids = [...new Set(cuentasCliente.map((c) => c.repara_id).filter((id) => id != null && id !== ''))]
+        const map = {}
+        if (ids.length) {
+          const pairs = await Promise.all(
+            ids.map(async (rid) => {
+              if (supabase) {
+                const { data: rep } = await supabase.from('reparaciones').select('*').eq('id', rid).maybeSingle()
+                return [rid, rep ?? null]
+              }
+              const allRep = readLs(LS_REP, [])
+              const rep = allRep.find((r) => sameId(r.id, rid))
+              return [rid, rep ?? null]
+            }),
+          )
+          for (const [rid, rep] of pairs) {
+            if (rep) {
+              map[rid] = rep
+              map[String(rid)] = rep
+            }
+          }
+        }
+        setCuentasEncontradas(cuentasCliente)
+        setRepsPorReparaId(map)
+        setCuentaSubtitle(
+          cuentasCliente.length === 0
+            ? 'No se encontraron cuentas para este cliente'
+            : `Se encontraron ${cuentasCliente.length} cuenta(s):`,
+        )
+      } catch (e) {
+        setCuentaTitle('Error')
+        setCuentaSubtitle(`Error al buscar cuentas: ${e.message}`)
+        setCuentasEncontradas([])
+        setRepsPorReparaId({})
+      } finally {
+        setLoadingCuentas(false)
+      }
+    },
+    [supabase, onError],
+  )
+
+  useEffect(() => {
+    const r = retornoVentas
+    if (!r?.openAccionesModal || !r?.cliente?.id) return
+    const cli = normalizeClienteRow(r.cliente)
+    setClienteAccion(cli)
+    setClienteCuentasPanel(null)
+    setPanelCuentasAbierto(false)
+    setModalAcciones(true)
+    onRetornoVentasConsumido?.()
+  }, [retornoVentas, onRetornoVentasConsumido])
+
   async function buscarCuentasCliente() {
     const cliente = clienteAccion
     if (!cliente?.id) {
       onError?.('Cliente sin ID válido')
       return
     }
-    const cli = normalizeClienteRow(cliente)
-    setModalAcciones(false)
-    setClienteCuentasPanel(cli)
-    setPanelCuentasAbierto(true)
-    setLoadingCuentas(true)
-    setCuentaTitle(`Cuentas de ${cli.nombre || 'Cliente'}`)
-    setCuentaSubtitle('')
-    try {
-      let todasCuentas = []
-      if (supabase) {
-        const { data, error } = await supabase.from('cuentas').select('*').order('id', { ascending: false })
-        if (error) throw error
-        todasCuentas = data ?? []
-      } else {
-        todasCuentas = readLs(LS_CUENTAS, [])
-      }
-      const cuentasCliente = todasCuentas.filter((cu) => sameId(cu.cliente_id, cli.id))
-      const ids = [...new Set(cuentasCliente.map((c) => c.repara_id).filter((id) => id != null && id !== ''))]
-      const map = {}
-      if (ids.length) {
-        const pairs = await Promise.all(
-          ids.map(async (rid) => {
-            if (supabase) {
-              const { data: rep } = await supabase.from('reparaciones').select('*').eq('id', rid).maybeSingle()
-              return [rid, rep ?? null]
-            }
-            const allRep = readLs(LS_REP, [])
-            const rep = allRep.find((r) => sameId(r.id, rid))
-            return [rid, rep ?? null]
-          }),
-        )
-        for (const [rid, rep] of pairs) {
-          if (rep) {
-            map[rid] = rep
-            map[String(rid)] = rep
-          }
-        }
-      }
-      setCuentasEncontradas(cuentasCliente)
-      setRepsPorReparaId(map)
-      setCuentaSubtitle(
-        cuentasCliente.length === 0
-          ? 'No se encontraron cuentas para este cliente'
-          : `Se encontraron ${cuentasCliente.length} cuenta(s):`,
-      )
-    } catch (e) {
-      setCuentaTitle('Error')
-      setCuentaSubtitle(`Error al buscar cuentas: ${e.message}`)
-      setCuentasEncontradas([])
-      setRepsPorReparaId({})
-    } finally {
-      setLoadingCuentas(false)
-    }
+    await cargarCuentasParaCliente(cliente)
   }
 
   async function buscarOrdenesServicioCliente() {
