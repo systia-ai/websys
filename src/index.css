@@ -1516,6 +1516,146 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   color: #555;
 }
 
+.rep-ordenes-resumen-caja {
+  user-select: none;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c5cae9;
+  background: linear-gradient(135deg, #f8faff 0%, #eef4ff 100%);
+  box-shadow: 0 1px 3px rgba(25, 118, 210, 0.08);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #37474f;
+}
+
+.rep-ordenes-resumen-caja--vacio {
+  border-color: #e0e0e0;
+  background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+  box-shadow: none;
+}
+
+.rep-ordenes-resumen-cliente {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #b0bec5;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #1565c0;
+  letter-spacing: 0.02em;
+}
+
+.rep-ordenes-resumen-caja--vacio .rep-ordenes-resumen-cliente {
+  color: #546e7a;
+  border-bottom-color: #cfd8dc;
+}
+
+.rep-ordenes-resumen-ico {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.rep-ordenes-resumen-nombre {
+  word-break: break-word;
+}
+
+.rep-ordenes-resumen-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.rep-ordenes-resumen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.rep-ordenes-resumen-chip--total {
+  background: #e8eaf6;
+  color: #3949ab;
+  border-color: #c5cae9;
+}
+
+.rep-ordenes-resumen-chip--taller {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border-color: #90caf9;
+}
+
+.rep-ordenes-resumen-chip--ok {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border-color: #a5d6a7;
+}
+
+.rep-ordenes-resumen-vacio-msg {
+  margin: 0;
+  font-weight: 600;
+  color: #546e7a;
+  font-size: 0.78rem;
+}
+
+.rep-ordenes-resumen-vacio-sugerencia {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: #78909c;
+}
+
+.rep-activa-card.rep-orden-entregada {
+  border-color: #c8e6c9;
+  background: #f1f8f4;
+}
+
+.rep-activa-card.rep-orden-entregada:hover,
+.rep-activa-card.rep-orden-entregada:focus-visible {
+  border-color: #43a047;
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.rep-activa-card.rep-orden-entregada:hover strong,
+.rep-activa-card.rep-orden-entregada:focus-visible strong {
+  color: #1b5e20;
+}
+
+.rep-activa-card.rep-orden-entregada:hover .small,
+.rep-activa-card.rep-orden-entregada:focus-visible .small {
+  color: #2e7d32;
+}
+
+.rep-orden-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 2px;
+  letter-spacing: 0.02em;
+}
+
+.rep-orden-badge--activa {
+  background: #e3f2fd;
+  color: #0d47a1;
+}
+
+.rep-orden-badge--entregada {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
 .warning-inline {
   color: #c62828;
   margin: 8px 0 0;

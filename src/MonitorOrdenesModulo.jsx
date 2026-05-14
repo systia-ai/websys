@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { estatusEsEntregado } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -59,10 +60,6 @@ function hoyYmdLocal() {
   return aYmdLocalDesdeRaw(new Date())
 }
 
-function esEntregado(rep) {
-  return /ENTREGAD[OA]\b/i.test(String(rep?.estatus ?? '').trim())
-}
-
 function diffDiasCalendario(ymdA, ymdB) {
   if (!ymdA || !ymdB || ymdA.length < 10 || ymdB.length < 10) return null
   const [ya, ma, da] = ymdA.slice(0, 10).split('-').map(Number)
@@ -77,7 +74,7 @@ function diffDiasCalendario(ymdA, ymdB) {
  * Si ya está ENTREGADO/A, devuelve null (la UI muestra ✅, no número).
  */
 function diasEnTaller(rep) {
-  if (esEntregado(rep)) return null
+  if (estatusEsEntregado(rep?.estatus)) return null
   const ing = fechaIngresoYmd(rep)
   if (!ing) return null
   const n = diffDiasCalendario(ing, hoyYmdLocal())
@@ -462,7 +459,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                     filasOrdenadas.map(({ rep, ymd, dias }) => {
                       const { tipo, desc } = datosEquipo(rep)
                       const tech = String(rep.tecnico ?? '').trim()
-                      const ent = esEntregado(rep)
+                      const ent = estatusEsEntregado(rep?.estatus)
                       return (
                         <tr key={rep.id}>
                           <td>{formatearFechaMostrar(ymd)}</td>

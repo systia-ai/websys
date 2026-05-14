@@ -323,11 +323,16 @@ export default function ReparacionesOrden({
         tipo_pago: null,
       }
       if (supabase) {
-        const { error: ce } = await supabase.from('cuentas').insert(cuenta)
-        if (ce) console.warn(ce)
+        const { data: yaCuenta } = await supabase.from('cuentas').select('id').eq('repara_id', newId).limit(1)
+        if (!(yaCuenta && yaCuenta.length > 0)) {
+          const { error: ce } = await supabase.from('cuentas').insert(cuenta)
+          if (ce) console.warn(ce)
+        }
       } else {
         const cu = readLs(LS_CUENTAS, [])
-        writeLs(LS_CUENTAS, [{ id: nextLocalId(), ...cuenta }, ...cu])
+        if (!cu.some((c) => Number(c.repara_id) === Number(newId))) {
+          writeLs(LS_CUENTAS, [{ id: nextLocalId(), ...cuenta }, ...cu])
+        }
       }
       setMsgExito(`Se registró la orden de servicio con ID: ${newId}.`)
       setDialogExito(true)
@@ -469,11 +474,20 @@ export default function ReparacionesOrden({
     try {
       let cuenta
       if (supabase) {
-        const { data, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid).maybeSingle()
-        if (error && error.code !== 'PGRST116') throw error
-        cuenta = data ?? null
+        const { data: rows, error } = await supabase
+          .from('cuentas')
+          .select('*')
+          .eq('repara_id', rid)
+          .order('id', { ascending: false })
+          .limit(1)
+        if (error) throw error
+        cuenta = rows?.[0] ?? null
       } else {
-        cuenta = readLs(LS_CUENTAS, []).find((c) => Number(c.repara_id) === Number(rid)) ?? null
+        const matches = readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) === Number(rid))
+        cuenta =
+          matches.length === 0
+            ? null
+            : [...matches].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
       }
       if (!cuenta?.id) {
         const nueva = {
@@ -491,7 +505,12 @@ export default function ReparacionesOrden({
           const id = nextLocalId()
           cuenta = { id, ...nueva }
           const all = readLs(LS_CUENTAS, [])
-          writeLs(LS_CUENTAS, [cuenta, ...all])
+          if (!all.some((c) => Number(c.repara_id) === Number(rid))) {
+            writeLs(LS_CUENTAS, [cuenta, ...all])
+          } else {
+            const m = all.filter((c) => Number(c.repara_id) === Number(rid))
+            cuenta = [...m].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+          }
         }
       }
       setCuentaIdPago(cuenta.id)

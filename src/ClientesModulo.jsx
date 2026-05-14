@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { isReparacionActiva } from './reparacionUtils.js'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -28,12 +29,8 @@ function writeLs(key, val) {
   localStorage.setItem(key, JSON.stringify(val))
 }
 
-function isReparacionActiva(rep) {
-  return String(rep?.estatus ?? '').toUpperCase() !== 'ENTREGADO'
-}
-
 /**
- * Módulo Clientes alineado con ClientesScreen.kt (lista, búsqueda, acciones Servicio/Cuentas, reparaciones activas, ventas).
+ * Módulo Clientes alineado con ClientesScreen.kt (lista, búsqueda, acciones Servicio/Cuentas, órdenes de servicio, ventas).
  */
 export default function ClientesModulo({
   supabase,
@@ -71,8 +68,10 @@ export default function ClientesModulo({
   const [modalRepActivas, setModalRepActivas] = useState(false)
   const [repsActivas, setRepsActivas] = useState([])
   const [loadingReps, setLoadingReps] = useState(false)
-  const [repTitle, setRepTitle] = useState('Reparaciones Activas')
+  const [repTitle, setRepTitle] = useState('Órdenes de servicio')
   const [repSubtitle, setRepSubtitle] = useState('')
+  /** Resumen del modal de órdenes (totales por cliente). null si error o aún no cargado. */
+  const [repResumen, setRepResumen] = useState(null)
 
   const [cargandoEquipoRep, setCargandoEquipoRep] = useState(false)
 
@@ -268,7 +267,7 @@ export default function ClientesModulo({
     }
   }
 
-  async function buscarReparacionesActivas() {
+  async function buscarOrdenesServicioCliente() {
     const cliente = clienteAccion
     if (!cliente?.id) {
       onError?.('Cliente sin ID válido')
@@ -276,7 +275,9 @@ export default function ClientesModulo({
     }
     setModalAcciones(false)
     setLoadingReps(true)
-    setRepTitle('Reparaciones Activas')
+    setRepTitle('Órdenes de servicio')
+    setRepResumen(null)
+    setRepSubtitle('')
     try {
       let todas = []
       if (supabase) {
@@ -286,17 +287,29 @@ export default function ClientesModulo({
       } else {
         todas = readLs(LS_REP, [])
       }
-      const activas = todas.filter((r) => sameId(r.cliente_id, cliente.id) && isReparacionActiva(r))
-      setRepsActivas(activas)
-      const n = activas.length
-      setRepSubtitle(
-        n > 0
-          ? `Se encontraron ${n} reparación${n === 1 ? '' : 'es'} activa${n === 1 ? '' : 's'} para '${cliente.nombre || ''}'`
-          : `No se encontraron reparaciones activas para '${cliente.nombre || ''}'`,
-      )
+      const delCliente = todas.filter((r) => sameId(r.cliente_id, cliente.id))
+      delCliente.sort((a, b) => {
+        const aa = isReparacionActiva(a) ? 0 : 1
+        const bb = isReparacionActiva(b) ? 0 : 1
+        if (aa !== bb) return aa - bb
+        const ida = Number(a.id) || 0
+        const idb = Number(b.id) || 0
+        return idb - ida
+      })
+      setRepsActivas(delCliente)
+      const n = delCliente.length
+      const nAct = delCliente.filter(isReparacionActiva).length
+      const nEnt = n - nAct
+      setRepResumen({
+        nombre: String(cliente.nombre || 'Cliente').trim() || 'Cliente',
+        total: n,
+        enTaller: nAct,
+        entregadas: nEnt,
+      })
       setModalRepActivas(true)
     } catch (e) {
       setRepTitle('Error de búsqueda')
+      setRepResumen(null)
       setRepSubtitle(`Error: ${e.message}`)
       setRepsActivas([])
       setModalRepActivas(true)
@@ -316,7 +329,7 @@ export default function ClientesModulo({
     return { serie: eq?.serie ?? '', tipo: eq?.tipo_equipo ?? '' }
   }
 
-  async function seleccionarReparacionActiva(rep) {
+  async function seleccionarOrdenCliente(rep) {
     const cliente = clienteAccion
     if (!cliente || !rep) return
     setCargandoEquipoRep(true)
@@ -512,7 +525,7 @@ export default function ClientesModulo({
               <p className="muted">Selecciona una acción:</p>
             </div>
             <div className="modal-footer modal-footer-wrap">
-              <button type="button" className="btn-servicio" onClick={() => void buscarReparacionesActivas()}>
+              <button type="button" className="btn-servicio" onClick={() => void buscarOrdenesServicioCliente()}>
                 Servicio
               </button>
               <button type="button" className="btn-cuentas" onClick={() => void buscarCuentasCliente()}>
@@ -554,26 +567,77 @@ export default function ClientesModulo({
               <h3>{repTitle}</h3>
             </div>
             <div className="modal-body">
-              <p className="muted">{repSubtitle}</p>
               {loadingReps ? (
                 <p className="center">Cargando…</p>
-              ) : repsActivas.length > 0 ? (
+              ) : repTitle === 'Error de búsqueda' ? (
+                <p className="warning-inline">{repSubtitle}</p>
+              ) : repResumen ? (
+                repResumen.total > 0 ? (
+                  <div className="rep-ordenes-resumen-caja" role="status" aria-live="polite">
+                    <div className="rep-ordenes-resumen-cliente">
+                      <span className="rep-ordenes-resumen-ico" aria-hidden>
+                        👤
+                      </span>
+                      <span className="rep-ordenes-resumen-nombre">{repResumen.nombre}</span>
+                    </div>
+                    <div className="rep-ordenes-resumen-stats">
+                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--total">
+                        <span aria-hidden>📋</span> {repResumen.total}{' '}
+                        {repResumen.total === 1 ? 'orden' : 'órdenes'}
+                      </span>
+                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--taller">
+                        <span aria-hidden>🔧</span> {repResumen.enTaller} en taller
+                      </span>
+                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--ok">
+                        <span aria-hidden>✅</span> {repResumen.entregadas}{' '}
+                        {repResumen.entregadas === 1 ? 'entregada' : 'entregadas'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="rep-ordenes-resumen-caja rep-ordenes-resumen-caja--vacio"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="rep-ordenes-resumen-cliente">
+                      <span className="rep-ordenes-resumen-ico" aria-hidden>
+                        👤
+                      </span>
+                      <span className="rep-ordenes-resumen-nombre">{repResumen.nombre}</span>
+                    </div>
+                    <p className="rep-ordenes-resumen-vacio-msg">Sin órdenes de servicio registradas.</p>
+                    <p className="rep-ordenes-resumen-vacio-sugerencia">
+                      Pulse «Nueva reparación» para registrar la primera orden.
+                    </p>
+                  </div>
+                )
+              ) : null}
+              {!loadingReps && repsActivas.length > 0 ? (
                 <ul className="rep-activa-list">
-                  {repsActivas.map((rep) => (
-                    <li key={rep.id}>
-                      <button type="button" className="rep-activa-card" onClick={() => void seleccionarReparacionActiva(rep)}>
-                        <strong>🔧 Reparación #{rep.id}</strong>
-                        {rep.tipo_reparacion ? <span className="small">🔧 Tipo: {rep.tipo_reparacion}</span> : null}
-                        {rep.descripcion_equipo ? <span className="small">📝 {rep.descripcion_equipo}</span> : null}
-                        {rep.problemas_reportados ? <span className="small">⚠️ {rep.problemas_reportados}</span> : null}
-                        <span className="small">📊 Estado: {rep.estatus ?? 'Sin estado'}</span>
-                      </button>
-                    </li>
-                  ))}
+                  {repsActivas.map((rep) => {
+                    const activa = isReparacionActiva(rep)
+                    return (
+                      <li key={rep.id}>
+                        <button
+                          type="button"
+                          className={`rep-activa-card${activa ? '' : ' rep-orden-entregada'}`}
+                          onClick={() => void seleccionarOrdenCliente(rep)}
+                        >
+                          <span className={`rep-orden-badge${activa ? ' rep-orden-badge--activa' : ' rep-orden-badge--entregada'}`}>
+                            {activa ? 'En taller' : 'Entregada'}
+                          </span>
+                          <strong>🔧 Orden #{rep.id}</strong>
+                          {rep.tipo_reparacion ? <span className="small">🔧 Tipo: {rep.tipo_reparacion}</span> : null}
+                          {rep.descripcion_equipo ? <span className="small">📝 {rep.descripcion_equipo}</span> : null}
+                          {rep.problemas_reportados ? <span className="small">⚠️ {rep.problemas_reportados}</span> : null}
+                          <span className="small">📊 Estado: {rep.estatus ?? 'Sin estado'}</span>
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
-              ) : (
-                <p className="warning-inline">No hay reparaciones activas para mostrar</p>
-              )}
+              ) : null}
             </div>
             <div className="modal-footer modal-footer-wrap">
               <button type="button" className="btn-agregar-equipo modal-btn-compact" onClick={nuevaReparacionIrServicios}>
