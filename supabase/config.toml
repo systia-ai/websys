@@ -1,0 +1,4 @@
+# Supabase CLI: https://supabase.com/docs/guides/cli
+# La app no usa JWT de usuario; la función acepta invocación con la anon key del proyecto.
+[functions.send-whatsapp-orden]
+verify_jwt = false

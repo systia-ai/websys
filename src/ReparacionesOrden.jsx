@@ -4,7 +4,7 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
-import { abrirWhatsAppOrden } from './whatsappUtils.js'
+import { abrirWhatsAppOrden, enviarOrdenWhatsAppCloudApi, normalizarTelefonoWa } from './whatsappUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -627,22 +627,36 @@ export default function ReparacionesOrden({
     }
   }
 
-  function enviarWhatsAppOrden() {
+  async function enviarWhatsAppOrden() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
       onError('Primero registra la orden de servicio para enviar el mensaje.')
       return
     }
-    const res = abrirWhatsAppOrden({ telefono: telClienteUi, numeroOrden: ord })
-    if (res.ok) {
+    if (supabase) {
+      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const res = await enviarOrdenWhatsAppCloudApi(supabase, {
+        orden: ord,
+        nombreCliente: nombreClienteUi,
+        ...(toDigits ? { to: toDigits } : {}),
+      })
+      if (res.ok) {
+        onNotice('Mensaje enviado por WhatsApp (Cloud API). Revisa tu teléfono.')
+        return
+      }
+      onError(res.errorMsg || 'No se pudo enviar el mensaje por WhatsApp API.')
+      return
+    }
+    const wa = abrirWhatsAppOrden({ telefono: telClienteUi, numeroOrden: ord })
+    if (wa.ok) {
       onNotice('Mensaje listo en WhatsApp. Pulsa enviar para que llegue al cliente.')
       return
     }
-    if (res.motivo === 'sin-telefono') {
+    if (wa.motivo === 'sin-telefono') {
       onError('El cliente no tiene un teléfono registrado.')
-    } else if (res.motivo === 'telefono-invalido') {
+    } else if (wa.motivo === 'telefono-invalido') {
       onError(`El teléfono "${telClienteUi}" no tiene un formato válido para WhatsApp.`)
-    } else if (res.motivo === 'popup-bloqueado') {
+    } else if (wa.motivo === 'popup-bloqueado') {
       onError('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
     }
   }
@@ -894,9 +908,15 @@ export default function ReparacionesOrden({
           <button
             type="button"
             className="btn-success wide"
-            disabled={!puedeAccionesPdf || !telClienteUi}
-            onClick={enviarWhatsAppOrden}
-            title={!telClienteUi ? 'El cliente no tiene teléfono registrado' : 'Abrir WhatsApp con un mensaje listo para el cliente'}
+            disabled={!puedeAccionesPdf || (!supabase && !telClienteUi)}
+            onClick={() => void enviarWhatsAppOrden()}
+            title={
+              !supabase && !telClienteUi
+                ? 'El cliente no tiene teléfono registrado'
+                : supabase
+                  ? 'Enviar plantilla de WhatsApp por Cloud API (ver secretos WHATSAPP_* en Supabase)'
+                  : 'Abrir WhatsApp con un mensaje listo para el cliente'
+            }
           >
             📲 Enviar por WhatsApp
           </button>

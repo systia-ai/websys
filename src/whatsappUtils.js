@@ -1,3 +1,5 @@
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
+
 /**
  * Utilidades para abrir conversaciones de WhatsApp via wa.me.
  *
@@ -58,6 +60,64 @@ export function buildWhatsAppUrl({ telefono, mensaje }) {
   if (!tel) return null
   const txt = encodeURIComponent(mensaje ?? '')
   return `https://wa.me/${tel}?text=${txt}`
+}
+
+/**
+ * Envía notificación de orden vía WhatsApp Cloud API (Supabase Edge Function `send-whatsapp-orden`).
+ * El token de Meta vive solo en secretos del servidor.
+ *
+ * @param {object} supabase Cliente `@supabase/supabase-js`.
+ * @param {{ orden: string|number, nombreCliente?: string, to?: string }} p
+ * @returns {Promise<{ ok: true, data?: unknown } | { ok: false, errorMsg: string }>}
+ */
+function truncarMetaTexto(s, max = 900) {
+  const t = String(s ?? '')
+  return t.length <= max ? t : `${t.slice(0, max)}…`
+}
+
+/**
+ * Cuando la Edge Function responde 4xx/5xx, supabase-js lanza `FunctionsHttpError` y `data` es null.
+ * El JSON con `error` viene en `error.context` (Response).
+ */
+async function mensajeErrorInvoke(error) {
+  if (error instanceof FunctionsHttpError && error.context?.json) {
+    try {
+      const body = await error.context.json()
+      if (body && typeof body === 'object') {
+        if (typeof body.error === 'string') return body.error
+        if (body.error && typeof body.error === 'object' && typeof body.error.message === 'string') {
+          return body.error.message
+        }
+        if (body.meta?.error?.message) return String(body.meta.error.message)
+      }
+    } catch {
+      /* ignore */
+    }
+    return `${error.message} (HTTP ${error.context.status})`
+  }
+  if (error instanceof FunctionsRelayError) {
+    return error.message || 'Error de relay al invocar la función.'
+  }
+  if (error instanceof FunctionsFetchError) {
+    return error.message || 'No se pudo conectar con la Edge Function (red o CORS).'
+  }
+  return error?.message ?? 'Error al invocar la función.'
+}
+
+export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
+  if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  const { orden, nombreCliente = '', to } = p
+  const { data, error } = await supabase.functions.invoke('send-whatsapp-orden', {
+    body: { orden: String(orden), nombreCliente: truncarMetaTexto(nombreCliente), ...(to ? { to } : {}) },
+  })
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: msg }
+  }
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: String(data.error) }
+  }
+  return { ok: true, data }
 }
 
 /**

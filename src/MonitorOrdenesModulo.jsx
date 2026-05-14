@@ -16,31 +16,84 @@ function readLs(key, fallback) {
   }
 }
 
-/** Fecha de ingreso para ordenar y mostrar (variantes comunes en DB / Android). */
-function fechaIngresoYmd(rep) {
-  const raw =
-    rep.fecha_ingreso ??
-    rep.fechaIngreso ??
-    rep.fecha_registro ??
-    rep.fecha ??
-    rep.created_at ??
-    rep.updated_at
+/** Convierte timestamp o fecha a YYYY-MM-DD en calendario local (coherente con `<input type="date">`). */
+function aYmdLocalDesdeRaw(raw) {
   if (raw == null || raw === '') return null
   const s = String(raw).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Fecha de ingreso al taller (Supabase guarda `fecha_creacion` al registrar la orden). */
+function fechaIngresoYmd(rep) {
+  const raw =
+    rep.fecha_ingreso ??
+    rep.fechaIngreso ??
+    rep.fecha_registro ??
+    rep.fecha_creacion ??
+    rep.created_at ??
+    rep.fecha ??
+    rep.updated_at
+  return aYmdLocalDesdeRaw(raw)
 }
 
 function fechaIngresoTime(rep) {
-  const y = fechaIngresoYmd(rep)
-  if (y) return new Date(`${y}T12:00:00`).getTime()
-  const raw = rep.created_at ?? rep.updated_at
+  const ymd = fechaIngresoYmd(rep)
+  if (ymd) {
+    const [y, m, d] = ymd.split('-').map(Number)
+    return new Date(y, m - 1, d).getTime()
+  }
+  const raw = rep.fecha_creacion ?? rep.created_at ?? rep.updated_at
   if (raw == null) return null
   const t = new Date(raw).getTime()
   return Number.isNaN(t) ? null : t
+}
+
+function hoyYmdLocal() {
+  return aYmdLocalDesdeRaw(new Date())
+}
+
+function esEntregado(rep) {
+  return /ENTREGAD[OA]\b/i.test(String(rep?.estatus ?? '').trim())
+}
+
+/** Fin del conteo de días: hoy si sigue en taller; si ENTREGADO/A, fecha de salida o última actualización. */
+function fechaFinConteoYmd(rep) {
+  if (!esEntregado(rep)) return hoyYmdLocal()
+  const raw =
+    rep.fecha_entrega ?? rep.fechaEntrega ?? rep.fecha_salida ?? rep.updated_at ?? rep.fecha_creacion
+  return aYmdLocalDesdeRaw(raw) ?? hoyYmdLocal()
+}
+
+function diffDiasCalendario(ymdA, ymdB) {
+  if (!ymdA || !ymdB || ymdA.length < 10 || ymdB.length < 10) return null
+  const [ya, ma, da] = ymdA.slice(0, 10).split('-').map(Number)
+  const [yb, mb, db] = ymdB.slice(0, 10).split('-').map(Number)
+  const ta = Date.UTC(ya, ma - 1, da)
+  const tb = Date.UTC(yb, mb - 1, db)
+  return Math.round((tb - ta) / 86400000)
+}
+
+/** Días desde ingreso hasta hoy (abierta) o hasta cierre aproximado (entregada). */
+function diasEnTaller(rep) {
+  const ing = fechaIngresoYmd(rep)
+  const fin = fechaFinConteoYmd(rep)
+  if (!ing || !fin) return null
+  const n = diffDiasCalendario(ing, fin)
+  return n == null ? null : Math.max(0, n)
+}
+
+/** Si el texto es solo «N días» / «N dia», devuelve N; si no, null. */
+function parsearFiltroDiasExactos(texto) {
+  const t = String(texto ?? '').trim()
+  const m = t.match(/^(\d+)\s*d[ií]a(s)?\s*$/i)
+  return m ? Number(m[1]) : null
 }
 
 function formatearFechaMostrar(ymdOrNull) {
@@ -48,6 +101,13 @@ function formatearFechaMostrar(ymdOrNull) {
   const [y, m, d] = ymdOrNull.slice(0, 10).split('-').map(Number)
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymdOrNull
   return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** Alinea variantes de BD con los valores del catálogo del monitor. */
+function estatusParaFiltro(rep) {
+  const st = String(rep?.estatus ?? '').trim().toUpperCase()
+  if (st === 'ENTREGADA') return 'ENTREGADO'
+  return st
 }
 
 const TECNICO_TODAS = ''
@@ -72,6 +132,8 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
   /** '' = sin filtro; yyyy-mm-dd = solo órdenes con fecha de ingreso >= este día */
   const [fechaDesde, setFechaDesde] = useState('')
+  /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
+  const [busqueda, setBusqueda] = useState('')
 
   /** Catálogo de técnicos (controlado por el usuario). */
   const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
@@ -131,7 +193,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const filasOrdenadas = useMemo(() => {
     const sel = estatusSeleccionados
     let filtradas = reparaciones.filter((r) => {
-      const st = String(r.estatus ?? '').trim().toUpperCase()
+      const st = estatusParaFiltro(r)
       return sel.size === 0 ? false : sel.has(st)
     })
     if (tecnicoFiltro === TECNICO_SIN) {
@@ -152,10 +214,31 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         return ymd != null && ymd >= desde
       })
     }
+    const diasExactos = parsearFiltroDiasExactos(busqueda)
+    const qTexto = String(busqueda ?? '').trim()
+    if (diasExactos != null) {
+      filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
+    } else if (qTexto) {
+      const q = qTexto.toLowerCase()
+      filtradas = filtradas.filter((r) => {
+        const c = clientes.find((x) => sameId(x.id, r.cliente_id))
+        const nombre = String(c?.nombre ?? '').toLowerCase()
+        const blob = [
+          nombre,
+          String(r.id ?? ''),
+          String(r.problemas_reportados ?? '').toLowerCase(),
+          String(r.descripcion_equipo ?? '').toLowerCase(),
+          String(r.tecnico ?? '').toLowerCase(),
+          String(r.estatus ?? '').toLowerCase(),
+        ].join(' ')
+        return blob.includes(q)
+      })
+    }
     const conTiempo = filtradas.map((r) => ({
       rep: r,
       t: fechaIngresoTime(r),
       ymd: fechaIngresoYmd(r),
+      dias: diasEnTaller(r),
     }))
     conTiempo.sort((a, b) => {
       const ta = a.t ?? 0
@@ -166,8 +249,8 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       if (b.t == null) return -1
       return ordenFecha === 'asc' ? ta - tb : tb - ta
     })
-    return conTiempo.map(({ rep, ymd }) => ({ rep, ymd }))
-  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde])
+    return conTiempo.map(({ rep, ymd, dias }) => ({ rep, ymd, dias }))
+  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde, busqueda, clientes])
 
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
@@ -303,10 +386,32 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 </button>
               </div>
             </label>
+            <label className="monitor-ordenes-label-inline monitor-ordenes-busqueda-wrap">
+              <span>Buscador</span>
+              <div className="monitor-ordenes-fecha-desde">
+                <input
+                  type="search"
+                  className="monitor-ordenes-busqueda-input"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Ej. 10 días, nombre cliente, #orden…"
+                  aria-label="Buscador: texto libre o filtro exacto por días en taller"
+                />
+                <button
+                  type="button"
+                  className="monitor-ordenes-fecha-clear"
+                  onClick={() => setBusqueda('')}
+                  disabled={!busqueda.trim()}
+                  title="Limpiar buscador"
+                  aria-label="Limpiar buscador"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </label>
           </div>
           <fieldset className="monitor-ordenes-fieldset">
             <legend className="monitor-ordenes-legend">Estatus a listar</legend>
-            <p className="muted small monitor-ordenes-ayuda">Por defecto solo <strong>INGRESADO</strong>. Marque los que desea ver.</p>
             <div className="monitor-ordenes-estatus-grid">
               {ESTATUS_ORDEN.map((est) => {
                 const st = String(est).trim().toUpperCase()
@@ -341,6 +446,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <thead>
                   <tr>
                     <th>Fecha de ingreso</th>
+                    <th>Días en taller</th>
                     <th>No. orden</th>
                     <th>Cliente</th>
                     <th>Tipo de equipo</th>
@@ -353,17 +459,24 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <tbody>
                   {filasOrdenadas.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="monitor-ordenes-vacio">
+                      <td colSpan={9} className="monitor-ordenes-vacio">
                         No hay órdenes con los filtros seleccionados.
                       </td>
                     </tr>
                   ) : (
-                    filasOrdenadas.map(({ rep, ymd }) => {
+                    filasOrdenadas.map(({ rep, ymd, dias }) => {
                       const { tipo, desc } = datosEquipo(rep)
                       const tech = String(rep.tecnico ?? '').trim()
+                      const diasStr = dias == null ? '—' : String(dias)
+                      const diasTitulo = esEntregado(rep)
+                        ? `Días desde ingreso hasta cierre (${diasStr} días; orden entregada)`
+                        : `Días desde ingreso hasta hoy (${diasStr} días)`
                       return (
                         <tr key={rep.id}>
                           <td>{formatearFechaMostrar(ymd)}</td>
+                          <td className="monitor-ordenes-dias" title={diasTitulo}>
+                            {diasStr}
+                          </td>
                           <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
                           <td>{nombreCliente(rep.cliente_id)}</td>
                           <td>{tipo}</td>

@@ -666,6 +666,36 @@ td {
   cursor: not-allowed;
 }
 
+.monitor-ordenes-busqueda-wrap {
+  grid-column: 1 / -1;
+}
+
+.monitor-ordenes-busqueda-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: #263238;
+  font-family: inherit;
+}
+
+.monitor-ordenes-busqueda-input:focus {
+  outline: 2px solid #1e88e5;
+  outline-offset: 1px;
+  border-color: #1e88e5;
+}
+
+.monitor-ordenes-dias {
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #1565c0;
+  white-space: nowrap;
+}
+
 .monitor-ordenes-gestion-tecnicos-btn {
   margin-left: 8px;
   border: 1px solid #1e88e5;
@@ -850,10 +880,6 @@ td {
   font-size: 0.85rem;
   font-weight: 700;
   padding: 0 6px;
-}
-
-.monitor-ordenes-ayuda {
-  margin: 0 0 10px 0;
 }
 
 .monitor-ordenes-estatus-grid {
