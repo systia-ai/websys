@@ -54,6 +54,12 @@ function combineNiveles(b, y, c, m, cLight, mLight) {
   return parts.length ? parts.join(' ') : null
 }
 
+function parseClienteIdFromSession(sess) {
+  const raw = sess?.clienteId ?? sess?.cliente_id
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 function parseNiveles(str) {
   const out = { b: '', y: '', m: '', c: '', mL: '', cL: '' }
   if (!str || !String(str).trim()) return out
@@ -117,7 +123,7 @@ export default function ReparacionesOrden({
     const n = Number(repIdStr)
     return Number.isFinite(n) && repIdStr ? n : null
   })
-  const [clienteIdNum, setClienteIdNum] = useState(null)
+  const [clienteIdNum, setClienteIdNum] = useState(() => parseClienteIdFromSession(s))
 
   const [dialogExito, setDialogExito] = useState(false)
   const [msgExito, setMsgExito] = useState('')
@@ -236,6 +242,11 @@ export default function ReparacionesOrden({
     if (clienteDesdeBd?.id != null) {
       setClienteIdNum(clienteDesdeBd.id)
       return clienteDesdeBd.id
+    }
+    const sid = parseClienteIdFromSession(s)
+    if (sid != null) {
+      setClienteIdNum(sid)
+      return sid
     }
     const nom = (s.clienteNombre ?? clienteDesdeBd?.nombre ?? '').trim()
     const tel = (s.clienteTelefono ?? clienteDesdeBd?.telefono ?? '').trim()

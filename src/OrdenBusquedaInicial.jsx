@@ -65,6 +65,7 @@ function buildSessionFromDetalleFixed(row) {
     equipoTipo: tipoEquipo || '',
     equipoDescripcion: rep?.descripcion_equipo ?? '',
     equipoTipoReparacion: rep?.tipo_reparacion ?? '',
+    clienteId: c.id ?? rep?.cliente_id,
     clienteNombre: c.nombre || nombreCliente || '',
     clienteTelefono: c.telefono,
     clienteDomicilio: c.domicilio,

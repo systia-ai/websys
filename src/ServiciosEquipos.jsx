@@ -250,6 +250,7 @@ export default function ServiciosEquipos({
       await cargarEquipos()
       onNotice('Cliente asociado al equipo')
       onOpenReparaciones({
+        clienteId: c.id,
         clienteNombre: c.nombre,
         clienteTelefono: c.telefono,
         clienteDomicilio: c.domicilio,
@@ -284,6 +285,7 @@ export default function ServiciosEquipos({
       onNotice(editandoId ? 'Equipo actualizado' : 'Equipo agregado')
       if (!editandoId) {
         onOpenReparaciones({
+          clienteId: cli.id,
           clienteNombre: cli.nombre,
           clienteTelefono: cli.telefono,
           clienteDomicilio: cli.domicilio,
@@ -341,6 +343,7 @@ export default function ServiciosEquipos({
           await cargarEquipos()
           onNotice('Equipo agregado')
           onOpenReparaciones({
+            clienteId: cli.id,
             clienteNombre: cli.nombre,
             clienteTelefono: cli.telefono,
             clienteDomicilio: cli.domicilio,
@@ -432,6 +435,7 @@ export default function ServiciosEquipos({
     const c = normalizeClienteRow(cli ?? {})
     setModalRep(null)
     onOpenReparaciones({
+      clienteId: c.id ?? rep.cliente_id,
       clienteNombre: c.nombre,
       clienteTelefono: c.telefono,
       clienteDomicilio: c.domicilio,
@@ -458,6 +462,7 @@ export default function ServiciosEquipos({
       const c = normalizeClienteRow(cli ?? {})
       setModalRep(null)
       onOpenReparaciones({
+        clienteId: c.id ?? eq.cliente_id,
         clienteNombre: c.nombre,
         clienteTelefono: c.telefono,
         clienteDomicilio: c.domicilio,

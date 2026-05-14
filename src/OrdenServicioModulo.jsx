@@ -72,6 +72,7 @@ export default function OrdenServicioModulo({
               session?.reparacionId ?? '',
               session?.clienteTelefono ?? '',
               session?.clienteNombre ?? '',
+              session?.clienteId ?? session?.cliente_id ?? '',
             ].join('|')}
             supabase={supabase}
             session={session ?? {}}

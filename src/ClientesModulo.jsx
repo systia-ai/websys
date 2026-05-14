@@ -361,6 +361,7 @@ export default function ClientesModulo({
     try {
       const { serie: serieEquipo, tipo: tipoEquipo } = await fetchEquipoPorId(rep.equipo_id)
       onOpenReparaciones({
+        clienteId: cliente.id,
         clienteNombre: cliente.nombre,
         clienteTelefono: cliente.telefono,
         clienteDomicilio: cliente.domicilio,
