@@ -809,9 +809,6 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                   {totalVenta > 0.0001 ? <> · <strong>${totalVenta.toFixed(2)}</strong></> : null}
                 </span>
               </button>
-              <p className="muted small pago-modal-divider">
-                O seleccione un concepto del catálogo para registrar un pago parcial:
-              </p>
               <input className="full" placeholder="Buscar concepto…" value={busqCat} onChange={(e) => setBusqCat(e.target.value)} />
               <ul className="cat-pago-list">
                 {catFiltrado.map((c) => (

@@ -1329,6 +1329,7 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 .btn-pagar-adeudo-total {
   width: 100%;
   min-height: 52px;
+  margin-bottom: 12px;
   padding: 0 14px;
   border: 0;
   border-radius: 10px;
@@ -1416,23 +1417,6 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   background: #eceff1;
   color: #90a4ae;
   cursor: not-allowed;
-}
-
-.pago-modal-divider {
-  margin: 14px 0 8px;
-  text-align: center;
-  position: relative;
-}
-
-.pago-modal-divider::before,
-.pago-modal-divider::after {
-  content: '';
-  display: inline-block;
-  width: 20%;
-  height: 1px;
-  background: #cfd8dc;
-  vertical-align: middle;
-  margin: 0 8px;
 }
 
 .btn-nueva-cuenta-cliente {
