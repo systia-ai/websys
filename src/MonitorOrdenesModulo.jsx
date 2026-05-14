@@ -63,14 +63,6 @@ function esEntregado(rep) {
   return /ENTREGAD[OA]\b/i.test(String(rep?.estatus ?? '').trim())
 }
 
-/** Fin del conteo de días: hoy si sigue en taller; si ENTREGADO/A, fecha de salida o última actualización. */
-function fechaFinConteoYmd(rep) {
-  if (!esEntregado(rep)) return hoyYmdLocal()
-  const raw =
-    rep.fecha_entrega ?? rep.fechaEntrega ?? rep.fecha_salida ?? rep.updated_at ?? rep.fecha_creacion
-  return aYmdLocalDesdeRaw(raw) ?? hoyYmdLocal()
-}
-
 function diffDiasCalendario(ymdA, ymdB) {
   if (!ymdA || !ymdB || ymdA.length < 10 || ymdB.length < 10) return null
   const [ya, ma, da] = ymdA.slice(0, 10).split('-').map(Number)
@@ -80,12 +72,15 @@ function diffDiasCalendario(ymdA, ymdB) {
   return Math.round((tb - ta) / 86400000)
 }
 
-/** Días desde ingreso hasta hoy (abierta) o hasta cierre aproximado (entregada). */
+/**
+ * Días en taller solo para órdenes abiertas (ingreso → hoy).
+ * Si ya está ENTREGADO/A, devuelve null (la UI muestra ✅, no número).
+ */
 function diasEnTaller(rep) {
+  if (esEntregado(rep)) return null
   const ing = fechaIngresoYmd(rep)
-  const fin = fechaFinConteoYmd(rep)
-  if (!ing || !fin) return null
-  const n = diffDiasCalendario(ing, fin)
+  if (!ing) return null
+  const n = diffDiasCalendario(ing, hoyYmdLocal())
   return n == null ? null : Math.max(0, n)
 }
 
@@ -467,15 +462,29 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                     filasOrdenadas.map(({ rep, ymd, dias }) => {
                       const { tipo, desc } = datosEquipo(rep)
                       const tech = String(rep.tecnico ?? '').trim()
-                      const diasStr = dias == null ? '—' : String(dias)
-                      const diasTitulo = esEntregado(rep)
-                        ? `Días desde ingreso hasta cierre (${diasStr} días; orden entregada)`
-                        : `Días desde ingreso hasta hoy (${diasStr} días)`
+                      const ent = esEntregado(rep)
                       return (
                         <tr key={rep.id}>
                           <td>{formatearFechaMostrar(ymd)}</td>
-                          <td className="monitor-ordenes-dias" title={diasTitulo}>
-                            {diasStr}
+                          <td
+                            className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}
+                            title={
+                              ent
+                                ? 'Entregado — ya no está en el taller'
+                                : dias == null
+                                  ? 'Sin fecha de ingreso'
+                                  : `Días en taller: ${dias}`
+                            }
+                          >
+                            {ent ? (
+                              <span role="img" aria-label="Entregado, fuera del taller">
+                                ✅
+                              </span>
+                            ) : dias == null ? (
+                              '—'
+                            ) : (
+                              String(dias)
+                            )}
                           </td>
                           <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
                           <td>{nombreCliente(rep.cliente_id)}</td>

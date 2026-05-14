@@ -696,6 +696,11 @@ td {
   white-space: nowrap;
 }
 
+.monitor-ordenes-dias--entregado {
+  color: #2e7d32;
+  font-size: 1.1rem;
+}
+
 .monitor-ordenes-gestion-tecnicos-btn {
   margin-left: 8px;
   border: 1px solid #1e88e5;
