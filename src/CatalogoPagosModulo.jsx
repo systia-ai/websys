@@ -165,7 +165,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
   return (
     <div className="servicios-root inventarios-root catalogo-pagos-root">
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
+        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">

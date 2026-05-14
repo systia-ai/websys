@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { normalizeClienteRow } from './clienteUtils.js'
 import ServiciosEquipos from './ServiciosEquipos.jsx'
@@ -50,6 +50,61 @@ function App() {
   /** Desde ClientesModulo → pantalla Cuentas (VentasScreen.kt). */
   const [ventasContext, setVentasContext] = useState(null)
   const supabase = useMemo(() => getSupabaseClient(), [])
+
+  const activeModuleRef = useRef(activeModule)
+  /** Historial de pantallas para «atrás» / salir (no siempre inicio). */
+  const navStackRef = useRef(['home'])
+
+  useEffect(() => {
+    activeModuleRef.current = activeModule
+  }, [activeModule])
+
+  function navigateTo(nextKey) {
+    if (nextKey === 'home') {
+      navStackRef.current = ['home']
+      setRepSession(null)
+      setVentasContext(null)
+      setClienteVinculoServicios(null)
+      setActiveModule('home')
+      setNotice('')
+      return
+    }
+    const cur = activeModuleRef.current
+    if (cur === nextKey) {
+      setActiveModule(nextKey)
+      return
+    }
+    navStackRef.current = [...navStackRef.current, nextKey]
+    setActiveModule(nextKey)
+  }
+
+  function goBack() {
+    const leaving = activeModuleRef.current
+    const stack = navStackRef.current
+    if (stack.length <= 1) {
+      navigateTo('home')
+      return
+    }
+    if (stack[stack.length - 1] === leaving) {
+      navStackRef.current = stack.slice(0, -1)
+    } else {
+      const idx = stack.lastIndexOf(leaving)
+      navStackRef.current = idx >= 0 ? stack.slice(0, idx) : stack.slice(0, -1)
+    }
+    const nextStack = navStackRef.current
+    const target = nextStack[nextStack.length - 1] ?? 'home'
+    if (leaving === 'reparaciones') setRepSession(null)
+    if (leaving === 'ventas') setVentasContext(null)
+    if (leaving === 'servicios') setClienteVinculoServicios(null)
+    setActiveModule(target)
+    setNotice('')
+  }
+
+  function openReparacionesFromServicios(payload) {
+    setRepSession(payload ?? null)
+    setError('')
+    navigateTo('reparaciones')
+  }
 
   const current = modules.find((m) => m.key === activeModule)
   const filteredRows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
@@ -142,18 +197,6 @@ function App() {
     setFormData(values)
   }
 
-  function openReparacionesFromServicios(payload) {
-    setRepSession(payload)
-    setActiveModule('reparaciones')
-    setError('')
-  }
-
-  function salirReparaciones() {
-    setRepSession(null)
-    setActiveModule('home')
-    setNotice('')
-  }
-
   function renderHome() {
     return (
       <div className="home-page-shell">
@@ -180,7 +223,7 @@ function App() {
               key={m.key}
               type="button"
               className="card home-menu-card"
-              onClick={() => setActiveModule(m.key)}
+              onClick={() => navigateTo(m.key)}
             >
               <span className="home-menu-card-icon">
                 <HomeModuleIcon moduleKey={m.key} />
@@ -206,23 +249,23 @@ function App() {
     return (
       <ClientesModulo
         supabase={supabase}
-        onHome={() => setActiveModule('home')}
+        onHome={goBack}
         onOpenServiciosConCliente={(row) => {
           const c = normalizeClienteRow(row)
           setClienteVinculoServicios(c)
-          setActiveModule('servicios')
+          navigateTo('servicios')
           setNotice(`Cliente "${c.nombre || c.id || '—'}" vinculado a Equipos`)
           setTimeout(() => setNotice(''), 4000)
         }}
         onOpenReparaciones={openReparacionesFromServicios}
-        onIrEquipos={() => setActiveModule('servicios')}
+        onIrEquipos={() => navigateTo('servicios')}
         onIrAOrdenServicio={() => {
           setRepSession(null)
-          setActiveModule('reparaciones')
+          navigateTo('reparaciones')
         }}
         onOpenVentas={(boot) => {
           setVentasContext({ ...boot, returnTo: 'clientes' })
-          setActiveModule('ventas')
+          navigateTo('ventas')
         }}
         onError={(msg) => {
           setError(msg)
@@ -244,7 +287,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <InventariosModulo
           supabase={supabase}
-          onHome={() => setActiveModule('home')}
+          onHome={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -266,7 +309,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <CatalogoPagosModulo
           supabase={supabase}
-          onHome={() => setActiveModule('home')}
+          onHome={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -288,7 +331,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <CorteCajaModulo
           supabase={supabase}
-          onHome={() => setActiveModule('home')}
+          onHome={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -310,7 +353,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <ReportesModulo
           supabase={supabase}
-          onHome={() => setActiveModule('home')}
+          onHome={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -331,7 +374,7 @@ function App() {
         {error && <p className="error">{error}</p>}
         <MonitorOrdenesModulo
           supabase={supabase}
-          onHome={() => setActiveModule('home')}
+          onHome={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -352,14 +395,11 @@ function App() {
         supabase={supabase}
         clienteDesdeClientes={clienteVinculoServicios}
         onConsumeClienteVinculo={() => setClienteVinculoServicios(null)}
-        onHome={() => {
-          setClienteVinculoServicios(null)
-          setActiveModule('home')
-        }}
-        onIrAClientes={() => setActiveModule('clientes')}
+        onHome={goBack}
+        onIrAClientes={() => navigateTo('clientes')}
         onIrAOrdenServicio={() => {
           setRepSession(null)
-          setActiveModule('reparaciones')
+          navigateTo('reparaciones')
         }}
         onOpenReparaciones={openReparacionesFromServicios}
         onError={(msg) => {
@@ -381,16 +421,12 @@ function App() {
         session={repSession ?? {}}
         error={error}
         notice={notice}
-        onHome={() => {
-          setRepSession(null)
-          setActiveModule('home')
-          setNotice('')
-        }}
-        onIrEquipos={() => setActiveModule('servicios')}
-        onIrClientes={() => setActiveModule('clientes')}
+        onHome={goBack}
+        onIrEquipos={() => navigateTo('servicios')}
+        onIrClientes={() => navigateTo('clientes')}
         onSeleccionarOrdenDesdeBusqueda={(payload) => setRepSession(payload)}
         onClearOrdenSession={() => setRepSession(null)}
-        onSalir={salirReparaciones}
+        onSalir={goBack}
         onError={(msg) => {
           setError(msg)
           setTimeout(() => setError(''), 6000)
@@ -412,11 +448,7 @@ function App() {
         <VentasCuentaScreen
           supabase={supabase}
           context={ventasContext}
-          onSalir={() => {
-            const dest = ventasContext?.returnTo ?? 'home'
-            setVentasContext(null)
-            setActiveModule(dest)
-          }}
+          onSalir={goBack}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -434,13 +466,13 @@ function App() {
     return (
       <main className="module">
         <div className="toolbar">
-          <button type="button" onClick={() => setActiveModule('home')}>
+          <button type="button" onClick={() => navigateTo('home')}>
             Inicio
           </button>
           <h2>Ventas / Cuentas</h2>
         </div>
         <p className="warning">Las cuentas se abren desde el módulo Clientes.</p>
-        <button type="button" onClick={() => setActiveModule('clientes')}>
+        <button type="button" onClick={() => navigateTo('clientes')}>
           Ir a Clientes
         </button>
       </main>
@@ -450,7 +482,7 @@ function App() {
   return (
     <main className="module">
       <div className="toolbar">
-        <button type="button" onClick={() => setActiveModule('home')}>
+        <button type="button" onClick={() => navigateTo('home')}>
           Inicio
         </button>
         <h2>{current.title}</h2>

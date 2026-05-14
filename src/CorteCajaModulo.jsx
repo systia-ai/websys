@@ -285,7 +285,7 @@ td{font-size:0.9rem}
     return (
       <div className="servicios-root inventarios-root corte-caja-root">
         <header className="servicios-appbar">
-          <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
+          <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
             ←
           </button>
           <h1 className="servicios-appbar-title">
@@ -328,7 +328,7 @@ td{font-size:0.9rem}
   return (
     <div className="servicios-root inventarios-root corte-caja-root">
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Inicio">
+        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">
