@@ -260,6 +260,7 @@ export default function ServiciosEquipos({
         equipoDescripcion: eq.descripcion ?? '',
         equipoTipoReparacion: eq.tipo_reparacion ?? '',
         reparacionId: '',
+        sesionStamp: Date.now(),
       })
       return true
     } catch (e) {
@@ -295,6 +296,7 @@ export default function ServiciosEquipos({
           equipoDescripcion: base.descripcion ?? '',
           equipoTipoReparacion: base.tipo_reparacion ?? '',
           reparacionId: '',
+          sesionStamp: Date.now(),
         })
         onConsumeClienteVinculo?.()
       }
@@ -353,6 +355,7 @@ export default function ServiciosEquipos({
             equipoDescripcion: base.descripcion ?? '',
             equipoTipoReparacion: base.tipo_reparacion ?? '',
             reparacionId: '',
+            sesionStamp: Date.now(),
           })
           onConsumeClienteVinculo?.()
         } catch (e) {
@@ -472,6 +475,7 @@ export default function ServiciosEquipos({
         equipoDescripcion: eq.descripcion ?? '',
         equipoTipoReparacion: eq.tipo_reparacion ?? '',
         reparacionId: '',
+        sesionStamp: Date.now(),
       })
       return
     }

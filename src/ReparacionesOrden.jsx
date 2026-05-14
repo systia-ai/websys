@@ -4,7 +4,7 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
-import { abrirWhatsAppOrden, enviarOrdenWhatsAppCloudApi, normalizarTelefonoWa } from './whatsappUtils.js'
+import { abrirWhatsAppOrden, enviarOrdenWhatsAppCloudApi, formatFechaOrdenMensaje, normalizarTelefonoWa } from './whatsappUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -56,8 +56,21 @@ function combineNiveles(b, y, c, m, cLight, mLight) {
 
 function parseClienteIdFromSession(sess) {
   const raw = sess?.clienteId ?? sess?.cliente_id
-  const n = Number(raw)
+  if (raw == null || raw === '') return null
+  const n = Number(String(raw).trim())
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** True si la sesión trae un ID de reparación real (>0) a cargar desde BD. */
+function repIdStrEsOrdenExistente(repIdStr) {
+  const t = repIdStr != null ? String(repIdStr).trim() : ''
+  if (!t) return false
+  const n = Number(t)
+  return Number.isFinite(n) && n > 0
+}
+
+function soloDigitosTel(t) {
+  return String(t ?? '').replace(/\D/g, '')
 }
 
 function parseNiveles(str) {
@@ -101,7 +114,7 @@ export default function ReparacionesOrden({
 }) {
   const s = session ?? {}
   const repIdStr = s.reparacionId != null ? String(s.reparacionId).trim() : ''
-  const [numeroOrden, setNumeroOrden] = useState(() => (repIdStr ? repIdStr : ''))
+  const [numeroOrden, setNumeroOrden] = useState(() => (repIdStrEsOrdenExistente(repIdStr) ? repIdStr : ''))
   const [serieEquipo, setSerieEquipo] = useState(() => s.equipoSerie ?? '')
   const [tipoEquipo, setTipoEquipo] = useState(() => s.equipoTipo ?? '')
   const [tipoReparacion, setTipoReparacion] = useState(() => s.equipoTipoReparacion ?? '')
@@ -118,10 +131,11 @@ export default function ReparacionesOrden({
   const [nivelMlight, setNivelMlight] = useState('')
   const [nivelClight, setNivelClight] = useState('')
   const [descripcionSolucion, setDescripcionSolucion] = useState('')
-  const [ordenRegistrada, setOrdenRegistrada] = useState(() => Boolean(repIdStr))
+  const [ordenRegistrada, setOrdenRegistrada] = useState(() => repIdStrEsOrdenExistente(repIdStr))
   const [idReparacion, setIdReparacion] = useState(() => {
+    if (!repIdStrEsOrdenExistente(repIdStr)) return null
     const n = Number(repIdStr)
-    return Number.isFinite(n) && repIdStr ? n : null
+    return Number.isFinite(n) && n > 0 ? n : null
   })
   const [clienteIdNum, setClienteIdNum] = useState(() => parseClienteIdFromSession(s))
 
@@ -149,11 +163,13 @@ export default function ReparacionesOrden({
   const [cuentaIdPago, setCuentaIdPago] = useState(null)
   /** Datos de cliente cargados por `cliente_id` cuando la sesión no trae nombre/teléfono. */
   const [clienteDesdeBd, setClienteDesdeBd] = useState(null)
+  /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
+  const [fechaCreacionOrden, setFechaCreacionOrden] = useState(null)
 
-  const esOrdenExistente = repIdStr.length > 0
+  const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
 
   const cargarReparacion = useCallback(async () => {
-    if (!repIdStr) return
+    if (!repIdStrEsOrdenExistente(repIdStr)) return
     const id = Number(repIdStr)
     if (!Number.isFinite(id)) return
     try {
@@ -167,6 +183,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setFechaCreacionOrden(data.fecha_creacion ?? data.updated_at ?? null)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -203,6 +220,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setFechaCreacionOrden(data.fecha_creacion ?? data.updated_at ?? null)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -250,13 +268,16 @@ export default function ReparacionesOrden({
     }
     const nom = (s.clienteNombre ?? clienteDesdeBd?.nombre ?? '').trim()
     const tel = (s.clienteTelefono ?? clienteDesdeBd?.telefono ?? '').trim()
+    const telDig = soloDigitosTel(tel)
     if (!nom || !tel) return null
+    const coincideTel = (x) =>
+      String(x.telefono) === tel || (telDig.length > 0 && soloDigitosTel(x.telefono) === telDig)
     if (supabase) {
       const { data, error } = await supabase.from('clientes').select('*')
       if (error) throw error
       const c = (data ?? [])
         .map(normalizeClienteRow)
-        .find((x) => x.nombre.toLowerCase() === nom.toLowerCase() && String(x.telefono) === tel)
+        .find((x) => x.nombre.toLowerCase() === nom.toLowerCase() && coincideTel(x))
       if (c?.id != null) {
         setClienteIdNum(c.id)
         return c.id
@@ -264,7 +285,7 @@ export default function ReparacionesOrden({
     } else {
       const c = readLs(LS_CLIENTES, [])
         .map(normalizeClienteRow)
-        .find((x) => x.nombre.toLowerCase() === nom.toLowerCase() && String(x.telefono) === tel)
+        .find((x) => x.nombre.toLowerCase() === nom.toLowerCase() && coincideTel(x))
       if (c?.id != null) {
         setClienteIdNum(c.id)
         return c.id
@@ -274,15 +295,15 @@ export default function ReparacionesOrden({
   }
 
   async function resolverEquipoId() {
-    const ser = String(serieEquipo).trim()
+    const ser = String(serieEquipo).trim().toUpperCase()
     if (!ser) return null
     if (supabase) {
       const { data, error } = await supabase.from('equipos').select('*')
       if (error) throw error
-      const e = (data ?? []).find((x) => String(x.serie) === ser)
+      const e = (data ?? []).find((x) => String(x.serie ?? '').trim().toUpperCase() === ser)
       return e?.id ?? null
     }
-    const e = readLs(LS_EQUIPOS, []).find((x) => String(x.serie) === ser)
+    const e = readLs(LS_EQUIPOS, []).find((x) => String(x.serie ?? '').trim().toUpperCase() === ser)
     return e?.id ?? null
   }
 
@@ -372,6 +393,7 @@ export default function ReparacionesOrden({
       setNumeroOrden(String(newId))
       setOrdenRegistrada(true)
       setClienteIdNum(cid)
+      setFechaCreacionOrden(now)
       setMsgExito(`Se registró la orden de servicio con ID: ${newId}.`)
       setDialogExito(true)
       onNotice('Orden registrada')
@@ -732,6 +754,9 @@ export default function ReparacionesOrden({
       const res = await enviarOrdenWhatsAppCloudApi(supabase, {
         orden: ord,
         nombreCliente: nombreClienteUi,
+        fecha: formatFechaOrdenMensaje(fechaCreacionOrden),
+        descripcionEquipo,
+        problemasReportados,
         ...(toDigits ? { to: toDigits } : {}),
       })
       if (res.ok) {
@@ -741,7 +766,17 @@ export default function ReparacionesOrden({
       onError(res.errorMsg || 'No se pudo enviar el mensaje por WhatsApp API.')
       return
     }
-    const wa = abrirWhatsAppOrden({ telefono: telClienteUi, numeroOrden: ord })
+    const wa = abrirWhatsAppOrden({
+      telefono: telClienteUi,
+      numeroOrden: ord,
+      negocio: 'SISTEBIT',
+      fechaCreacion: fechaCreacionOrden,
+      nombreCliente: nombreClienteUi,
+      descripcionEquipo,
+      problemasReportados,
+      tipoEquipo,
+      serieEquipo,
+    })
     if (wa.ok) {
       onNotice('Mensaje listo en WhatsApp. Pulsa enviar para que llegue al cliente.')
       return

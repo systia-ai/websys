@@ -53,7 +53,14 @@ Deno.serve(async (req) => {
     })
   }
 
-  let body: { orden?: string; nombreCliente?: string; to?: string } = {}
+  let body: {
+    orden?: string
+    nombreCliente?: string
+    to?: string
+    fecha?: string
+    descripcionEquipo?: string
+    problemasReportados?: string
+  } = {}
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -69,12 +76,22 @@ Deno.serve(async (req) => {
   }
 
   const orden = truncar(String(body.orden ?? '—'), 120)
-  const nombre = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
-  const fecha = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  const nombreBase = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
+  const descEq = truncar(String(body.descripcionEquipo ?? '').trim(), 200)
+  const prob = truncar(String(body.problemasReportados ?? '').trim(), 200)
+  const partes = [nombreBase]
+  if (descEq) partes.push(`Equipo: ${descEq}`)
+  if (prob) partes.push(`Problema: ${prob}`)
+  /** Primer parámetro del cuerpo de la plantilla: nombre + detalles (según plantilla aprobada en Meta). */
+  const nombre = truncar(partes.join(' · '), 512)
+  const fecha =
+    body.fecha != null && String(body.fecha).trim()
+      ? truncar(String(body.fecha).trim(), 120)
+      : new Date().toLocaleDateString('es-MX', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
 
   const template: {
     name: string

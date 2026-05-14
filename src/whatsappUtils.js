@@ -42,7 +42,69 @@ export function normalizarTelefonoWa(raw, defaultPais = PAIS_DEFAULT) {
 }
 
 /**
- * Construye el mensaje predeterminado de notificación de orden.
+ * Fecha legible para el mensaje (orden en BD o notificación).
+ * @param {string|Date|null|undefined} isoOrDate
+ * @returns {string}
+ */
+export function formatFechaOrdenMensaje(isoOrDate) {
+  if (isoOrDate == null || isoOrDate === '') {
+    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(String(isoOrDate))
+  if (Number.isNaN(d.getTime())) {
+    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function textoDescripcionEquipoWa({ descripcionEquipo, tipoEquipo, serieEquipo }) {
+  const desc = String(descripcionEquipo ?? '').trim()
+  const tipo = String(tipoEquipo ?? '').trim()
+  const ser = String(serieEquipo ?? '').trim()
+  const bits = []
+  if (desc) bits.push(desc)
+  const meta = [tipo && `Tipo: ${tipo}`, ser && `Serie: ${ser}`].filter(Boolean).join(', ')
+  if (meta) bits.push(meta)
+  return bits.length ? bits.join(' — ') : '—'
+}
+
+/**
+ * Mensaje completo para el cliente (wa.me o referencia para plantillas).
+ * Usa los datos reales de la orden en pantalla.
+ *
+ * @param {object} p
+ * @param {string} [p.negocio]
+ * @param {string|number} p.numeroOrden
+ * @param {string|Date|null} [p.fechaCreacion] ISO o Date; si falta, hoy
+ * @param {string} [p.nombreCliente]
+ * @param {string} [p.descripcionEquipo]
+ * @param {string} [p.problemasReportados]
+ * @param {string} [p.tipoEquipo]
+ * @param {string} [p.serieEquipo]
+ */
+export function buildMensajeOrdenClienteDetalle(p) {
+  const neg = String(p?.negocio ?? NEGOCIO_DEFAULT).trim() || NEGOCIO_DEFAULT
+  const ord = String(p?.numeroOrden ?? '').trim() || '—'
+  const fecha = formatFechaOrdenMensaje(p?.fechaCreacion)
+  const nom = String(p?.nombreCliente ?? '').trim() || '—'
+  const equipo = textoDescripcionEquipoWa({
+    descripcionEquipo: p?.descripcionEquipo,
+    tipoEquipo: p?.tipoEquipo,
+    serieEquipo: p?.serieEquipo,
+  })
+  const prob = String(p?.problemasReportados ?? '').trim() || '—'
+  return (
+    `Hola buen día, de parte de ${neg} le informo lo siguiente:\n\n` +
+    `• Número de orden: ${ord}\n` +
+    `• Fecha: ${fecha}\n` +
+    `• Nombre del cliente: ${nom}\n` +
+    `• Descripción del equipo: ${equipo}\n` +
+    `• Descripción del problema: ${prob}`
+  )
+}
+
+/**
+ * Construye el mensaje corto (compatibilidad).
  * @param {string|number} numeroOrden
  * @param {string} [negocio]
  */
@@ -67,7 +129,14 @@ export function buildWhatsAppUrl({ telefono, mensaje }) {
  * El token de Meta vive solo en secretos del servidor.
  *
  * @param {object} supabase Cliente `@supabase/supabase-js`.
- * @param {{ orden: string|number, nombreCliente?: string, to?: string }} p
+ * @param {{
+ *   orden: string|number,
+ *   nombreCliente?: string,
+ *   to?: string,
+ *   fecha?: string,
+ *   descripcionEquipo?: string,
+ *   problemasReportados?: string,
+ * }} p
  * @returns {Promise<{ ok: true, data?: unknown } | { ok: false, errorMsg: string }>}
  */
 function truncarMetaTexto(s, max = 900) {
@@ -106,9 +175,20 @@ async function mensajeErrorInvoke(error) {
 
 export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
   if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
-  const { orden, nombreCliente = '', to } = p
+  const { orden, nombreCliente = '', to, fecha, descripcionEquipo, problemasReportados } = p
   const { data, error } = await supabase.functions.invoke('send-whatsapp-orden', {
-    body: { orden: String(orden), nombreCliente: truncarMetaTexto(nombreCliente), ...(to ? { to } : {}) },
+    body: {
+      orden: String(orden),
+      nombreCliente: truncarMetaTexto(nombreCliente),
+      ...(fecha != null && String(fecha).trim() ? { fecha: truncarMetaTexto(String(fecha).trim(), 120) } : {}),
+      ...(descripcionEquipo != null && String(descripcionEquipo).trim()
+        ? { descripcionEquipo: truncarMetaTexto(String(descripcionEquipo).trim(), 400) }
+        : {}),
+      ...(problemasReportados != null && String(problemasReportados).trim()
+        ? { problemasReportados: truncarMetaTexto(String(problemasReportados).trim(), 400) }
+        : {}),
+      ...(to ? { to } : {}),
+    },
   })
   if (error) {
     const msg = await mensajeErrorInvoke(error)
@@ -123,14 +203,38 @@ export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
 /**
  * Abre WhatsApp Web/app con el mensaje predeterminado de orden ya escrito.
  *
- * @param {{ telefono: string, numeroOrden: string|number, negocio?: string }} p
+ * @param {{
+ *   telefono: string,
+ *   mensaje?: string,
+ *   numeroOrden?: string|number,
+ *   negocio?: string,
+ *   fechaCreacion?: string|Date|null,
+ *   nombreCliente?: string,
+ *   descripcionEquipo?: string,
+ *   problemasReportados?: string,
+ *   tipoEquipo?: string,
+ *   serieEquipo?: string,
+ * }} p
  * @returns {{ ok: true, url: string } | { ok: false, motivo: 'sin-telefono' | 'telefono-invalido' | 'popup-bloqueado' }}
  */
-export function abrirWhatsAppOrden({ telefono, numeroOrden, negocio }) {
+export function abrirWhatsAppOrden(p) {
+  const { telefono, mensaje: mensajePre, numeroOrden, negocio, fechaCreacion, nombreCliente, descripcionEquipo, problemasReportados, tipoEquipo, serieEquipo } = p
   if (!telefono || !String(telefono).trim()) {
     return { ok: false, motivo: 'sin-telefono' }
   }
-  const mensaje = buildMensajeOrden(numeroOrden, negocio)
+  const mensaje =
+    mensajePre != null && String(mensajePre).trim()
+      ? String(mensajePre).trim()
+      : buildMensajeOrdenClienteDetalle({
+          negocio,
+          numeroOrden: numeroOrden ?? '—',
+          fechaCreacion,
+          nombreCliente,
+          descripcionEquipo,
+          problemasReportados,
+          tipoEquipo,
+          serieEquipo,
+        })
   const url = buildWhatsAppUrl({ telefono, mensaje })
   if (!url) return { ok: false, motivo: 'telefono-invalido' }
   const win = window.open(url, '_blank', 'noopener')
