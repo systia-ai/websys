@@ -943,9 +943,6 @@ export default function ReparacionesOrden({
                 ))}
             </select>
           </div>
-          <p className="muted small" style={{ margin: '4px 0 0' }}>
-            Puedes asignar uno o dos técnicos. Si necesitas agregar/eliminar técnicos del catálogo, hazlo desde el <strong>Monitor de órdenes → ⚙️ Gestionar</strong>.
-          </p>
         </div>
         {(esOrdenExistente || idReparacion != null) && (
           <div className="rep-block highlight">
