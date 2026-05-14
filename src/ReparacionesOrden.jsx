@@ -76,6 +76,14 @@ function parseNiveles(str) {
   return out
 }
 
+/** Error de Postgres por índice único (evita duplicar cuenta u orden al reintentar). */
+function esViolacionUnica(err) {
+  const code = String(err?.code ?? '')
+  if (code === '23505') return true
+  const msg = String(err?.message ?? err?.details ?? '').toLowerCase()
+  return msg.includes('duplicate') || msg.includes('unique')
+}
+
 export default function ReparacionesOrden({
   supabase,
   session,
@@ -119,6 +127,11 @@ export default function ReparacionesOrden({
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
   const guardandoRef = useRef(false)
+  const [actualizandoOrden, setActualizandoOrden] = useState(false)
+  const actualizandoRef = useRef(false)
+  const [abriendoAnticipo, setAbriendoAnticipo] = useState(false)
+  const [registrandoAnticipo, setRegistrandoAnticipo] = useState(false)
+  const registrandoAnticipoRef = useRef(false)
 
   const [pagoModal, setPagoModal] = useState(false)
   const [catalogo, setCatalogo] = useState([])
@@ -262,8 +275,13 @@ export default function ReparacionesOrden({
     return e?.id ?? null
   }
 
+  /**
+   * Registra una orden nueva. Devuelve true solo si reparación + cuenta quedaron creadas.
+   * Evita doble inserción (doble clic) y revierte la reparación si falla la cuenta en Supabase.
+   */
   async function insertarReparacion() {
-    if (guardandoRef.current) return
+    if (guardandoRef.current) return false
+    if (ordenRegistrada) return false
     guardandoRef.current = true
     setGuardandoOrden(true)
     try {
@@ -274,12 +292,12 @@ export default function ReparacionesOrden({
           `No se encontró el cliente con nombre "${(s.clienteNombre ?? clienteDesdeBd?.nombre ?? '').trim() || '(vacío)'}" y teléfono "${(s.clienteTelefono ?? clienteDesdeBd?.telefono ?? '').trim() || '(vacío)'}".`,
         )
         setDialogExito(true)
-        return
+        return false
       }
       if (eid == null) {
         setMsgExito(`No se encontró el equipo con serie "${serieEquipo}".`)
         setDialogExito(true)
-        return
+        return false
       }
       const now = new Date().toISOString()
       const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
@@ -309,10 +327,7 @@ export default function ReparacionesOrden({
         writeLs(LS_REP, [{ id: newId, ...row }, ...all])
       }
       if (!newId) throw new Error('No se obtuvo ID de reparación')
-      setIdReparacion(newId)
-      setNumeroOrden(String(newId))
-      setOrdenRegistrada(true)
-      setClienteIdNum(cid)
+
       const cuenta = {
         cliente_id: cid,
         total: 0,
@@ -323,10 +338,17 @@ export default function ReparacionesOrden({
         tipo_pago: null,
       }
       if (supabase) {
-        const { data: yaCuenta } = await supabase.from('cuentas').select('id').eq('repara_id', newId).limit(1)
+        const { data: yaCuenta, error: eSel } = await supabase.from('cuentas').select('id').eq('repara_id', newId).limit(1)
+        if (eSel) throw eSel
         if (!(yaCuenta && yaCuenta.length > 0)) {
           const { error: ce } = await supabase.from('cuentas').insert(cuenta)
-          if (ce) console.warn(ce)
+          if (ce) {
+            const { error: eDel } = await supabase.from('reparaciones').delete().eq('id', newId)
+            if (eDel) console.warn('No se pudo revertir la orden tras fallo de cuenta:', eDel.message)
+            throw new Error(
+              `No se pudo crear la cuenta vinculada (${ce.message}). La orden no quedó guardada; inténtelo de nuevo.`,
+            )
+          }
         }
       } else {
         const cu = readLs(LS_CUENTAS, [])
@@ -334,12 +356,19 @@ export default function ReparacionesOrden({
           writeLs(LS_CUENTAS, [{ id: nextLocalId(), ...cuenta }, ...cu])
         }
       }
+
+      setIdReparacion(newId)
+      setNumeroOrden(String(newId))
+      setOrdenRegistrada(true)
+      setClienteIdNum(cid)
       setMsgExito(`Se registró la orden de servicio con ID: ${newId}.`)
       setDialogExito(true)
       onNotice('Orden registrada')
+      return true
     } catch (e) {
       setMsgExito(`Error: ${e.message}`)
       setDialogExito(true)
+      return false
     } finally {
       guardandoRef.current = false
       setGuardandoOrden(false)
@@ -347,8 +376,11 @@ export default function ReparacionesOrden({
   }
 
   async function actualizarOrden() {
+    if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) return
+    actualizandoRef.current = true
+    setActualizandoOrden(true)
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const patch = {
@@ -398,10 +430,14 @@ export default function ReparacionesOrden({
       setDialogExito(true)
     } catch (e) {
       onError(`Error al actualizar: ${e.message}`)
+    } finally {
+      actualizandoRef.current = false
+      setActualizandoOrden(false)
     }
   }
 
   async function eliminarOrden() {
+    if (eliminandoOrden) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) {
       onError('No hay orden para eliminar')
@@ -461,6 +497,7 @@ export default function ReparacionesOrden({
   }
 
   async function abrirAnticipo() {
+    if (abriendoAnticipo) return
     const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!rid || !Number.isFinite(Number(rid))) {
       onError('Primero debe generar la orden de servicio')
@@ -471,6 +508,7 @@ export default function ReparacionesOrden({
       onError('No se pudo obtener el cliente')
       return
     }
+    setAbriendoAnticipo(true)
     try {
       let cuenta
       if (supabase) {
@@ -499,8 +537,23 @@ export default function ReparacionesOrden({
         }
         if (supabase) {
           const { data, error } = await supabase.from('cuentas').insert(nueva).select('*').single()
-          if (error) throw error
-          cuenta = data
+          if (error) {
+            if (esViolacionUnica(error)) {
+              const { data: rows2, error: e2 } = await supabase
+                .from('cuentas')
+                .select('*')
+                .eq('repara_id', rid)
+                .order('id', { ascending: false })
+                .limit(1)
+              if (e2) throw e2
+              cuenta = rows2?.[0] ?? null
+              if (!cuenta?.id) throw new Error('Cuenta duplicada detectada pero no se pudo recuperar.')
+            } else {
+              throw error
+            }
+          } else {
+            cuenta = data
+          }
         } else {
           const id = nextLocalId()
           cuenta = { id, ...nueva }
@@ -512,6 +565,9 @@ export default function ReparacionesOrden({
             cuenta = [...m].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
           }
         }
+      }
+      if (!cuenta?.id) {
+        throw new Error('No se pudo obtener o crear la cuenta de cobro para esta orden.')
       }
       setCuentaIdPago(cuenta.id)
       if (supabase) {
@@ -529,10 +585,13 @@ export default function ReparacionesOrden({
       setPagoModal(true)
     } catch (e) {
       onError(`Error al abrir anticipo: ${e.message}`)
+    } finally {
+      setAbriendoAnticipo(false)
     }
   }
 
   async function registrarPago() {
+    if (registrandoAnticipoRef.current) return
     if (!selCat || !cuentaIdPago) return
     const cant = Number(cantPago)
     const val = Number(valorPago)
@@ -550,6 +609,8 @@ export default function ReparacionesOrden({
       concepto: selCat.concepto ?? 'Anticipo',
       forma_pago: formaPago,
     }
+    registrandoAnticipoRef.current = true
+    setRegistrandoAnticipo(true)
     try {
       if (supabase) {
         const { error } = await supabase.from('pagosclientes').insert(row)
@@ -562,6 +623,9 @@ export default function ReparacionesOrden({
       onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago})`)
     } catch (e) {
       onError(`Error al registrar anticipo: ${e.message}`)
+    } finally {
+      registrandoAnticipoRef.current = false
+      setRegistrandoAnticipo(false)
     }
   }
 
@@ -914,8 +978,13 @@ export default function ReparacionesOrden({
             {ordenRegistrada ? 'Orden Registrada' : 'Registrar Orden'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
-            <button type="button" className="btn-secondary wide" onClick={actualizarOrden}>
-              Actualizar orden
+            <button
+              type="button"
+              className="btn-secondary wide"
+              disabled={actualizandoOrden}
+              onClick={() => void actualizarOrden()}
+            >
+              {actualizandoOrden ? 'Guardando…' : 'Actualizar orden'}
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
@@ -939,8 +1008,13 @@ export default function ReparacionesOrden({
           >
             📲 Enviar por WhatsApp
           </button>
-          <button type="button" className="btn-anticipo wide" onClick={abrirAnticipo}>
-            Recibir anticipo
+          <button
+            type="button"
+            className="btn-anticipo wide"
+            disabled={abriendoAnticipo || !puedeAccionesPdf}
+            onClick={() => void abrirAnticipo()}
+          >
+            {abriendoAnticipo ? 'Abriendo…' : 'Recibir anticipo'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
             <button
@@ -1034,8 +1108,12 @@ export default function ReparacionesOrden({
               <button type="button" className="secondary" onClick={() => setPagoModal(false)}>
                 Cancelar
               </button>
-              <button type="button" onClick={registrarPago} disabled={!selCat}>
-                Registrar anticipo
+              <button
+                type="button"
+                onClick={() => void registrarPago()}
+                disabled={!selCat || registrandoAnticipo}
+              >
+                {registrandoAnticipo ? 'Registrando…' : 'Registrar anticipo'}
               </button>
             </div>
           </div>
@@ -1052,7 +1130,8 @@ export default function ReparacionesOrden({
             <div className="modal-header">
               <h3>📝 ¿Seguro que quieres guardar estos datos?</h3>
               <p className="muted small" style={{ margin: '4px 0 0' }}>
-                Revisa la información antes de registrar la orden de servicio. Una vez guardada podrás editarla, pero el ID quedará asignado.
+                Revise los datos antes de confirmar. El <strong>número de orden</strong> lo asigna la base de datos al
+                guardar (consecutivo); no lo elige usted. Una vez guardada podrá editar la orden.
               </p>
             </div>
             <div className="modal-body">
@@ -1101,8 +1180,8 @@ export default function ReparacionesOrden({
                 disabled={guardandoOrden}
                 onClick={async () => {
                   if (guardandoRef.current) return
-                  await insertarReparacion()
-                  setConfirmGuardarAbierto(false)
+                  const ok = await insertarReparacion()
+                  if (ok) setConfirmGuardarAbierto(false)
                 }}
               >
                 {guardandoOrden ? 'Guardando…' : '✅ Confirmar y guardar'}
