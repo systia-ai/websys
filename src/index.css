@@ -2246,6 +2246,26 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 1.15rem;
 }
 
+.rep-orden-numero-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rep-orden-numero-row input {
+  flex: 0 1 7rem;
+  min-width: 4.5rem;
+  max-width: 10rem;
+}
+
+.rep-orden-fecha-creada {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1565c0;
+  white-space: nowrap;
+}
+
 .rep-block.highlight label {
   color: #1976d2;
   font-size: 1rem;

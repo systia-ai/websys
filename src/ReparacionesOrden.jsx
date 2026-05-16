@@ -193,7 +193,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
-        setFechaCreacionOrden(data.fecha_creacion ?? data.updated_at ?? null)
+        setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -230,7 +230,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
-        setFechaCreacionOrden(data.fecha_creacion ?? data.updated_at ?? null)
+        setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -917,7 +917,20 @@ export default function ReparacionesOrden({
       <div className="rep-scroll">
         <div className="rep-block highlight">
           <label>No de Orden</label>
-          <input value={numeroOrden} onChange={(e) => setNumeroOrden(e.target.value)} placeholder="No de Orden" readOnly={ordenRegistrada} />
+          <div className="rep-orden-numero-row">
+            <input
+              value={numeroOrden}
+              onChange={(e) => setNumeroOrden(e.target.value)}
+              placeholder="No de Orden"
+              readOnly={ordenRegistrada}
+              aria-describedby={ordenRegistrada && fechaCreacionOrden ? 'rep-orden-fecha-creada' : undefined}
+            />
+            {(ordenRegistrada || idReparacion != null) && numeroOrden ? (
+              <span id="rep-orden-fecha-creada" className="rep-orden-fecha-creada" title="Fecha de creación de la orden">
+                {fechaCreacionOrden ? `· ${formatFechaOrdenMensaje(fechaCreacionOrden)}` : '—'}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="rep-block">
