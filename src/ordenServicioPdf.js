@@ -108,7 +108,7 @@ function drawSistebitWordArtLogo(pdf, centerX, yTop) {
  */
 function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
   const val = dashIfEmpty(value)
-  const padX = opts.compact ? 2.5 : 3
+  const padX = opts.padX ?? (opts.compact ? 2.5 : 3)
   const labelBand = opts.compact ? 4.6 : 5.2
   const valueFontSize = opts.valueFontSize ?? 10.5
   const labelFontSize = opts.compact ? 6.8 : 7.2
@@ -142,11 +142,15 @@ function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
 
 const COMPACT_CAMPO = { compact: true, valueFontSize: 9 }
 
-/** Ancho de recuadro compacto según el texto del valor + etiqueta. */
-function anchoRecuadroCompacto(pdf, value, { min = 22, max = 52, pad = 7 } = {}) {
+/** Ancho de recuadro compacto: el mayor entre etiqueta, valor y mínimo, + margen horizontal. */
+function anchoRecuadroCompacto(pdf, label, value, { min = 22, max = 52, pad = 9 } = {}) {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(6.8)
+  const wLabel = pdf.getTextWidth(String(label).toUpperCase())
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(COMPACT_CAMPO.valueFontSize)
-  const w = pdf.getTextWidth(dashIfEmpty(value)) + pad
+  const wVal = pdf.getTextWidth(dashIfEmpty(value))
+  const w = Math.max(wLabel, wVal) + pad
   return Math.min(Math.max(w, min), max)
 }
 
@@ -157,11 +161,11 @@ function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
   const ordenStr = String(orden ?? '—')
   const fechaStr = dashIfEmpty(fecha)
 
-  const wOrden = anchoRecuadroCompacto(pdf, ordenStr, { min: 20, max: 28, pad: 8 })
-  const wFecha = anchoRecuadroCompacto(pdf, fechaStr, { min: 36, max: 50, pad: 7 })
+  const wOrden = anchoRecuadroCompacto(pdf, 'No. de Orden', ordenStr, { min: 24, max: 32, pad: 10 })
+  const wFecha = anchoRecuadroCompacto(pdf, 'Fecha', fechaStr, { min: 36, max: 50, pad: 8 })
 
   const h = 11
-  drawCampo(pdf, 'No. de Orden', ordenStr, x, y, wOrden, h, TEMA.orden, COMPACT_CAMPO)
+  drawCampo(pdf, 'No. de Orden', ordenStr, x, y, wOrden, h, TEMA.orden, { ...COMPACT_CAMPO, padX: 3.2 })
   drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, h, TEMA.fecha, COMPACT_CAMPO)
   return h
 }
