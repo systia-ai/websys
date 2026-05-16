@@ -106,15 +106,18 @@ function drawSistebitWordArtLogo(pdf, centerX, yTop) {
  * Recuadro con etiqueta + valor (similar a inputs de la app).
  * @returns {number} altura del recuadro en mm
  */
-function drawCampo(pdf, label, value, x, y, w, minH, theme) {
+function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
   const val = dashIfEmpty(value)
-  const padX = 3
-  const labelBand = 5.2
+  const padX = opts.compact ? 2.5 : 3
+  const labelBand = opts.compact ? 4.6 : 5.2
+  const valueFontSize = opts.valueFontSize ?? 10.5
+  const labelFontSize = opts.compact ? 6.8 : 7.2
 
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10.5)
+  pdf.setFontSize(valueFontSize)
   const valLines = pdf.splitTextToSize(val, w - padX * 2)
-  const h = Math.max(minH, labelBand + 4 + valLines.length * 4.4)
+  const lineH = opts.compact ? 3.9 : 4.4
+  const h = Math.max(minH, labelBand + 3.5 + valLines.length * lineH)
 
   pdf.setFillColor(210, 218, 226)
   pdf.roundedRect(x + 0.45, y + 0.45, w, h, 2.8, 2.8, 'F')
@@ -125,27 +128,37 @@ function drawCampo(pdf, label, value, x, y, w, minH, theme) {
   pdf.roundedRect(x, y, w, h, 2.8, 2.8, 'FD')
 
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(7.2)
+  pdf.setFontSize(labelFontSize)
   pdf.setTextColor(...theme.label)
-  pdf.text(String(label).toUpperCase(), x + padX, y + 3.6)
+  pdf.text(String(label).toUpperCase(), x + padX, y + (opts.compact ? 3.2 : 3.6))
 
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10.5)
+  pdf.setFontSize(valueFontSize)
   pdf.setTextColor(26, 32, 44)
-  pdf.text(valLines, x + padX, y + labelBand + 3.8)
+  pdf.text(valLines, x + padX, y + labelBand + (opts.compact ? 3.2 : 3.8))
 
   return h
 }
 
-/** Fila: No. orden (recuadro chico) + fecha (al lado). */
+/** Fila: No. orden (más ancho) + fecha compacta al lado (ancho según texto). */
 function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
   const gap = 4
-  const h = 15
-  const wOrden = totalW * 0.36
-  const wFecha = totalW - wOrden - gap
-  drawCampo(pdf, 'No. de Orden', orden, x, y, wOrden, h, TEMA.orden)
-  drawCampo(pdf, 'Fecha', fecha, x + wOrden + gap, y, wFecha, h, TEMA.fecha)
-  return h
+  const fechaStr = dashIfEmpty(fecha)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  const fechaTextW = pdf.getTextWidth(fechaStr)
+  const wFecha = Math.min(Math.max(fechaTextW + 7, 38), totalW * 0.46)
+  const wOrden = totalW - wFecha - gap
+
+  const hOrden = 14
+  const hFecha = 11
+  drawCampo(pdf, 'No. de Orden', orden, x, y, wOrden, hOrden, TEMA.orden)
+  drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, hFecha, TEMA.fecha, {
+    compact: true,
+    valueFontSize: 9,
+  })
+  return Math.max(hOrden, hFecha)
 }
 
 /**
