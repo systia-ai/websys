@@ -620,6 +620,60 @@ td {
   }
 }
 
+.monitor-ordenes-rango-fechas {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monitor-ordenes-rango-titulo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #455a64;
+}
+
+.monitor-ordenes-rango-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.monitor-ordenes-label-fecha {
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.monitor-ordenes-label-fecha input[type='date'] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: #263238;
+  font-family: inherit;
+}
+
+.monitor-ordenes-label-fecha input[type='date']:focus {
+  outline: 2px solid #1e88e5;
+  outline-offset: 1px;
+  border-color: #1e88e5;
+}
+
+.monitor-ordenes-fecha-clear--rango {
+  align-self: flex-end;
+  min-height: 40px;
+}
+
+.monitor-ordenes-rango-aviso {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #c62828;
+  font-weight: 600;
+}
+
 .monitor-ordenes-fecha-desde {
   display: flex;
   gap: 8px;

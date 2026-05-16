@@ -122,8 +122,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
-  /** '' = sin filtro; yyyy-mm-dd = solo órdenes con fecha de ingreso >= este día */
+  /** '' = sin límite; yyyy-mm-dd = fecha de ingreso >= este día (incluye el día) */
   const [fechaDesde, setFechaDesde] = useState('')
+  /** '' = sin límite; yyyy-mm-dd = fecha de ingreso <= este día (incluye el día) */
+  const [fechaHasta, setFechaHasta] = useState('')
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
@@ -200,10 +202,14 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       })
     }
     const desde = String(fechaDesde ?? '').trim()
-    if (desde) {
+    const hasta = String(fechaHasta ?? '').trim()
+    if (desde || hasta) {
       filtradas = filtradas.filter((r) => {
         const ymd = fechaIngresoYmd(r)
-        return ymd != null && ymd >= desde
+        if (ymd == null) return false
+        if (desde && ymd < desde) return false
+        if (hasta && ymd > hasta) return false
+        return true
       })
     }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
@@ -242,7 +248,13 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       return ordenFecha === 'asc' ? ta - tb : tb - ta
     })
     return conTiempo.map(({ rep, ymd, dias }) => ({ rep, ymd, dias }))
-  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde, busqueda, clientes])
+  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde, fechaHasta, busqueda, clientes])
+
+  const rangoFechasInvalido = useMemo(() => {
+    const d = String(fechaDesde ?? '').trim()
+    const h = String(fechaHasta ?? '').trim()
+    return d && h && d > h
+  }, [fechaDesde, fechaHasta])
 
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
@@ -357,27 +369,49 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 ))}
               </select>
             </label>
-            <label className="monitor-ordenes-label-inline">
-              <span>Fecha desde (incluye)</span>
-              <div className="monitor-ordenes-fecha-desde">
-                <input
-                  type="date"
-                  value={fechaDesde}
-                  onChange={(e) => setFechaDesde(e.target.value)}
-                  aria-label="Mostrar órdenes con fecha de ingreso desde este día"
-                />
+            <div className="monitor-ordenes-rango-fechas">
+              <span className="monitor-ordenes-rango-titulo">Rango de fechas de ingreso (incluye ambos días)</span>
+              <div className="monitor-ordenes-rango-inputs">
+                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
+                  <span>Desde</span>
+                  <input
+                    type="date"
+                    value={fechaDesde}
+                    max={fechaHasta || undefined}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                    aria-label="Fecha inicial del rango"
+                  />
+                </label>
+                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
+                  <span>Hasta</span>
+                  <input
+                    type="date"
+                    value={fechaHasta}
+                    min={fechaDesde || undefined}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                    aria-label="Fecha final del rango"
+                  />
+                </label>
                 <button
                   type="button"
-                  className="monitor-ordenes-fecha-clear"
-                  onClick={() => setFechaDesde('')}
-                  disabled={!fechaDesde}
-                  title="Quitar filtro de fecha"
-                  aria-label="Quitar filtro de fecha"
+                  className="monitor-ordenes-fecha-clear monitor-ordenes-fecha-clear--rango"
+                  onClick={() => {
+                    setFechaDesde('')
+                    setFechaHasta('')
+                  }}
+                  disabled={!fechaDesde && !fechaHasta}
+                  title="Quitar filtro de rango de fechas"
+                  aria-label="Quitar filtro de rango de fechas"
                 >
-                  Limpiar
+                  Limpiar fechas
                 </button>
               </div>
-            </label>
+              {rangoFechasInvalido ? (
+                <p className="monitor-ordenes-rango-aviso" role="alert">
+                  La fecha inicial no puede ser posterior a la final.
+                </p>
+              ) : null}
+            </div>
             <label className="monitor-ordenes-label-inline monitor-ordenes-busqueda-wrap">
               <span>Buscador</span>
               <div className="monitor-ordenes-fecha-desde">
