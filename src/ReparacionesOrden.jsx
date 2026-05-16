@@ -155,6 +155,8 @@ export default function ReparacionesOrden({
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
   const guardandoRef = useRef(false)
+  /** Evita doble INSERT si el usuario confirma dos veces antes de que React actualice `ordenRegistrada`. */
+  const ordenRegistradaRef = useRef(repIdStrEsOrdenExistente(repIdStr))
   const [actualizandoOrden, setActualizandoOrden] = useState(false)
   const actualizandoRef = useRef(false)
   const [abriendoAnticipo, setAbriendoAnticipo] = useState(false)
@@ -199,6 +201,7 @@ export default function ReparacionesOrden({
         setTecnico2(t2)
         setIdReparacion(data.id)
         setOrdenRegistrada(true)
+        ordenRegistradaRef.current = true
         setClienteIdNum(data.cliente_id ?? null)
         const nv = parseNiveles(data.niveles_tinta)
         setNivelB(nv.b)
@@ -236,6 +239,7 @@ export default function ReparacionesOrden({
         setTecnico2(t2)
         setIdReparacion(data.id)
         setOrdenRegistrada(true)
+        ordenRegistradaRef.current = true
         setClienteIdNum(data.cliente_id ?? null)
         const nv = parseNiveles(data.niveles_tinta)
         setNivelB(nv.b)
@@ -322,7 +326,7 @@ export default function ReparacionesOrden({
    * Evita doble inserción (doble clic) y revierte la reparación si falla la cuenta en Supabase.
    */
   async function insertarReparacion() {
-    if (guardandoRef.current) return false
+    if (guardandoRef.current || ordenRegistradaRef.current) return false
     if (ordenRegistrada) return false
     guardandoRef.current = true
     setGuardandoOrden(true)
@@ -369,6 +373,8 @@ export default function ReparacionesOrden({
         writeLs(LS_REP, [{ id: newId, ...row }, ...all])
       }
       if (!newId) throw new Error('No se obtuvo ID de reparación')
+
+      ordenRegistradaRef.current = true
 
       const cuenta = {
         cliente_id: cid,
@@ -725,8 +731,9 @@ export default function ReparacionesOrden({
     const nt = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) ?? ''
     try {
       const { downloadOrdenServicioPdf } = await import('./ordenServicioPdf.js')
-      downloadOrdenServicioPdf({
+      await downloadOrdenServicioPdf({
         orden: ord,
+        fechaCreacion: fechaCreacionOrden,
         cliente: {
           nombre: nombreClienteUi,
           telefono: telClienteUi,
@@ -1393,7 +1400,7 @@ export default function ReparacionesOrden({
                 className="btn-confirm-guardar"
                 disabled={guardandoOrden}
                 onClick={async () => {
-                  if (guardandoRef.current) return
+                  if (guardandoRef.current || ordenRegistradaRef.current) return
                   const ok = await insertarReparacion()
                   if (ok) setConfirmGuardarAbierto(false)
                 }}
