@@ -44,6 +44,8 @@ export default function ClientesModulo({
   onNotice,
   retornoVentas = null,
   onRetornoVentasConsumido,
+  retornoOrdenes = null,
+  onRetornoOrdenesConsumido,
 }) {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -291,55 +293,75 @@ export default function ClientesModulo({
     await cargarCuentasParaCliente(cliente)
   }
 
+  const cargarOrdenesParaCliente = useCallback(
+    async (cliente, { cerrarModalAcciones = false } = {}) => {
+      const cli = normalizeClienteRow(cliente)
+      if (!cli?.id) {
+        onError?.('Cliente sin ID válido')
+        return
+      }
+      setClienteAccion(cli)
+      if (cerrarModalAcciones) setModalAcciones(false)
+      setLoadingReps(true)
+      setRepTitle('Órdenes de servicio')
+      setRepResumen(null)
+      setRepSubtitle('')
+      try {
+        let todas = []
+        if (supabase) {
+          const { data, error } = await supabase.from('reparaciones').select('*').order('id', { ascending: false })
+          if (error) throw error
+          todas = data ?? []
+        } else {
+          todas = readLs(LS_REP, [])
+        }
+        const delCliente = todas.filter((r) => sameId(r.cliente_id, cli.id))
+        delCliente.sort((a, b) => {
+          const aa = isReparacionActiva(a) ? 0 : 1
+          const bb = isReparacionActiva(b) ? 0 : 1
+          if (aa !== bb) return aa - bb
+          const ida = Number(a.id) || 0
+          const idb = Number(b.id) || 0
+          return idb - ida
+        })
+        setRepsActivas(delCliente)
+        const n = delCliente.length
+        const nAct = delCliente.filter(isReparacionActiva).length
+        const nEnt = n - nAct
+        setRepResumen({
+          nombre: String(cli.nombre || 'Cliente').trim() || 'Cliente',
+          total: n,
+          enTaller: nAct,
+          entregadas: nEnt,
+        })
+        setModalRepActivas(true)
+      } catch (e) {
+        setRepTitle('Error de búsqueda')
+        setRepResumen(null)
+        setRepSubtitle(`Error: ${e.message}`)
+        setRepsActivas([])
+        setModalRepActivas(true)
+      } finally {
+        setLoadingReps(false)
+      }
+    },
+    [supabase, onError],
+  )
+
+  useEffect(() => {
+    const r = retornoOrdenes
+    if (!r?.openOrdenesModal || !r?.cliente?.id) return
+    void cargarOrdenesParaCliente(r.cliente)
+    onRetornoOrdenesConsumido?.()
+  }, [retornoOrdenes, onRetornoOrdenesConsumido, cargarOrdenesParaCliente])
+
   async function buscarOrdenesServicioCliente() {
     const cliente = clienteAccion
     if (!cliente?.id) {
       onError?.('Cliente sin ID válido')
       return
     }
-    setModalAcciones(false)
-    setLoadingReps(true)
-    setRepTitle('Órdenes de servicio')
-    setRepResumen(null)
-    setRepSubtitle('')
-    try {
-      let todas = []
-      if (supabase) {
-        const { data, error } = await supabase.from('reparaciones').select('*').order('id', { ascending: false })
-        if (error) throw error
-        todas = data ?? []
-      } else {
-        todas = readLs(LS_REP, [])
-      }
-      const delCliente = todas.filter((r) => sameId(r.cliente_id, cliente.id))
-      delCliente.sort((a, b) => {
-        const aa = isReparacionActiva(a) ? 0 : 1
-        const bb = isReparacionActiva(b) ? 0 : 1
-        if (aa !== bb) return aa - bb
-        const ida = Number(a.id) || 0
-        const idb = Number(b.id) || 0
-        return idb - ida
-      })
-      setRepsActivas(delCliente)
-      const n = delCliente.length
-      const nAct = delCliente.filter(isReparacionActiva).length
-      const nEnt = n - nAct
-      setRepResumen({
-        nombre: String(cliente.nombre || 'Cliente').trim() || 'Cliente',
-        total: n,
-        enTaller: nAct,
-        entregadas: nEnt,
-      })
-      setModalRepActivas(true)
-    } catch (e) {
-      setRepTitle('Error de búsqueda')
-      setRepResumen(null)
-      setRepSubtitle(`Error: ${e.message}`)
-      setRepsActivas([])
-      setModalRepActivas(true)
-    } finally {
-      setLoadingReps(false)
-    }
+    await cargarOrdenesParaCliente(cliente, { cerrarModalAcciones: true })
   }
 
   async function fetchEquipoPorId(equipoId) {
@@ -371,6 +393,7 @@ export default function ClientesModulo({
         equipoDescripcion: '',
         equipoTipoReparacion: rep.tipo_reparacion ?? '',
         reparacionId: rep.id != null ? String(rep.id) : '',
+        returnToClientesOrdenes: cliente,
       })
     } catch (e) {
       onError?.(`Error al cargar información del equipo: ${e.message}`)

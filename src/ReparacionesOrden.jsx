@@ -4,7 +4,15 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
-import { abrirWhatsAppOrden, enviarOrdenWhatsAppCloudApi, formatFechaOrdenMensaje, normalizarTelefonoWa } from './whatsappUtils.js'
+import {
+  abrirWhatsAppAnticipo,
+  abrirWhatsAppOrden,
+  enviarAnticipoWhatsAppCloudApi,
+  enviarOrdenWhatsAppCloudApi,
+  formatFechaOrdenMensaje,
+  formatMontoAnticipoWa,
+  normalizarTelefonoWa,
+} from './whatsappUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -161,6 +169,8 @@ export default function ReparacionesOrden({
   const [valorPago, setValorPago] = useState('')
   const [formaPago, setFormaPago] = useState('EFECTIVO')
   const [cuentaIdPago, setCuentaIdPago] = useState(null)
+  const [waMenuAbierto, setWaMenuAbierto] = useState(false)
+  const [enviandoWa, setEnviandoWa] = useState(false)
   /** Datos de cliente cargados por `cliente_id` cuando la sesión no trae nombre/teléfono. */
   const [clienteDesdeBd, setClienteDesdeBd] = useState(null)
   /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
@@ -653,7 +663,7 @@ export default function ReparacionesOrden({
         writeLs(LS_PAGOS, [{ id: nextLocalId(), ...row }, ...all])
       }
       setPagoModal(false)
-      onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago})`)
+      onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago}). Use «Enviar por WhatsApp» para notificar al cliente.`)
     } catch (e) {
       onError(`Error al registrar anticipo: ${e.message}`)
     } finally {
@@ -743,7 +753,50 @@ export default function ReparacionesOrden({
     }
   }
 
-  async function enviarWhatsAppOrden() {
+  async function obtenerUltimoAnticipo() {
+    const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!rid) return null
+    if (supabase) {
+      const { data: cuentas, error: eC } = await supabase
+        .from('cuentas')
+        .select('id')
+        .eq('repara_id', rid)
+        .order('id', { ascending: false })
+        .limit(1)
+      if (eC) throw eC
+      const cuentaId = cuentas?.[0]?.id
+      if (!cuentaId) return null
+      const { data: pagos, error: eP } = await supabase
+        .from('pagosclientes')
+        .select('*')
+        .eq('cuenta_id', cuentaId)
+        .order('id', { ascending: false })
+        .limit(1)
+      if (eP) throw eP
+      return pagos?.[0] ?? null
+    }
+    const matches = readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) === Number(rid))
+    const cuenta =
+      matches.length === 0
+        ? null
+        : [...matches].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+    if (!cuenta?.id) return null
+    const pagos = readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) === Number(cuenta.id))
+    if (!pagos.length) return null
+    return [...pagos].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+  }
+
+  function reportarErrorTelefonoWa(wa) {
+    if (wa.motivo === 'sin-telefono') {
+      onError('El cliente no tiene un teléfono registrado.')
+    } else if (wa.motivo === 'telefono-invalido') {
+      onError(`El teléfono "${telClienteUi}" no tiene un formato válido para WhatsApp.`)
+    } else if (wa.motivo === 'popup-bloqueado') {
+      onError('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
+    }
+  }
+
+  async function enviarWhatsAppOrdenCliente() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
       onError('Primero registra la orden de servicio para enviar el mensaje.')
@@ -760,10 +813,10 @@ export default function ReparacionesOrden({
         ...(toDigits ? { to: toDigits } : {}),
       })
       if (res.ok) {
-        onNotice('Mensaje enviado por WhatsApp (Cloud API). Revisa tu teléfono.')
+        onNotice('Orden de servicio enviada por WhatsApp.')
         return
       }
-      onError(res.errorMsg || 'No se pudo enviar el mensaje por WhatsApp API.')
+      onError(res.errorMsg || 'No se pudo enviar la orden por WhatsApp.')
       return
     }
     const wa = abrirWhatsAppOrden({
@@ -778,15 +831,78 @@ export default function ReparacionesOrden({
       serieEquipo,
     })
     if (wa.ok) {
-      onNotice('Mensaje listo en WhatsApp. Pulsa enviar para que llegue al cliente.')
+      onNotice('Mensaje de orden listo en WhatsApp. Pulsa enviar en la app.')
       return
     }
-    if (wa.motivo === 'sin-telefono') {
-      onError('El cliente no tiene un teléfono registrado.')
-    } else if (wa.motivo === 'telefono-invalido') {
-      onError(`El teléfono "${telClienteUi}" no tiene un formato válido para WhatsApp.`)
-    } else if (wa.motivo === 'popup-bloqueado') {
-      onError('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
+    reportarErrorTelefonoWa(wa)
+  }
+
+  async function enviarWhatsAppAnticipoCliente() {
+    const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
+    if (!ord) {
+      onError('Primero registra la orden de servicio.')
+      return
+    }
+    let ultimo
+    try {
+      ultimo = await obtenerUltimoAnticipo()
+    } catch (e) {
+      onError(`No se pudo consultar el anticipo: ${e.message}`)
+      return
+    }
+    if (!ultimo) {
+      onError('No hay anticipo registrado para esta orden. Use «Recibir anticipo» primero.')
+      return
+    }
+    const monto = formatMontoAnticipoWa(ultimo.pago)
+    const forma = String(ultimo.forma_pago ?? '—')
+    const fechaPago = formatFechaOrdenMensaje(ultimo.fecha_creacion ?? ultimo.created_at ?? new Date())
+
+    if (supabase) {
+      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const res = await enviarAnticipoWhatsAppCloudApi(supabase, {
+        orden: ord,
+        nombreCliente: nombreClienteUi,
+        monto,
+        formaPago: forma,
+        fecha: fechaPago,
+        ...(toDigits ? { to: toDigits } : {}),
+      })
+      if (res.ok) {
+        onNotice(`Anticipo (${monto}) enviado por WhatsApp.`)
+        return
+      }
+      onError(res.errorMsg || 'No se pudo enviar el anticipo por WhatsApp.')
+      return
+    }
+    const wa = abrirWhatsAppAnticipo({
+      telefono: telClienteUi,
+      numeroOrden: ord,
+      negocio: 'SISTEBIT',
+      nombreCliente: nombreClienteUi,
+      monto,
+      formaPago: forma,
+      fecha: fechaPago,
+    })
+    if (wa.ok) {
+      onNotice('Mensaje de anticipo listo en WhatsApp. Pulsa enviar en la app.')
+      return
+    }
+    reportarErrorTelefonoWa(wa)
+  }
+
+  async function elegirEnvioWhatsApp(tipo) {
+    if (enviandoWa) return
+    setEnviandoWa(true)
+    try {
+      if (tipo === 'orden') {
+        await enviarWhatsAppOrdenCliente()
+      } else {
+        await enviarWhatsAppAnticipoCliente()
+      }
+      setWaMenuAbierto(false)
+    } finally {
+      setEnviandoWa(false)
     }
   }
 
@@ -1039,14 +1155,12 @@ export default function ReparacionesOrden({
           <button
             type="button"
             className="btn-success wide"
-            disabled={!puedeAccionesPdf || (!supabase && !telClienteUi)}
-            onClick={() => void enviarWhatsAppOrden()}
+            disabled={!puedeAccionesPdf || !telClienteUi}
+            onClick={() => setWaMenuAbierto(true)}
             title={
-              !supabase && !telClienteUi
+              !telClienteUi
                 ? 'El cliente no tiene teléfono registrado'
-                : supabase
-                  ? 'Enviar plantilla de WhatsApp por Cloud API (ver secretos WHATSAPP_* en Supabase)'
-                  : 'Abrir WhatsApp con un mensaje listo para el cliente'
+                : 'Enviar orden o anticipo por WhatsApp al cliente'
             }
           >
             📲 Enviar por WhatsApp
@@ -1074,6 +1188,49 @@ export default function ReparacionesOrden({
         </div>
       </div>
 
+      {waMenuAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !enviandoWa && setWaMenuAbierto(false)}
+        >
+          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📲 Enviar por WhatsApp</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Elija qué notificación enviar al cliente ({telClienteUi || 'sin teléfono'}).
+                {supabase
+                  ? ' Cuando Meta apruebe las plantillas, el envío llegará al número configurado en pruebas o al cliente.'
+                  : ' Se abrirá WhatsApp con el mensaje listo para enviar manualmente.'}
+              </p>
+            </div>
+            <div className="modal-body wa-menu-body">
+              <button
+                type="button"
+                className="wa-menu-option btn-primary wide"
+                disabled={enviandoWa}
+                onClick={() => void elegirEnvioWhatsApp('orden')}
+              >
+                {enviandoWa ? 'Enviando…' : 'Enviar orden cliente'}
+              </button>
+              <button
+                type="button"
+                className="wa-menu-option btn-anticipo wide"
+                disabled={enviandoWa}
+                onClick={() => void elegirEnvioWhatsApp('anticipo')}
+              >
+                {enviandoWa ? 'Enviando…' : 'Enviar anticipo de cliente'}
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary" disabled={enviandoWa} onClick={() => setWaMenuAbierto(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dialogExito && (
         <div className="modal-backdrop" role="presentation" onClick={() => setDialogExito(false)}>
           <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
@@ -1099,6 +1256,7 @@ export default function ReparacionesOrden({
               <h3>💵 Recibir anticipo</h3>
               <p className="muted small" style={{ margin: '4px 0 0' }}>
                 Seleccione un concepto del catálogo, ajuste el monto y la forma de pago, y registre el anticipo.
+                Después use «Enviar por WhatsApp» → «Enviar anticipo de cliente» para notificar.
               </p>
             </div>
             <div className="modal-body">

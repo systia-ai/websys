@@ -8,8 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy:function:whatsapp": "dotenv -e .env -- supabase functions deploy send-whatsapp-orden --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt",
-    "deploy:function:whatsapp:raw": "supabase functions deploy send-whatsapp-orden --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt"
+    "deploy:function:whatsapp": "dotenv -e .env -- supabase functions deploy send-whatsapp-orden --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt && dotenv -e .env -- supabase functions deploy send-whatsapp-anticipo --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt",
+    "deploy:function:whatsapp:raw": "supabase functions deploy send-whatsapp-orden --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt && supabase functions deploy send-whatsapp-anticipo --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",

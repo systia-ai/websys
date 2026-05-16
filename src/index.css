@@ -2358,6 +2358,27 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   cursor: pointer;
 }
 
+.wa-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wa-menu-option {
+  min-height: 52px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.wa-menu-option:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .btn-primary.wide {
   background: #1976d2;
   color: #fff;

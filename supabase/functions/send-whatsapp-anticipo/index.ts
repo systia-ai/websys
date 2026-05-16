@@ -1,14 +1,10 @@
 /**
- * Edge Function: notificación de orden de servicio por WhatsApp Cloud API (Meta).
+ * Edge Function: confirmación de anticipo por WhatsApp Cloud API (Meta).
  *
- * Secretos (Supabase → Edge Functions → Secrets):
- *   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID (obligatorios)
- *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sisteb (nombre exacto en Meta)
- *   WHATSAPP_TEMPLATE_LANG     default es_MX
- *   WHATSAPP_TEST_TO           opcional: fuerza destino de prueba (solo dígitos)
- *   WHATSAPP_API_VERSION       default v25.0
+ * Secretos compartidos con send-whatsapp-orden, más:
+ *   WHATSAPP_TEMPLATE_ANTICIPO_NAME   default anticipo_recibido_sisteb
  *
- * Plantilla esperada (cuerpo): {{1}} detalle cliente/equipo, {{2}} orden, {{3}} fecha
+ * Plantilla esperada (cuerpo): {{1}} cliente, {{2}} orden, {{3}} monto, {{4}} forma pago, {{5}} fecha
  */
 
 import {
@@ -32,7 +28,7 @@ Deno.serve(async (req) => {
 
   const cfg = leerConfigWhatsAppBase()
   const templateName =
-    Deno.env.get('WHATSAPP_TEMPLATE_NAME')?.trim() || 'orden_servicio_sisteb'
+    Deno.env.get('WHATSAPP_TEMPLATE_ANTICIPO_NAME')?.trim() || 'anticipo_recibido_sisteb'
 
   if (!validarConfigBase(cfg)) {
     return json(500, {
@@ -42,12 +38,12 @@ Deno.serve(async (req) => {
   }
 
   let body: {
-    orden?: string
     nombreCliente?: string
-    to?: string
+    orden?: string
+    monto?: string
+    formaPago?: string
     fecha?: string
-    descripcionEquipo?: string
-    problemasReportados?: string
+    to?: string
   } = {}
   try {
     body = (await req.json()) as typeof body
@@ -63,14 +59,10 @@ Deno.serve(async (req) => {
     })
   }
 
+  const nombreCliente = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
   const orden = truncar(String(body.orden ?? '—'), 120)
-  const nombreBase = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
-  const descEq = truncar(String(body.descripcionEquipo ?? '').trim(), 200)
-  const prob = truncar(String(body.problemasReportados ?? '').trim(), 200)
-  const partes = [nombreBase]
-  if (descEq) partes.push(`Equipo: ${descEq}`)
-  if (prob) partes.push(`Problema: ${prob}`)
-  const detalleCliente = truncar(partes.join(' · '), 512)
+  const monto = truncar(String(body.monto ?? '—'), 80)
+  const formaPago = truncar(String(body.formaPago ?? '—'), 80)
   const fecha =
     body.fecha != null && String(body.fecha).trim()
       ? truncar(String(body.fecha).trim(), 120)
@@ -83,7 +75,7 @@ Deno.serve(async (req) => {
     templateName,
     templateLang: cfg.templateLang,
     to,
-    bodyParams: [detalleCliente, orden, fecha],
+    bodyParams: [nombreCliente, orden, monto, formaPago, fecha],
   })
 
   if (!result.ok) {

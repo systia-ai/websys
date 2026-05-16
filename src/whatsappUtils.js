@@ -173,6 +173,28 @@ async function mensajeErrorInvoke(error) {
   return error?.message ?? 'Error al invocar la función.'
 }
 
+/** Mensaje más claro cuando Meta aún no aprueba la plantilla o el nombre no coincide. */
+export function humanizarErrorWhatsApp(errorMsg) {
+  const m = String(errorMsg ?? '').toLowerCase()
+  if (
+    m.includes('template') &&
+    (m.includes('not found') ||
+      m.includes('does not exist') ||
+      m.includes('not approved') ||
+      m.includes('pending') ||
+      m.includes('rejected'))
+  ) {
+    return (
+      'La plantilla de WhatsApp no está disponible aún (Meta en revisión o nombre incorrecto). ' +
+      'Cuando esté Activa en WhatsApp Manager, vuelva a intentar.'
+    )
+  }
+  if (m.includes('(#132001)') || m.includes('132001')) {
+    return 'Plantilla no encontrada: revise WHATSAPP_TEMPLATE_NAME y WHATSAPP_TEMPLATE_LANG (es_MX) en Supabase.'
+  }
+  return String(errorMsg ?? 'Error al enviar por WhatsApp.')
+}
+
 export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
   if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
   const { orden, nombreCliente = '', to, fecha, descripcionEquipo, problemasReportados } = p
@@ -192,12 +214,103 @@ export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
   })
   if (error) {
     const msg = await mensajeErrorInvoke(error)
-    return { ok: false, errorMsg: msg }
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
   }
   if (data && typeof data === 'object' && 'error' in data && data.error) {
-    return { ok: false, errorMsg: String(data.error) }
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
   }
   return { ok: true, data }
+}
+
+/**
+ * Confirmación de anticipo vía Edge Function `send-whatsapp-anticipo`.
+ * Plantilla Meta: {{1}} cliente, {{2}} orden, {{3}} monto, {{4}} forma pago, {{5}} fecha.
+ *
+ * @param {object} supabase
+ * @param {{
+ *   nombreCliente?: string,
+ *   orden: string|number,
+ *   monto: string,
+ *   formaPago?: string,
+ *   fecha?: string,
+ *   to?: string,
+ * }} p
+ */
+export async function enviarAnticipoWhatsAppCloudApi(supabase, p) {
+  if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  const { orden, nombreCliente = '', monto, formaPago = '', fecha, to } = p
+  const { data, error } = await supabase.functions.invoke('send-whatsapp-anticipo', {
+    body: {
+      orden: String(orden),
+      nombreCliente: truncarMetaTexto(nombreCliente),
+      monto: truncarMetaTexto(monto, 80),
+      formaPago: truncarMetaTexto(formaPago, 80),
+      ...(fecha != null && String(fecha).trim() ? { fecha: truncarMetaTexto(String(fecha).trim(), 120) } : {}),
+      ...(to ? { to } : {}),
+    },
+  })
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
+  }
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
+  }
+  return { ok: true, data }
+}
+
+/** Monto legible para plantilla WhatsApp (anticipo). */
+export function formatMontoAnticipoWa(monto) {
+  const n = Number(monto)
+  if (!Number.isFinite(n)) return String(monto ?? '—')
+  return `$${n.toFixed(2)} MXN`
+}
+
+/**
+ * Mensaje de anticipo para wa.me (modo sin API).
+ */
+export function buildMensajeAnticipoClienteDetalle(p) {
+  const neg = String(p?.negocio ?? NEGOCIO_DEFAULT).trim() || NEGOCIO_DEFAULT
+  const ord = String(p?.numeroOrden ?? '').trim() || '—'
+  const nom = String(p?.nombreCliente ?? '').trim() || '—'
+  const monto = String(p?.monto ?? '—').trim() || '—'
+  const forma = String(p?.formaPago ?? '').trim() || '—'
+  const fecha = formatFechaOrdenMensaje(p?.fecha)
+  return (
+    `Hola buen día, de parte de ${neg} confirmamos su anticipo:\n\n` +
+    `• Cliente: ${nom}\n` +
+    `• Orden de servicio: ${ord}\n` +
+    `• Monto: ${monto}\n` +
+    `• Forma de pago: ${forma}\n` +
+    `• Fecha: ${fecha}\n\n` +
+    `Gracias por su pago.`
+  )
+}
+
+/**
+ * Abre WhatsApp con mensaje de anticipo (wa.me).
+ */
+export function abrirWhatsAppAnticipo(p) {
+  const { telefono, mensaje: mensajePre, numeroOrden, negocio, nombreCliente, monto, formaPago, fecha } = p
+  if (!telefono || !String(telefono).trim()) {
+    return { ok: false, motivo: 'sin-telefono' }
+  }
+  const mensaje =
+    mensajePre != null && String(mensajePre).trim()
+      ? String(mensajePre).trim()
+      : buildMensajeAnticipoClienteDetalle({
+          negocio,
+          numeroOrden,
+          nombreCliente,
+          monto,
+          formaPago,
+          fecha,
+        })
+  const url = buildWhatsAppUrl({ telefono, mensaje })
+  if (!url) return { ok: false, motivo: 'telefono-invalido' }
+  const win = window.open(url, '_blank', 'noopener')
+  if (!win) return { ok: false, motivo: 'popup-bloqueado' }
+  return { ok: true, url }
 }
 
 /**

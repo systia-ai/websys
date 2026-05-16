@@ -51,9 +51,15 @@ function App() {
   const [ventasContext, setVentasContext] = useState(null)
   /** Al volver de Ventas → Clientes, reabrir el modal Servicio / Cuentas del mismo cliente. */
   const [clientesRetornoVentas, setClientesRetornoVentas] = useState(null)
+  /** Al volver de Orden de servicio → Clientes, reabrir la lista de órdenes del mismo cliente. */
+  const [clientesRetornoOrdenes, setClientesRetornoOrdenes] = useState(null)
 
   const limpiarRetornoVentasClientes = useCallback(() => {
     setClientesRetornoVentas(null)
+  }, [])
+
+  const limpiarRetornoOrdenesClientes = useCallback(() => {
+    setClientesRetornoOrdenes(null)
   }, [])
   const supabase = useMemo(() => getSupabaseClient(), [])
 
@@ -72,6 +78,7 @@ function App() {
       setVentasContext(null)
       setClienteVinculoServicios(null)
       setClientesRetornoVentas(null)
+      setClientesRetornoOrdenes(null)
       setActiveModule('home')
       setNotice('')
       return
@@ -108,7 +115,17 @@ function App() {
   }
 
   function openReparacionesFromServicios(payload) {
-    setRepSession(payload ?? null)
+    const raw = payload ?? {}
+    let session = raw
+    if (raw && typeof raw === 'object' && raw.returnToClientesOrdenes != null) {
+      const { returnToClientesOrdenes, ...rest } = raw
+      setClientesRetornoOrdenes({
+        openOrdenesModal: true,
+        cliente: normalizeClienteRow(returnToClientesOrdenes),
+      })
+      session = rest
+    }
+    setRepSession(session)
     setError('')
     navigateTo('reparaciones')
   }
@@ -258,6 +275,8 @@ function App() {
         supabase={supabase}
         retornoVentas={clientesRetornoVentas}
         onRetornoVentasConsumido={limpiarRetornoVentasClientes}
+        retornoOrdenes={clientesRetornoOrdenes}
+        onRetornoOrdenesConsumido={limpiarRetornoOrdenesClientes}
         onHome={goBack}
         onOpenServiciosConCliente={(row) => {
           const c = normalizeClienteRow(row)
