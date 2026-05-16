@@ -370,7 +370,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
               </select>
             </label>
             <div className="monitor-ordenes-rango-fechas">
-              <span className="monitor-ordenes-rango-titulo">Rango de fechas de ingreso (incluye ambos días)</span>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
                   <span>Desde</span>

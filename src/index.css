@@ -627,12 +627,6 @@ td {
   gap: 8px;
 }
 
-.monitor-ordenes-rango-titulo {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #455a64;
-}
-
 .monitor-ordenes-rango-inputs {
   display: flex;
   flex-wrap: wrap;
