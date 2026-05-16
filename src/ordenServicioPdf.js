@@ -140,25 +140,30 @@ function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
   return h
 }
 
-/** Fila: No. orden (más ancho) + fecha compacta al lado (ancho según texto). */
+const COMPACT_CAMPO = { compact: true, valueFontSize: 9 }
+
+/** Ancho de recuadro compacto según el texto del valor + etiqueta. */
+function anchoRecuadroCompacto(pdf, value, { min = 22, max = 52, pad = 7 } = {}) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(COMPACT_CAMPO.valueFontSize)
+  const w = pdf.getTextWidth(dashIfEmpty(value)) + pad
+  return Math.min(Math.max(w, min), max)
+}
+
+/** Fila superior: dos recuadros pequeños (orden + fecha), alineados a la izquierda. */
 function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
-  const gap = 4
+  void totalW
+  const gap = 3.5
+  const ordenStr = String(orden ?? '—')
   const fechaStr = dashIfEmpty(fecha)
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9)
-  const fechaTextW = pdf.getTextWidth(fechaStr)
-  const wFecha = Math.min(Math.max(fechaTextW + 7, 38), totalW * 0.46)
-  const wOrden = totalW - wFecha - gap
+  const wOrden = anchoRecuadroCompacto(pdf, ordenStr, { min: 20, max: 28, pad: 8 })
+  const wFecha = anchoRecuadroCompacto(pdf, fechaStr, { min: 36, max: 50, pad: 7 })
 
-  const hOrden = 14
-  const hFecha = 11
-  drawCampo(pdf, 'No. de Orden', orden, x, y, wOrden, hOrden, TEMA.orden)
-  drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, hFecha, TEMA.fecha, {
-    compact: true,
-    valueFontSize: 9,
-  })
-  return Math.max(hOrden, hFecha)
+  const h = 11
+  drawCampo(pdf, 'No. de Orden', ordenStr, x, y, wOrden, h, TEMA.orden, COMPACT_CAMPO)
+  drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, h, TEMA.fecha, COMPACT_CAMPO)
+  return h
 }
 
 /**
