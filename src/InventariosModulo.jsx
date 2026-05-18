@@ -90,6 +90,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [iconosMap, setIconosMap] = useState(() => readIconosMap())
   const [emojiSel, setEmojiSel] = useState('📦')
   const [emojiManual, setEmojiManual] = useState(false)
+  const [menuIconoAbierto, setMenuIconoAbierto] = useState(false)
 
   const cargarProductos = useCallback(async () => {
     setLoading(true)
@@ -134,6 +135,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setPrecioVenta('')
     setEmojiSel('📦')
     setEmojiManual(false)
+    setMenuIconoAbierto(false)
     setDialogo(true)
   }
 
@@ -147,6 +149,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setPrecioVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
     setEmojiSel(emojiParaProducto(p, iconosMap))
     setEmojiManual(false)
+    setMenuIconoAbierto(false)
     setDialogo(true)
   }
 
@@ -487,31 +490,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
               <h3>{editando ? 'Editar producto' : 'Agregar producto'}</h3>
             </div>
             <div className="modal-body form-stack">
-              <div className="inventario-emoji-field">
-                <span className="inventario-emoji-preview" aria-hidden="true">
-                  {emojiSel}
-                </span>
-                <div className="inventario-emoji-picker" role="group" aria-label="Icono del producto">
-                  {EMOJIS_ELEGIR.map((e) => (
-                    <button
-                      key={e}
-                      type="button"
-                      className={emojiSel === e ? 'inventario-emoji-btn activo' : 'inventario-emoji-btn'}
-                      onClick={() => {
-                        setEmojiSel(e)
-                        setEmojiManual(true)
-                      }}
-                      aria-label={`Icono ${e}`}
-                      aria-pressed={emojiSel === e}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-                <p className="muted small inventario-emoji-hint">
-                  Se sugiere al escribir; puede elegir otro icono.
-                </p>
-              </div>
               <label>
                 Serie
                 <input value={serie} onChange={(e) => onSerieChange(e.target.value.toUpperCase())} placeholder="Serie del producto" />
@@ -540,6 +518,43 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                 Precio venta
                 <input inputMode="decimal" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} placeholder="0.00" />
               </label>
+
+              <div className="inventario-icono-seccion">
+                <div className="inventario-icono-row">
+                  <span className="inventario-emoji-preview compacto" aria-hidden="true">
+                    {emojiSel}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-cambio-icono"
+                    onClick={() => setMenuIconoAbierto((v) => !v)}
+                    aria-expanded={menuIconoAbierto}
+                  >
+                    Cambio de icono
+                  </button>
+                </div>
+                {menuIconoAbierto ? (
+                  <div className="inventario-emoji-field">
+                    <div className="inventario-emoji-picker" role="group" aria-label="Icono del producto">
+                      {EMOJIS_ELEGIR.map((e) => (
+                        <button
+                          key={e}
+                          type="button"
+                          className={emojiSel === e ? 'inventario-emoji-btn activo' : 'inventario-emoji-btn'}
+                          onClick={() => {
+                            setEmojiSel(e)
+                            setEmojiManual(true)
+                          }}
+                          aria-label={`Icono ${e}`}
+                          aria-pressed={emojiSel === e}
+                        >
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="modal-footer">
               <button type="button" className="secondary" onClick={() => setDialogo(false)}>

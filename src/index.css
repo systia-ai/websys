@@ -573,6 +573,43 @@ td {
   text-align: center;
 }
 
+.inventario-icono-seccion {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e3eaf5;
+}
+
+.inventario-icono-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inventario-emoji-preview.compacto {
+  font-size: 1.75rem;
+  width: 2rem;
+}
+
+.btn-cambio-icono {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-cambio-icono:hover {
+  background: #bbdefb;
+}
+
+.inventario-icono-seccion .inventario-emoji-field {
+  margin-top: 10px;
+}
+
 .inventario-vender-resumen {
   display: flex;
   align-items: center;
