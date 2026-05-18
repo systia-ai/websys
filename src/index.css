@@ -1147,6 +1147,81 @@ td {
   padding-bottom: 24px;
 }
 
+.reportes-agrupacion-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 14px;
+  background: #f5f7ff;
+  border: 1px solid #c5cae9;
+}
+
+.reportes-agrupacion-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #3949ab;
+}
+
+.reportes-agrupacion-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reportes-agrupacion-btn {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3949ab;
+  background: #fff;
+  border: 1px solid #9fa8da;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.reportes-agrupacion-btn:hover {
+  background: #e8eaf6;
+}
+
+.reportes-agrupacion-btn--activo {
+  color: #fff;
+  background: linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%);
+  border-color: #3949ab;
+}
+
+.reportes-meses-detalle {
+  margin: 8px 0 20px;
+}
+
+.reportes-meses-detalle-titulo {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a237e;
+}
+
+.reportes-meses-detalle-desc {
+  margin: 0 0 14px;
+  font-size: 0.88rem;
+}
+
+.reportes-mes-detalle {
+  margin-bottom: 16px;
+  background: linear-gradient(145deg, #fafbff 0%, #fff 100%);
+  border: 1px solid #e8eaf6;
+  border-radius: 12px;
+}
+
+.reportes-mes-detalle-nombre {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #3949ab;
+  text-transform: capitalize;
+}
+
 .reportes-kpi-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -1,11 +1,21 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
+  AGRUPACIONES_ESTADISTICAS,
+  guardarAgrupacionEstadisticas,
   hayDatosConFecha,
   labelDiaCorta,
+  labelPeriodoEje,
+  leerAgrupacionEstadisticas,
+  reparacionesEnRango,
+  segmentosMesEnPeriodo,
   serieEntregadasActivas,
   serieEstatus,
+  serieOrdenesAgrupada,
   serieOrdenesPorDia,
+  seriePagosAgrupada,
   seriePagosPorDia,
+  tituloAgrupacionOrdenes,
+  tituloAgrupacionPagos,
 } from './reportesEstadisticas.js'
 
 const W = 640
@@ -17,11 +27,12 @@ function maxValor(series) {
   return m <= 0 ? 1 : m
 }
 
-function SvgLineChart({ title, series, formatY = (v) => String(v) }) {
+function SvgLineChart({ title, series, formatY = (v) => String(v), formatXLabel }) {
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
   const maxY = maxValor(series)
   const n = series.length
+  const fmtX = formatXLabel ?? ((l) => l)
 
   const pts = series.map((d, i) => {
     const x = PAD.l + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
@@ -64,7 +75,7 @@ function SvgLineChart({ title, series, formatY = (v) => String(v) }) {
         {pts.map((p, i) =>
           i % xStep === 0 || i === n - 1 ? (
             <text key={`x-${p.label}`} x={p.x} y={H - 12} textAnchor="middle" className="reportes-chart-axis-x">
-              {labelDiaCorta(p.label)}
+              {fmtX(p.label)}
             </text>
           ) : null,
         )}
@@ -73,13 +84,20 @@ function SvgLineChart({ title, series, formatY = (v) => String(v) }) {
   )
 }
 
-function SvgBarChart({ title, series, formatY = (v) => String(v) }) {
+function SvgBarChart({
+  title,
+  series,
+  formatY = (v) => String(v),
+  formatXLabel,
+  formatBarValue,
+}) {
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
   const maxY = maxValor(series)
   const n = series.length
   const gap = 12
   const barW = n > 0 ? Math.min(48, (innerW - gap * (n + 1)) / n) : 0
+  const fmtX = formatXLabel ?? ((l) => l)
 
   return (
     <figure className="reportes-chart-card">
@@ -101,14 +119,16 @@ function SvgBarChart({ title, series, formatY = (v) => String(v) }) {
           const h = (d.value / maxY) * innerH
           const x = PAD.l + gap + i * (barW + gap)
           const y = PAD.t + innerH - h
+          const xLbl = fmtX(d.label)
+          const short = xLbl.length > 12 ? `${xLbl.slice(0, 11)}…` : xLbl
           return (
             <g key={d.label}>
               <rect x={x} y={y} width={barW} height={h} rx={4} className="reportes-chart-bar" />
               <text x={x + barW / 2} y={H - 10} textAnchor="middle" className="reportes-chart-axis-x reportes-chart-axis-x--bar">
-                {d.label.length > 10 ? `${d.label.slice(0, 9)}…` : d.label}
+                {short}
               </text>
               <text x={x + barW / 2} y={y - 6} textAnchor="middle" className="reportes-chart-bar-val">
-                {d.value}
+                {formatBarValue ? formatBarValue(d.value) : d.value}
               </text>
             </g>
           )
@@ -172,6 +192,89 @@ function SvgDonutChart({ title, series }) {
   )
 }
 
+function formatPagoEje(v) {
+  return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`
+}
+
+function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
+  const periodo = periodoAplicado
+  const fmtX = useCallback((l) => labelPeriodoEje(l, agrupacion), [agrupacion])
+
+  const ordenesSerie = useMemo(
+    () => serieOrdenesAgrupada(reparaciones, periodo, agrupacion),
+    [reparaciones, periodo, agrupacion],
+  )
+  const pagosSerie = useMemo(
+    () => seriePagosAgrupada(reparaciones, periodo, agrupacion),
+    [reparaciones, periodo, agrupacion],
+  )
+
+  const mesesDetalle = useMemo(
+    () => (agrupacion === 'mes' ? segmentosMesEnPeriodo(periodo) : []),
+    [agrupacion, periodo],
+  )
+
+  const tituloOrdenes = tituloAgrupacionOrdenes(agrupacion)
+  const tituloPagos = tituloAgrupacionPagos(agrupacion)
+  const usarBarras = agrupacion === 'semana' || agrupacion === 'mes'
+
+  return (
+    <>
+      {usarBarras ? (
+        <>
+          <SvgBarChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
+          <SvgBarChart
+            title={tituloPagos}
+            series={pagosSerie}
+            formatY={formatPagoEje}
+            formatBarValue={formatPagoEje}
+            formatXLabel={fmtX}
+          />
+        </>
+      ) : (
+        <>
+          <SvgLineChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
+          <SvgLineChart title={tituloPagos} series={pagosSerie} formatY={formatPagoEje} formatXLabel={fmtX} />
+        </>
+      )}
+
+      {mesesDetalle.length > 0 ? (
+        <section className="reportes-meses-detalle" aria-labelledby="reportes-meses-detalle-titulo">
+          <h2 id="reportes-meses-detalle-titulo" className="reportes-meses-detalle-titulo">
+            Detalle por mes
+          </h2>
+          <p className="reportes-meses-detalle-desc muted">
+            Vista diaria dentro de cada mes del periodo seleccionado.
+          </p>
+          {mesesDetalle.map((seg) => {
+            const repMes = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
+            const ordenesDia = serieOrdenesPorDia(repMes, { ini: seg.ini, fin: seg.fin })
+            const pagosDia = seriePagosPorDia(repMes, { ini: seg.ini, fin: seg.fin })
+            const totalOrdenes = ordenesDia.reduce((s, d) => s + d.value, 0)
+            if (totalOrdenes === 0 && pagosDia.every((d) => d.value === 0)) return null
+            return (
+              <div key={seg.key} className="reportes-mes-detalle card-pad">
+                <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
+                <SvgLineChart
+                  title={`Órdenes — ${seg.label}`}
+                  series={ordenesDia}
+                  formatXLabel={labelDiaCorta}
+                />
+                <SvgLineChart
+                  title={`Ingresos — ${seg.label}`}
+                  series={pagosDia}
+                  formatY={formatPagoEje}
+                  formatXLabel={labelDiaCorta}
+                />
+              </div>
+            )
+          })}
+        </section>
+      ) : null}
+    </>
+  )
+}
+
 export default function ReportesEstadisticasView({
   reparaciones,
   resumen,
@@ -184,16 +287,14 @@ export default function ReportesEstadisticasView({
   filtrosSlot = null,
   onVolver,
 }) {
-  const conFecha = useMemo(() => hayDatosConFecha(reparaciones), [reparaciones])
+  const [agrupacion, setAgrupacion] = useState(leerAgrupacionEstadisticas)
 
-  const ordenesDia = useMemo(
-    () => serieOrdenesPorDia(reparaciones, periodoAplicado),
-    [reparaciones, periodoAplicado],
-  )
-  const pagosDia = useMemo(
-    () => seriePagosPorDia(reparaciones, periodoAplicado),
-    [reparaciones, periodoAplicado],
-  )
+  const cambiarAgrupacion = (id) => {
+    setAgrupacion(id)
+    guardarAgrupacionEstadisticas(id)
+  }
+
+  const conFecha = useMemo(() => hayDatosConFecha(reparaciones), [reparaciones])
   const estatusSerie = useMemo(() => serieEstatus(resumen.porEstatus), [resumen.porEstatus])
   const entregadasSerie = useMemo(
     () => serieEntregadasActivas(resumen.entregadas, resumen.activas),
@@ -235,42 +336,62 @@ export default function ReportesEstadisticasView({
           </p>
         ) : null}
 
+        {conFecha && periodoAplicado ? (
+          <div
+            className="reportes-agrupacion-bar card-pad"
+            role="group"
+            aria-label="Agrupar gráficas por periodo"
+          >
+            <span className="reportes-agrupacion-label">Ver gráficas:</span>
+            <div className="reportes-agrupacion-opciones">
+              {AGRUPACIONES_ESTADISTICAS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`reportes-agrupacion-btn${agrupacion === opt.id ? ' reportes-agrupacion-btn--activo' : ''}`}
+                  aria-pressed={agrupacion === opt.id}
+                  onClick={() => cambiarAgrupacion(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {loading ? <p className="muted center card-pad">Actualizando gráficas…</p> : null}
 
         {!soloPeriodo ? (
-        <section className="reportes-kpi-grid card-pad">
-          <div className="reportes-kpi">
-            <span className="label">Órdenes</span>
-            <strong>{resumen.total}</strong>
-          </div>
-          <div className="reportes-kpi">
-            <span className="label">Pagos</span>
-            <strong>${resumen.totalPagos.toFixed(2)}</strong>
-          </div>
-          <div className="reportes-kpi">
-            <span className="label">Costo reparación</span>
-            <strong>${resumen.totalCosto.toFixed(2)}</strong>
-          </div>
-          <div className="reportes-kpi">
-            <span className="label">Entregadas</span>
-            <strong>{resumen.entregadas}</strong>
-          </div>
-        </section>
+          <section className="reportes-kpi-grid card-pad">
+            <div className="reportes-kpi">
+              <span className="label">Órdenes</span>
+              <strong>{resumen.total}</strong>
+            </div>
+            <div className="reportes-kpi">
+              <span className="label">Pagos</span>
+              <strong>${resumen.totalPagos.toFixed(2)}</strong>
+            </div>
+            <div className="reportes-kpi">
+              <span className="label">Costo reparación</span>
+              <strong>${resumen.totalCosto.toFixed(2)}</strong>
+            </div>
+            <div className="reportes-kpi">
+              <span className="label">Entregadas</span>
+              <strong>{resumen.entregadas}</strong>
+            </div>
+          </section>
         ) : null}
 
         {!loading && !conFecha ? (
           <p className="warning card-pad">
-            No hay fechas en las órdenes de este reporte; las gráficas por día no están disponibles.
+            No hay fechas en las órdenes de este reporte; las gráficas por periodo no están disponibles.
           </p>
         ) : !loading && conFecha ? (
-          <>
-            <SvgLineChart title="Órdenes por día" series={ordenesDia} />
-            <SvgLineChart
-              title="Ingresos por día (pagos)"
-              series={pagosDia}
-              formatY={(v) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`)}
-            />
-          </>
+          <GraficasTemporales
+            agrupacion={agrupacion}
+            reparaciones={reparaciones}
+            periodoAplicado={periodoAplicado}
+          />
         ) : null}
 
         {!loading && estatusSerie.length > 0 ? (
