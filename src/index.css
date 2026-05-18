@@ -707,6 +707,240 @@ td {
   font-weight: 600;
 }
 
+.inventario-vista-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.inventario-vista-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #546e7a;
+}
+
+.inventario-vista-toggle {
+  display: inline-flex;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #b8dff5;
+  box-shadow: 0 1px 4px rgba(25, 118, 210, 0.12);
+}
+
+.inventario-vista-btn {
+  border: 0;
+  background: #fff;
+  color: #546e7a;
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.inventario-vista-btn + .inventario-vista-btn {
+  border-left: 1px solid #b8dff5;
+}
+
+.inventario-vista-btn:hover:not(.activo) {
+  background: #f0f9ff;
+}
+
+.inventario-vista-btn.activo {
+  background: linear-gradient(180deg, #e1f5fe 0%, #b3e5fc 100%);
+  color: #0277bd;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.inventario-tabla-wrap {
+  margin-top: 8px;
+}
+
+.inventario-tabla-scroll-hint {
+  margin: 0 0 8px;
+  text-align: right;
+}
+
+.inventario-tabla-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(3, 105, 161, 0.08);
+  padding: 10px 12px 14px;
+}
+
+.inventario-tabla-grid {
+  min-width: 980px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inventario-tabla-th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #607d8b;
+  font-weight: 700;
+  justify-content: flex-start;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  min-height: 36px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+.inventario-tabla-grupo-celdas--cabecera .inventario-celda {
+  pointer-events: none;
+}
+
+.inventario-tabla-th--acc {
+  flex: 0 0 64px;
+  min-width: 64px;
+  text-align: center;
+  align-self: flex-end;
+  padding-bottom: 8px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.inventario-tabla-cabecera {
+  margin-bottom: 2px;
+}
+
+.inventario-tabla-fila-grupo {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: min-content;
+}
+
+.inventario-tabla-grupo-celdas {
+  display: flex;
+  flex: 1;
+  flex-wrap: nowrap;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.inventario-tabla-grupo-celdas .inventario-celda {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  margin-left: -1px;
+  border-radius: 0;
+  border-right-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+}
+
+.inventario-tabla-grupo-celdas .inventario-celda:first-child {
+  margin-left: 0;
+  border-radius: 8px 0 0 8px;
+  border-right-width: 0;
+}
+
+.inventario-tabla-grupo-celdas .inventario-celda:last-child {
+  border-radius: 0 8px 8px 0;
+  border-right-width: 1px;
+}
+
+.inventario-tabla-fila-grupo:hover .inventario-celda {
+  border-color: #81d4fa;
+  z-index: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 1px rgba(129, 212, 250, 0.35);
+}
+
+.inventario-celda {
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #f0f9ff 0%, #e1f5fe 55%, #d4effc 100%);
+  border: 1px solid #b3e5fc;
+  color: #1565c0;
+  font-weight: 500;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.inventario-celda--icono {
+  flex: 0 0 52px;
+  min-width: 52px;
+  justify-content: center;
+  font-size: 1.45rem;
+  padding: 6px 8px;
+}
+
+.inventario-celda--serie {
+  flex: 0 0 240px;
+  min-width: 240px;
+  max-width: 320px;
+  font-weight: 700;
+  color: #0277bd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventario-celda--desc {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.inventario-celda--stock {
+  flex: 0 0 150px;
+  min-width: 150px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.inventario-celda--servicio {
+  flex: 0 0 150px;
+  min-width: 150px;
+  background: linear-gradient(180deg, #f3e5f5 0%, #e1bee7 100%);
+  border-color: #ce93d8;
+  color: #6a1b9a;
+}
+
+.inventario-celda--precio {
+  flex: 0 0 108px;
+  min-width: 108px;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.inventario-tabla-acciones {
+  flex: 0 0 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  align-self: center;
+}
+
+.inventario-tabla-link {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.inventario-tabla-link:hover {
+  background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%);
+  z-index: 2;
+}
+
 .inventario-vender-resumen {
   display: flex;
   align-items: center;

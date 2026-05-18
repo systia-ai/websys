@@ -11,6 +11,15 @@ import {
 import { esProductoContable } from './productoUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
+const LS_VISTA_INVENTARIO = 'sistefix_inventario_vista'
+
+function leerVistaInventario() {
+  try {
+    return localStorage.getItem(LS_VISTA_INVENTARIO) === 'tabla' ? 'tabla' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
 
 function readLs(key, fallback) {
   try {
@@ -50,6 +59,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [vista, setVista] = useState(leerVistaInventario)
 
   const [dialogo, setDialogo] = useState(false)
   const [editando, setEditando] = useState(null)
@@ -217,6 +227,15 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     }
   }
 
+  function cambiarVista(modo) {
+    setVista(modo)
+    try {
+      localStorage.setItem(LS_VISTA_INVENTARIO, modo)
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function confirmarEliminar() {
     const p = eliminar
     if (!p?.id) return
@@ -273,11 +292,106 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           />
         </div>
 
+        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
+          <span className="inventario-vista-label">Ver como:</span>
+          <div className="inventario-vista-toggle">
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('lista')}
+              aria-pressed={vista === 'lista'}
+            >
+              📋 Lista
+            </button>
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('tabla')}
+              aria-pressed={vista === 'tabla'}
+            >
+              ▦ Tabla
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <p className="muted center">Cargando…</p>
         ) : filtrados.length === 0 ? (
           <div className="empty-card">
             <p>{busqueda.trim() ? 'No se encontraron resultados' : 'No hay productos en inventario'}</p>
+          </div>
+        ) : vista === 'tabla' ? (
+          <div className="inventario-tabla-wrap">
+            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
+            <div className="inventario-tabla-scroll" role="region" aria-label="Inventario en tabla" tabIndex={0}>
+              <div className="inventario-tabla-grid">
+                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
+                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--icono" aria-hidden="true" />
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--serie">Serie</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Descripción</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--stock">Stock</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--precio">P. compra</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--precio">P. venta</span>
+                  </div>
+                  <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
+                </div>
+                {filtrados.map((p) => {
+                  const icono = emojiParaProducto(p, iconosMap)
+                  const esContable = esProductoContable(p)
+                  return (
+                    <div key={p.id} className="inventario-tabla-fila-grupo" role="row">
+                      <div className="inventario-tabla-grupo-celdas">
+                        <span className="inventario-celda inventario-celda--icono" aria-hidden="true">
+                          {icono}
+                        </span>
+                        <button
+                          type="button"
+                          className="inventario-tabla-link inventario-celda inventario-celda--serie"
+                          onClick={() => abrirEditar(p)}
+                        >
+                          {p.serie || 'Sin serie'}
+                        </button>
+                        <span className="inventario-celda inventario-celda--desc">{p.descripcion || '—'}</span>
+                        {esContable ? (
+                          <span className="inventario-celda inventario-celda--stock">
+                            Ex. {p.existencia ?? '—'} · Cant. {p.cantidad ?? '—'}
+                          </span>
+                        ) : (
+                          <span className="inventario-celda inventario-celda--servicio">Servicio</span>
+                        )}
+                        <span className="inventario-celda inventario-celda--precio">
+                          ${Number(p.precio_compra ?? 0).toFixed(2)}
+                        </span>
+                        <span className="inventario-celda inventario-celda--precio">
+                          ${Number(p.precio_venta ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="inventario-tabla-acciones">
+                        <button
+                          type="button"
+                          className="btn-icon edit"
+                          onClick={() => abrirEditar(p)}
+                          title="Editar"
+                          aria-label="Editar"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-icon danger"
+                          onClick={() => setEliminar(p)}
+                          title="Eliminar"
+                          aria-label="Eliminar"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <ul className="equipo-list inventario-list">
