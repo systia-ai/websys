@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
 import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
+import { esProductoContable, etiquetaExistencia } from './productoUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -33,16 +34,23 @@ function sumSubtotales(lineas) {
   return lineas.reduce((s, L) => s + Number(L.subtotal ?? 0), 0)
 }
 
-function buildLineasDesdeServidor({ movs, reps, pagos }) {
+function lookupProducto(productosPorId, productoId) {
+  if (productoId == null || productoId === '') return null
+  return productosPorId.get(String(productoId)) ?? null
+}
+
+function buildLineasDesdeServidor({ movs, reps, pagos, productosPorId = new Map() }) {
   const lineas = []
   for (const m of movs) {
     const cant = Number(m.cantidad ?? 0)
     const costo = Number(m.costo ?? 0)
+    const prod = lookupProducto(productosPorId, m.producto_id)
     lineas.push({
       key: `cuentamov_${m.id}`,
       tipo: 'cuentamov',
       dbId: m.id,
       producto_id: m.producto_id ?? 0,
+      contable: prod ? esProductoContable(prod) : true,
       cantidad: cant,
       descripcion: `[VENTA] ${m.descripcion ?? 'Sin descripción'}`,
       precioUnitario: costo,
@@ -107,6 +115,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const [cantProd, setCantProd] = useState('')
   const [precioProd, setPrecioProd] = useState('')
   const [productoIdSel, setProductoIdSel] = useState(0)
+  const [productoContableSel, setProductoContableSel] = useState(true)
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
@@ -189,7 +198,16 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           }
         }
 
-        const built = buildLineasDesdeServidor({ movs, reps, pagos })
+        let productosLista = []
+        if (supabase) {
+          const r4 = await supabase.from('productos').select('id, contable')
+          if (!r4.error) productosLista = r4.data ?? []
+        } else {
+          productosLista = readLs(LS_PRODUCTOS, [])
+        }
+        const productosPorId = new Map(productosLista.map((p) => [String(p.id), p]))
+
+        const built = buildLineasDesdeServidor({ movs, reps, pagos, productosPorId })
         setLineas(built)
       } catch (e) {
         onError?.(`Error al cargar cuenta: ${e.message}`)
@@ -458,10 +476,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   }
 
   function seleccionarProducto(p) {
+    const esContable = esProductoContable(p)
     setProductoIdSel(Number(p.id) || 0)
+    setProductoContableSel(esContable)
     setSerieProd(String(p.serie ?? '').toUpperCase())
     setDescProd(String(p.descripcion ?? '').toUpperCase())
-    setExistencia(String(p.existencia ?? ''))
+    setExistencia(esContable ? String(p.existencia ?? '') : etiquetaExistencia(p))
     setPrecioProd(String(p.precio_venta ?? ''))
     setCantProd('')
     setModalProductos(false)
@@ -496,10 +516,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('Genere o seleccione una cuenta antes de agregar productos')
       return
     }
-    const stockDisp = Number(existencia)
-    if (Number.isFinite(stockDisp) && cant > stockDisp) {
-      onError?.(`Stock insuficiente. Disponible: ${stockDisp}`)
-      return
+    if (productoContableSel) {
+      const stockDisp = Number(existencia)
+      if (Number.isFinite(stockDisp) && cant > stockDisp) {
+        onError?.(`Stock insuficiente. Disponible: ${stockDisp}`)
+        return
+      }
     }
     try {
       const { movId: nuevoId } = await registrarVentaEnCuenta({
@@ -518,6 +540,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           tipo: 'cuentamov',
           dbId: nuevoId,
           producto_id: productoIdSel,
+          contable: productoContableSel,
           cantidad: cant,
           descripcion: `[VENTA] ${descProd.trim()}`,
           precioUnitario: precio,
@@ -530,8 +553,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       setCantProd('')
       setPrecioProd('')
       setProductoIdSel(0)
+      setProductoContableSel(true)
       setMostrarCamposProducto(false)
-      onNotice?.('Producto agregado · inventario actualizado')
+      onNotice?.(
+        productoContableSel ? 'Producto agregado · inventario actualizado' : 'Servicio agregado a la cuenta',
+      )
     } catch (e) {
       onError?.(`Error al agregar línea: ${e.message}`)
     }
@@ -562,7 +588,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
             readLs(LS_CUENTAMOV, []).filter((x) => !sameId(x.id, L.dbId)),
           )
         }
-        if (prodId > 0 && Number.isFinite(cantLinea) && cantLinea > 0) {
+        if (prodId > 0 && Number.isFinite(cantLinea) && cantLinea > 0 && L.contable !== false) {
           await reponerExistencia(supabase, prodId, cantLinea)
         }
       } else if (L.tipo === 'pago' && L.dbId != null) {
@@ -946,7 +972,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                       </span>
                       <strong>{p.serie}</strong>
                       <span className="muted small">{p.descripcion}</span>
-                      <span className="muted small">Existencia: {p.existencia ?? '—'}</span>
+                      <span className="muted small">Existencia: {etiquetaExistencia(p)}</span>
                       <span className="muted small">${Number(p.precio_venta ?? 0).toFixed(2)}</span>
                     </button>
                   </li>

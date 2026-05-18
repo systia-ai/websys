@@ -1,4 +1,5 @@
 import { sameId } from './clienteUtils.js'
+import { esProductoContable } from './productoUtils.js'
 
 export const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -23,6 +24,18 @@ function parseCantidad(cantidad) {
   return cant
 }
 
+async function leerProducto(supabase, productoId) {
+  if (supabase) {
+    const { data, error } = await supabase.from('productos').select('*').eq('id', productoId).single()
+    if (error) throw error
+    return data
+  }
+  const list = readLs(LS_PRODUCTOS, [])
+  const p = list.find((x) => sameId(x.id, productoId))
+  if (!p) throw new Error('Producto no encontrado en inventario')
+  return p
+}
+
 /** Lee existencia actual del producto (Supabase o localStorage). */
 export async function leerExistencia(supabase, productoId) {
   if (supabase) {
@@ -36,9 +49,12 @@ export async function leerExistencia(supabase, productoId) {
   return Number(p.existencia ?? 0)
 }
 
-/** Resta unidades de `existencia` en inventario. */
+/** Resta unidades de `existencia` en inventario (no hace nada si el producto no es contable). */
 export async function descontarExistencia(supabase, productoId, cantidad) {
   const cant = parseCantidad(cantidad)
+  const producto = await leerProducto(supabase, productoId)
+  if (!esProductoContable(producto)) return null
+
   if (supabase) {
     const actual = await leerExistencia(supabase, productoId)
     if (actual < cant) {
@@ -66,6 +82,10 @@ export async function descontarExistencia(supabase, productoId, cantidad) {
 export async function reponerExistencia(supabase, productoId, cantidad) {
   const cant = parseCantidad(cantidad)
   if (!productoId || Number(productoId) <= 0) return null
+
+  const producto = await leerProducto(supabase, productoId)
+  if (!esProductoContable(producto)) return null
+
   if (supabase) {
     const actual = await leerExistencia(supabase, productoId)
     const nueva = actual + cant
@@ -108,7 +128,11 @@ export async function registrarVentaEnCuenta({
     throw new Error('Producto inválido')
   }
 
-  await descontarExistencia(supabase, productoId, cant)
+  const producto = await leerProducto(supabase, productoId)
+  const contable = esProductoContable(producto)
+  if (contable) {
+    await descontarExistencia(supabase, productoId, cant)
+  }
 
   const movRow = {
     cuenta_id: cuentaId,
@@ -122,7 +146,7 @@ export async function registrarVentaEnCuenta({
     if (supabase) {
       const { data, error } = await supabase.from('cuentamov').insert(movRow).select('*').single()
       if (error) throw error
-      return { movId: data?.id, movRow: data }
+      return { movId: data?.id, movRow: data, contable }
     }
     if (typeof nextLocalId !== 'function') {
       throw new Error('nextLocalId requerido en modo local')
@@ -130,9 +154,11 @@ export async function registrarVentaEnCuenta({
     const nuevoId = nextLocalId()
     const all = readLs(LS_CUENTAMOV, [])
     writeLs(LS_CUENTAMOV, [{ id: nuevoId, ...movRow }, ...all])
-    return { movId: nuevoId, movRow: { id: nuevoId, ...movRow } }
+    return { movId: nuevoId, movRow: { id: nuevoId, ...movRow }, contable }
   } catch (e) {
-    await reponerExistencia(supabase, productoId, cant)
+    if (contable) {
+      await reponerExistencia(supabase, productoId, cant)
+    }
     throw e
   }
 }
