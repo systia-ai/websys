@@ -7,6 +7,7 @@ import {
   labelPeriodoEje,
   leerAgrupacionEstadisticas,
   reparacionesEnRango,
+  segmentosAnioEnPeriodo,
   segmentosMesEnPeriodo,
   serieEntregadasActivas,
   serieEstatus,
@@ -213,10 +214,15 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
     () => (agrupacion === 'mes' ? segmentosMesEnPeriodo(periodo) : []),
     [agrupacion, periodo],
   )
+  const aniosDetalle = useMemo(
+    () => (agrupacion === 'anio' ? segmentosAnioEnPeriodo(periodo) : []),
+    [agrupacion, periodo],
+  )
+  const fmtMes = useCallback((l) => labelPeriodoEje(l, 'mes'), [])
 
   const tituloOrdenes = tituloAgrupacionOrdenes(agrupacion)
   const tituloPagos = tituloAgrupacionPagos(agrupacion)
-  const usarBarras = agrupacion === 'semana' || agrupacion === 'mes'
+  const usarBarras = agrupacion === 'semana' || agrupacion === 'mes' || agrupacion === 'anio'
 
   return (
     <>
@@ -265,6 +271,37 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
                   series={pagosDia}
                   formatY={formatPagoEje}
                   formatXLabel={labelDiaCorta}
+                />
+              </div>
+            )
+          })}
+        </section>
+      ) : null}
+
+      {aniosDetalle.length > 0 ? (
+        <section className="reportes-meses-detalle" aria-labelledby="reportes-anios-detalle-titulo">
+          <h2 id="reportes-anios-detalle-titulo" className="reportes-meses-detalle-titulo">
+            Detalle por año
+          </h2>
+          <p className="reportes-meses-detalle-desc muted">
+            Vista mensual dentro de cada año del periodo seleccionado.
+          </p>
+          {aniosDetalle.map((seg) => {
+            const repAnio = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
+            const ordenesMes = serieOrdenesAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
+            const pagosMes = seriePagosAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
+            const totalOrdenes = ordenesMes.reduce((s, d) => s + d.value, 0)
+            if (totalOrdenes === 0 && pagosMes.every((d) => d.value === 0)) return null
+            return (
+              <div key={seg.key} className="reportes-mes-detalle card-pad">
+                <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
+                <SvgBarChart title={`Órdenes por mes — ${seg.label}`} series={ordenesMes} formatXLabel={fmtMes} />
+                <SvgBarChart
+                  title={`Ingresos por mes — ${seg.label}`}
+                  series={pagosMes}
+                  formatY={formatPagoEje}
+                  formatBarValue={formatPagoEje}
+                  formatXLabel={fmtMes}
                 />
               </div>
             )

@@ -4,6 +4,7 @@ export const AGRUPACIONES_ESTADISTICAS = [
   { id: 'dia', label: 'Por día' },
   { id: 'semana', label: 'Por semana' },
   { id: 'mes', label: 'Por mes' },
+  { id: 'anio', label: 'Por año' },
 ]
 
 const LS_AGRUPACION = 'sistefix_reportes_agrupacion'
@@ -11,7 +12,7 @@ const LS_AGRUPACION = 'sistefix_reportes_agrupacion'
 export function leerAgrupacionEstadisticas() {
   try {
     const v = localStorage.getItem(LS_AGRUPACION)
-    if (v === 'semana' || v === 'mes') return v
+    if (v === 'semana' || v === 'mes' || v === 'anio') return v
     return 'dia'
   } catch {
     return 'dia'
@@ -66,6 +67,10 @@ function claveMes(ymd) {
   return ymd.slice(0, 7)
 }
 
+function claveAnio(ymd) {
+  return ymd.slice(0, 4)
+}
+
 /** Lunes de la semana (calendario local) como YYYY-MM-DD. */
 function claveSemana(ymd) {
   const d = ymdToLocalDate(ymd)
@@ -96,6 +101,16 @@ function llenarRangoMeses(ini, fin) {
   return out
 }
 
+function llenarRangoAnios(ini, fin) {
+  const out = []
+  const y0 = Number(ini.slice(0, 4))
+  const y1 = Number(fin.slice(0, 4))
+  for (let y = y0; y <= y1; y += 1) {
+    out.push(String(y))
+  }
+  return out
+}
+
 function llenarRangoSemanas(ini, fin) {
   const seen = new Set()
   for (const dia of llenarRangoDias(ini, fin)) {
@@ -112,6 +127,7 @@ function ultimoDiaMes(ym) {
 }
 
 function claveAgrupacion(ymd, agrupacion) {
+  if (agrupacion === 'anio') return claveAnio(ymd)
   if (agrupacion === 'mes') return claveMes(ymd)
   if (agrupacion === 'semana') return claveSemana(ymd)
   return ymd
@@ -119,6 +135,7 @@ function claveAgrupacion(ymd, agrupacion) {
 
 function bucketsEnPeriodo(periodo, agrupacion) {
   if (!periodo?.ini || !periodo?.fin) return []
+  if (agrupacion === 'anio') return llenarRangoAnios(periodo.ini, periodo.fin)
   if (agrupacion === 'mes') return llenarRangoMeses(periodo.ini, periodo.fin)
   if (agrupacion === 'semana') return llenarRangoSemanas(periodo.ini, periodo.fin)
   return llenarRangoDias(periodo.ini, periodo.fin)
@@ -187,12 +204,26 @@ export function labelPeriodoEje(label, agrupacion) {
   }
   if (agrupacion === 'semana') {
     const start = ymdToLocalDate(label)
-    const end = new Date(start)
-    end.setDate(end.getDate() + 6)
     const fmt = (d) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
     return `${fmt(start)}`
   }
+  if (agrupacion === 'anio') return label
   return label
+}
+
+/** Años calendario dentro del periodo (detalle mensual por año). */
+export function segmentosAnioEnPeriodo(periodo) {
+  if (!periodo?.ini || !periodo?.fin) return []
+  return llenarRangoAnios(periodo.ini, periodo.fin).map((y) => {
+    const inicioAnio = `${y}-01-01`
+    const finAnio = `${y}-12-31`
+    return {
+      key: y,
+      label: y,
+      ini: inicioAnio < periodo.ini ? periodo.ini : inicioAnio,
+      fin: finAnio > periodo.fin ? periodo.fin : finAnio,
+    }
+  })
 }
 
 /** Meses calendario dentro del periodo (para gráficas diarias por mes). */
@@ -218,12 +249,14 @@ export function reparacionesEnRango(reparaciones, ini, fin) {
 }
 
 export function tituloAgrupacionOrdenes(agrupacion) {
+  if (agrupacion === 'anio') return 'Órdenes por año'
   if (agrupacion === 'mes') return 'Órdenes por mes'
   if (agrupacion === 'semana') return 'Órdenes por semana'
   return 'Órdenes por día'
 }
 
 export function tituloAgrupacionPagos(agrupacion) {
+  if (agrupacion === 'anio') return 'Ingresos por año (pagos)'
   if (agrupacion === 'mes') return 'Ingresos por mes (pagos)'
   if (agrupacion === 'semana') return 'Ingresos por semana (pagos)'
   return 'Ingresos por día (pagos)'
