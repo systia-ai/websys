@@ -1,7 +1,13 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
+import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
+import {
+  crearSetEstatusTodos,
+  labelEstatusAplicados,
+  filtrarPorEstatus,
+} from './reportesFiltros.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -90,7 +96,8 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [pantalla, setPantalla] = useState('fechas')
   const [fechaInicio, setFechaInicio] = useState(ymdInicioMes)
   const [fechaFin, setFechaFin] = useState(ymdHoy)
-  const [estatusFiltro, setEstatusFiltro] = useState('')
+  const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => crearSetEstatusTodos())
+  const [estadisticasDesdeReporte, setEstadisticasDesdeReporte] = useState(false)
   const [periodoAplicado, setPeriodoAplicado] = useState(null)
   const [estatusAplicado, setEstatusAplicado] = useState('')
   const [sinColumnaFecha, setSinColumnaFecha] = useState(false)
@@ -119,8 +126,8 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     void cargarClientes()
   }, [cargarClientes])
 
-  const ejecutarReporte = useCallback(
-    async (ini, fin, estatusSel) => {
+  const cargarDatosPeriodo = useCallback(
+    async (ini, fin, estatusSet) => {
       setLoading(true)
       setSinColumnaFecha(false)
       try {
@@ -133,23 +140,20 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
           todos = readLs(LS_REP, [])
         }
         const { filas: porFecha, sinColumnaFecha: sinF } = aplicarFiltroFechas(todos, ini, fin)
-        let filas = porFecha
-        if (estatusSel.trim()) {
-          const st = estatusSel.trim().toUpperCase()
-          filas = filas.filter((r) => String(r.estatus ?? '').toUpperCase() === st)
-        }
+        const filas = filtrarPorEstatus(porFecha, estatusSet)
         setReparaciones(filas)
         setSinColumnaFecha(sinF)
         setPeriodoAplicado({ ini, fin })
-        setEstatusAplicado(estatusSel.trim())
-        setPantalla('resultados')
+        setEstatusAplicado(labelEstatusAplicados(estatusSet))
         setBusqueda('')
         if (sinF && todos.length > 0) {
           onNotice?.('Las órdenes no tienen fecha reconocible; se muestran todas para el reporte.')
         }
+        return true
       } catch (e) {
-        onError?.(`Error al generar reporte: ${e.message}`)
+        onError?.(`Error al cargar datos: ${e.message}`)
         setReparaciones([])
+        return false
       } finally {
         setLoading(false)
       }
@@ -157,18 +161,55 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     [supabase, onError, onNotice],
   )
 
-  async function onGenerarReporte() {
+  const rangoInvalido = Boolean(fechaInicio && fechaFin && fechaInicio > fechaFin)
+
+  function validarFiltros() {
     const ini = fechaInicio.trim()
     const fin = fechaFin.trim()
     if (!ini || !fin) {
       onError?.('Indique fecha inicio y fecha fin')
-      return
+      return null
     }
     if (ini > fin) {
       onError?.('La fecha inicio no puede ser posterior a la fecha fin')
-      return
+      return null
     }
-    await ejecutarReporte(ini, fin, estatusFiltro)
+    if (estatusSeleccionados.size === 0) {
+      onError?.('Seleccione al menos un estatus')
+      return null
+    }
+    return { ini, fin }
+  }
+
+  async function onGenerarReporte() {
+    const rango = validarFiltros()
+    if (!rango) return
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+    if (ok) {
+      setEstadisticasDesdeReporte(false)
+      setPantalla('resultados')
+    }
+  }
+
+  async function onVerEstadisticas() {
+    const rango = validarFiltros()
+    if (!rango) return
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+    if (ok) {
+      setEstadisticasDesdeReporte(false)
+      setPantalla('estadisticas')
+    }
+  }
+
+  async function onActualizarEstadisticas() {
+    const rango = validarFiltros()
+    if (!rango) return
+    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+  }
+
+  function onVerEstadisticasDelPeriodo() {
+    setEstadisticasDesdeReporte(true)
+    setPantalla('estadisticas')
   }
 
   const resumen = useMemo(() => {
@@ -208,11 +249,49 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
 
   function volverAElegirFechas() {
     setPantalla('fechas')
+    setEstadisticasDesdeReporte(false)
     setReparaciones([])
     setPeriodoAplicado(null)
     setEstatusAplicado('')
     setSinColumnaFecha(false)
     setBusqueda('')
+  }
+
+  if (pantalla === 'estadisticas') {
+    return (
+      <ReportesEstadisticasView
+        reparaciones={reparaciones}
+        resumen={resumen}
+        periodoAplicado={periodoAplicado}
+        estatusAplicado={estatusAplicado}
+        formatearFechaCorta={formatearFechaCorta}
+        soloPeriodo={estadisticasDesdeReporte}
+        loading={loading}
+        onVolver={estadisticasDesdeReporte ? () => setPantalla('resultados') : volverAElegirFechas}
+        filtrosSlot={
+          !estadisticasDesdeReporte ? (
+            <ReportesFiltrosCard
+              fechaInicio={fechaInicio}
+              fechaFin={fechaFin}
+              onFechaInicio={setFechaInicio}
+              onFechaFin={setFechaFin}
+              estatusSeleccionados={estatusSeleccionados}
+              onEstatusSeleccionados={setEstatusSeleccionados}
+              rangoInvalido={rangoInvalido}
+            >
+              <button
+                type="button"
+                className="btn-agregar-equipo btn-consultar-corte-caja"
+                onClick={() => void onActualizarEstadisticas()}
+                disabled={loading || rangoInvalido}
+              >
+                {loading ? 'Actualizando…' : 'ACTUALIZAR GRÁFICAS'}
+              </button>
+            </ReportesFiltrosCard>
+          ) : null
+        }
+      />
+    )
   }
 
   function imprimirReporte() {
@@ -221,7 +300,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
       return
     }
     const periodoTxt = `${formatearFechaCorta(periodoAplicado.ini)} — ${formatearFechaCorta(periodoAplicado.fin)}`
-    const estTxt = estatusAplicado ? escapeHtml(estatusAplicado) : 'Todos'
+    const estTxt = escapeHtml(estatusAplicado || 'Todos')
     const filas = reparaciones
       .map(
         (r) =>
@@ -280,41 +359,34 @@ p{margin:0 0 16px;line-height:1.5}
           <span className="servicios-appbar-placeholder" aria-hidden />
         </header>
         <div className="servicios-body">
-          <section className="corte-caja-fechas-card card-pad reportes-fechas-card">
-            <h2 className="corte-caja-fechas-titulo">Reporte de reparaciones</h2>
-            <p className="muted small corte-caja-fechas-desc">
-              Elija el periodo y, si desea, un estatus para filtrar las órdenes incluidas en el reporte.
-            </p>
-            <div className="corte-caja-fechas-grid form-stack">
-              <label>
-                Fecha inicio
-                <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
-              </label>
-              <label>
-                Fecha fin
-                <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
-              </label>
-              <label>
-                Estatus (opcional)
-                <select value={estatusFiltro} onChange={(e) => setEstatusFiltro(e.target.value)}>
-                  <option value="">Todos</option>
-                  {ESTATUS_ORDEN.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <ReportesFiltrosCard
+            fechaInicio={fechaInicio}
+            fechaFin={fechaFin}
+            onFechaInicio={setFechaInicio}
+            onFechaFin={setFechaFin}
+            estatusSeleccionados={estatusSeleccionados}
+            onEstatusSeleccionados={setEstatusSeleccionados}
+            rangoInvalido={rangoInvalido}
+          >
+            <div className="reportes-inicio-acciones">
+              <button
+                type="button"
+                className="btn-agregar-equipo btn-consultar-corte-caja"
+                onClick={() => void onGenerarReporte()}
+                disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
+              >
+                {loading ? 'Generando…' : 'GENERAR REPORTE'}
+              </button>
+              <button
+                type="button"
+                className="btn-agregar-equipo btn-ver-estadisticas"
+                onClick={() => void onVerEstadisticas()}
+                disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
+              >
+                📈 VER ESTADÍSTICAS
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn-agregar-equipo btn-consultar-corte-caja"
-              onClick={() => void onGenerarReporte()}
-              disabled={loading}
-            >
-              {loading ? 'Generando…' : 'GENERAR REPORTE'}
-            </button>
-          </section>
+          </ReportesFiltrosCard>
         </div>
       </div>
     )
@@ -339,17 +411,8 @@ p{margin:0 0 16px;line-height:1.5}
         {periodoAplicado ? (
           <p className="corte-caja-periodo-banner card-pad">
             <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} — {formatearFechaCorta(periodoAplicado.fin)}
-            {estatusAplicado ? (
-              <>
-                {' '}
-                · <strong>Estatus:</strong> {estatusAplicado}
-              </>
-            ) : (
-              <>
-                {' '}
-                · <strong>Estatus:</strong> Todos
-              </>
-            )}
+            {' '}
+            · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
           </p>
         ) : null}
 
@@ -398,14 +461,24 @@ p{margin:0 0 16px;line-height:1.5}
           </div>
         </section>
 
-        <button
-          type="button"
-          className="btn-agregar-equipo btn-imprimir-corte-caja"
-          onClick={imprimirReporte}
-          disabled={loading || reparaciones.length === 0}
-        >
-          🖨 IMPRIMIR REPORTE
-        </button>
+        <div className="reportes-acciones-row">
+          <button
+            type="button"
+            className="btn-agregar-equipo btn-ver-estadisticas"
+            onClick={onVerEstadisticasDelPeriodo}
+            disabled={loading || reparaciones.length === 0}
+          >
+            📈 Ver estadísticas del periodo
+          </button>
+          <button
+            type="button"
+            className="btn-agregar-equipo btn-imprimir-corte-caja"
+            onClick={imprimirReporte}
+            disabled={loading || reparaciones.length === 0}
+          >
+            🖨 IMPRIMIR REPORTE
+          </button>
+        </div>
 
         <div className="servicios-search card-pad">
           <span className="search-ico" aria-hidden>
