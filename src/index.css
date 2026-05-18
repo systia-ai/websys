@@ -941,6 +941,32 @@ td {
   z-index: 2;
 }
 
+/* Tabla de equipos (Servicios) — mismas celdas que inventario */
+.equipos-tabla-grid {
+  min-width: 880px;
+}
+
+.inventario-celda--tipo-equipo {
+  flex: 0 0 140px;
+  min-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventario-celda--tipo-rep {
+  flex: 0 0 160px;
+  min-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.equipos-tabla-grid .inventario-celda--desc {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
 .inventario-vender-resumen {
   display: flex;
   align-items: center;
