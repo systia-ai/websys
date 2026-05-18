@@ -1,8 +1,32 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de productos (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { sameId } from './clienteUtils.js'
+import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { registrarVentaEnCuenta } from './inventarioStock.js'
+import {
+  EMOJIS_ELEGIR,
+  emojiParaProducto,
+  guardarIconoProducto,
+  readIconosMap,
+  sugerirEmojiPorTexto,
+} from './productoEmoji.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
+const LS_CLIENTES = 'sistefix_local_clientes'
+const LS_CUENTAS = 'sistefix_local_cuentas'
+
+let __movSeq = 1
+function nextLocalMovId() {
+  __movSeq += 1
+  return __movSeq
+}
+
+function nextLocalCuentaId(list) {
+  const max = list.reduce((m, r) => {
+    const id = Number(r.id)
+    return Number.isFinite(id) && id > m ? id : m
+  }, 0)
+  return max + 1
+}
 
 function readLs(key, fallback) {
   try {
@@ -54,6 +78,19 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
 
   const [eliminar, setEliminar] = useState(null)
 
+  const [venderProducto, setVenderProducto] = useState(null)
+  const [clientesVenta, setClientesVenta] = useState([])
+  const [busqClienteVenta, setBusqClienteVenta] = useState('')
+  const [clienteVentaSel, setClienteVentaSel] = useState(null)
+  const [cuentasCliente, setCuentasCliente] = useState([])
+  const [cuentaVentaId, setCuentaVentaId] = useState('')
+  const [cantVenta, setCantVenta] = useState('1')
+  const [precioUnitVenta, setPrecioUnitVenta] = useState('')
+  const [vendiendo, setVendiendo] = useState(false)
+  const [iconosMap, setIconosMap] = useState(() => readIconosMap())
+  const [emojiSel, setEmojiSel] = useState('📦')
+  const [emojiManual, setEmojiManual] = useState(false)
+
   const cargarProductos = useCallback(async () => {
     setLoading(true)
     try {
@@ -68,6 +105,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       onError?.(`Error al cargar inventario: ${e.message}`)
       setProductos([])
     } finally {
+      setIconosMap(readIconosMap())
       setLoading(false)
     }
   }, [supabase, onError])
@@ -94,6 +132,8 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setExistencia('')
     setPrecioCompra('')
     setPrecioVenta('')
+    setEmojiSel('📦')
+    setEmojiManual(false)
     setDialogo(true)
   }
 
@@ -105,7 +145,23 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setExistencia(p.existencia != null && p.existencia !== '' ? String(p.existencia) : '')
     setPrecioCompra(p.precio_compra != null && p.precio_compra !== '' ? String(p.precio_compra) : '')
     setPrecioVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
+    setEmojiSel(emojiParaProducto(p, iconosMap))
+    setEmojiManual(false)
     setDialogo(true)
+  }
+
+  function onDescripcionChange(val) {
+    setDescripcion(val)
+    if (!emojiManual) {
+      setEmojiSel(sugerirEmojiPorTexto(serie, val))
+    }
+  }
+
+  function onSerieChange(val) {
+    setSerie(val)
+    if (!emojiManual) {
+      setEmojiSel(sugerirEmojiPorTexto(val, descripcion))
+    }
   }
 
   async function guardar() {
@@ -126,15 +182,17 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       existencia: toIntOrNull(existencia) ?? 0,
       precio_compra: toNum(precioCompra),
       precio_venta: toNum(precioVenta),
+      icono: emojiSel,
     }
+    const { icono, ...rowDb } = row
     try {
       if (supabase) {
         if (editando?.id != null) {
-          const { error } = await supabase.from('productos').update(row).eq('id', editando.id)
+          const { error } = await supabase.from('productos').update(rowDb).eq('id', editando.id)
           if (error) throw error
           onNotice?.('Producto actualizado')
         } else {
-          const { error } = await supabase.from('productos').insert(row)
+          const { error } = await supabase.from('productos').insert(rowDb)
           if (error) throw error
           onNotice?.('Producto agregado')
         }
@@ -151,8 +209,21 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
         onNotice?.(editando?.id != null ? 'Producto actualizado' : 'Producto agregado')
       }
       setDialogo(false)
+      const idGuardado = editando?.id
       setEditando(null)
       await cargarProductos()
+      if (idGuardado != null) {
+        guardarIconoProducto(idGuardado, icono)
+      } else if (supabase) {
+        const { data: rows } = await supabase.from('productos').select('id').eq('serie', ser).limit(1)
+        const found = rows?.[0]
+        if (found?.id != null) guardarIconoProducto(found.id, icono)
+      } else {
+        const list = readLs(LS_PRODUCTOS, [])
+        const found = list.find((x) => String(x.serie ?? '').toUpperCase() === ser)
+        if (found?.id != null) guardarIconoProducto(found.id, icono)
+      }
+      setIconosMap(readIconosMap())
     } catch (e) {
       const msg = e.message ?? String(e)
       if (msg.includes('duplicate') || msg.includes('23505')) {
@@ -160,6 +231,146 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       } else {
         onError?.(`Error al guardar: ${msg}`)
       }
+    }
+  }
+
+  async function abrirVenderACliente(p) {
+    const stock = Number(p.existencia ?? 0)
+    if (!Number.isFinite(stock) || stock <= 0) {
+      onError?.('Sin existencia en inventario para vender')
+      return
+    }
+    setVenderProducto(p)
+    setBusqClienteVenta('')
+    setClienteVentaSel(null)
+    setCuentasCliente([])
+    setCuentaVentaId('')
+    setCantVenta('1')
+    setPrecioUnitVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('clientes').select('*').order('nombre', { ascending: true })
+        if (error) throw error
+        setClientesVenta((data ?? []).map((r) => normalizeClienteRow(r)))
+      } else {
+        setClientesVenta(readLs(LS_CLIENTES, []).map((r) => normalizeClienteRow(r)))
+      }
+    } catch (e) {
+      onError?.(`Error al cargar clientes: ${e.message}`)
+      setVenderProducto(null)
+    }
+  }
+
+  function cerrarVenderModal() {
+    setVenderProducto(null)
+    setClienteVentaSel(null)
+    setCuentasCliente([])
+    setCuentaVentaId('')
+    setVendiendo(false)
+  }
+
+  const clientesVentaFiltrados = useMemo(() => {
+    const t = busqClienteVenta.trim().toLowerCase()
+    if (!t) return clientesVenta.slice(0, 40)
+    return clientesVenta
+      .filter((c) => {
+        const n = String(c.nombre ?? '').toLowerCase()
+        const tel = String(c.telefono ?? '').toLowerCase()
+        return n.includes(t) || tel.includes(t)
+      })
+      .slice(0, 40)
+  }, [clientesVenta, busqClienteVenta])
+
+  async function elegirClienteVenta(c) {
+    setClienteVentaSel(c)
+    setCuentaVentaId('')
+    try {
+      let list = []
+      if (supabase) {
+        const { data, error } = await supabase.from('cuentas').select('*').eq('cliente_id', c.id).order('id', { ascending: false })
+        if (error) throw error
+        list = data ?? []
+      } else {
+        list = readLs(LS_CUENTAS, []).filter((x) => sameId(x.cliente_id, c.id))
+      }
+      const abiertas = list.filter((cu) => String(cu.estatus ?? '').toUpperCase() !== 'LIQUIDADA')
+      setCuentasCliente(abiertas)
+      if (abiertas.length === 1) {
+        setCuentaVentaId(String(abiertas[0].id))
+      }
+    } catch (e) {
+      onError?.(`Error al cargar cuentas: ${e.message}`)
+      setCuentasCliente([])
+    }
+  }
+
+  async function obtenerOCrearCuentaVenta() {
+    if (cuentaVentaId === 'nueva') {
+      if (!clienteVentaSel?.id) throw new Error('Seleccione un cliente')
+      const row = {
+        cliente_id: clienteVentaSel.id,
+        total: 0,
+        estatus: 'PENDIENTE',
+        tipo_pago: 'EFECTIVO',
+        repara_id: null,
+      }
+      if (supabase) {
+        const { data, error } = await supabase.from('cuentas').insert(row).select('*').single()
+        if (error) throw error
+        return data?.id
+      }
+      const list = readLs(LS_CUENTAS, [])
+      const nuevo = { id: nextLocalCuentaId(list), ...row }
+      writeLs(LS_CUENTAS, [nuevo, ...list])
+      return nuevo.id
+    }
+    if (!cuentaVentaId) throw new Error('Seleccione una cuenta o cree una nueva')
+    return cuentaVentaId
+  }
+
+  async function confirmarVentaACliente() {
+    if (!venderProducto?.id) return
+    if (!clienteVentaSel?.id) {
+      onError?.('Seleccione el cliente')
+      return
+    }
+    const cant = Number(cantVenta)
+    const precio = Number(precioUnitVenta)
+    const stock = Number(venderProducto.existencia ?? 0)
+    if (!Number.isFinite(cant) || cant <= 0) {
+      onError?.('Cantidad inválida')
+      return
+    }
+    if (cant > stock) {
+      onError?.(`Stock insuficiente. Disponible: ${stock}`)
+      return
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      onError?.('Precio de venta inválido')
+      return
+    }
+    setVendiendo(true)
+    try {
+      const cuentaId = await obtenerOCrearCuentaVenta()
+      const desc = String(venderProducto.descripcion ?? venderProducto.serie ?? 'PRODUCTO').toUpperCase()
+      await registrarVentaEnCuenta({
+        supabase,
+        cuentaId,
+        productoId: venderProducto.id,
+        descripcion: desc,
+        cantidad: cant,
+        precio,
+        nextLocalId: nextLocalMovId,
+      })
+      cerrarVenderModal()
+      await cargarProductos()
+      onNotice?.(
+        `Agregado a cuenta de ${clienteVentaSel.nombre || 'cliente'} · inventario: ${Math.max(0, stock - cant)} en stock`,
+      )
+    } catch (e) {
+      onError?.(`Error al vender: ${e.message}`)
+    } finally {
+      setVendiendo(false)
     }
   }
 
@@ -227,9 +438,15 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           </div>
         ) : (
           <ul className="equipo-list inventario-list">
-            {filtrados.map((p) => (
+            {filtrados.map((p) => {
+              const icono = emojiParaProducto(p, iconosMap)
+              return (
               <li key={p.id} className="equipo-card inventario-card">
                 <button type="button" className="equipo-card-main inventario-card-main" onClick={() => abrirEditar(p)}>
+                  <span className="inventario-producto-emoji" aria-hidden="true">
+                    {icono}
+                  </span>
+                  <span className="inventario-card-texto">
                   <strong>{p.serie || 'Sin serie'}</strong>
                   <span className="muted">{p.descripcion || '—'}</span>
                   <span className="muted small">
@@ -238,8 +455,18 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   <span className="muted small">
                     Compra ${Number(p.precio_compra ?? 0).toFixed(2)} · Venta ${Number(p.precio_venta ?? 0).toFixed(2)}
                   </span>
+                  </span>
                 </button>
                 <div className="equipo-card-actions">
+                  <button
+                    type="button"
+                    className="btn-icon venta"
+                    onClick={() => void abrirVenderACliente(p)}
+                    title="Vender a cliente"
+                    aria-label="Vender a cliente"
+                  >
+                    🛒
+                  </button>
                   <button type="button" className="btn-icon edit" onClick={() => abrirEditar(p)} title="Editar" aria-label="Editar">
                     ✏️
                   </button>
@@ -248,7 +475,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   </button>
                 </div>
               </li>
-            ))}
+            )})}
           </ul>
         )}
       </div>
@@ -260,15 +487,40 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
               <h3>{editando ? 'Editar producto' : 'Agregar producto'}</h3>
             </div>
             <div className="modal-body form-stack">
+              <div className="inventario-emoji-field">
+                <span className="inventario-emoji-preview" aria-hidden="true">
+                  {emojiSel}
+                </span>
+                <div className="inventario-emoji-picker" role="group" aria-label="Icono del producto">
+                  {EMOJIS_ELEGIR.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      className={emojiSel === e ? 'inventario-emoji-btn activo' : 'inventario-emoji-btn'}
+                      onClick={() => {
+                        setEmojiSel(e)
+                        setEmojiManual(true)
+                      }}
+                      aria-label={`Icono ${e}`}
+                      aria-pressed={emojiSel === e}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+                <p className="muted small inventario-emoji-hint">
+                  Se sugiere al escribir; puede elegir otro icono.
+                </p>
+              </div>
               <label>
                 Serie
-                <input value={serie} onChange={(e) => setSerie(e.target.value.toUpperCase())} placeholder="Serie del producto" />
+                <input value={serie} onChange={(e) => onSerieChange(e.target.value.toUpperCase())} placeholder="Serie del producto" />
               </label>
               <label>
                 Descripción
                 <input
                   value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value.toUpperCase())}
+                  onChange={(e) => onDescripcionChange(e.target.value.toUpperCase())}
                   placeholder="Descripción"
                 />
               </label>
@@ -296,6 +548,90 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
               <button type="button" onClick={() => void guardar()}>
                 {editando ? 'Actualizar' : 'Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {venderProducto && (
+        <div className="modal-backdrop" role="presentation" onClick={cerrarVenderModal}>
+          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Vender a cliente</h3>
+            </div>
+            <div className="modal-body form-stack">
+              <p className="muted small inventario-vender-resumen">
+                <span className="inventario-producto-emoji inline" aria-hidden="true">
+                  {emojiParaProducto(venderProducto, iconosMap)}
+                </span>
+                <strong>{venderProducto.serie}</strong> — {venderProducto.descripcion || '—'} · Existencia:{' '}
+                {venderProducto.existencia ?? 0}
+              </p>
+              {!clienteVentaSel ? (
+                <>
+                  <label>
+                    Buscar cliente
+                    <input
+                      value={busqClienteVenta}
+                      onChange={(e) => setBusqClienteVenta(e.target.value)}
+                      placeholder="Nombre o teléfono"
+                    />
+                  </label>
+                  <ul className="inventario-clientes-lista">
+                    {clientesVentaFiltrados.length === 0 ? (
+                      <li className="muted">Sin resultados</li>
+                    ) : (
+                      clientesVentaFiltrados.map((c) => (
+                        <li key={c.id}>
+                          <button type="button" className="inventario-cliente-opcion" onClick={() => void elegirClienteVenta(c)}>
+                            {c.nombre || 'Sin nombre'} · {c.telefono || '—'}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Cliente: <strong>{clienteVentaSel.nombre}</strong>{' '}
+                    <button type="button" className="link-btn" onClick={() => setClienteVentaSel(null)}>
+                      Cambiar
+                    </button>
+                  </p>
+                  <label>
+                    Cuenta del cliente
+                    <select value={cuentaVentaId} onChange={(e) => setCuentaVentaId(e.target.value)}>
+                      <option value="">— Seleccione —</option>
+                      {cuentasCliente.map((cu) => (
+                        <option key={cu.id} value={String(cu.id)}>
+                          Cuenta #{cu.id}
+                          {cu.repara_id != null ? ` · Orden ${cu.repara_id}` : ''} · {cu.estatus ?? 'PENDIENTE'}
+                        </option>
+                      ))}
+                      <option value="nueva">+ Nueva cuenta</option>
+                    </select>
+                  </label>
+                  <label>
+                    Cantidad
+                    <input inputMode="numeric" value={cantVenta} onChange={(e) => setCantVenta(e.target.value)} />
+                  </label>
+                  <label>
+                    Precio unitario
+                    <input inputMode="decimal" value={precioUnitVenta} onChange={(e) => setPrecioUnitVenta(e.target.value)} />
+                  </label>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary" onClick={cerrarVenderModal}>
+                Cancelar
+              </button>
+              {clienteVentaSel ? (
+                <button type="button" disabled={vendiendo} onClick={() => void confirmarVentaACliente()}>
+                  {vendiendo ? 'Guardando…' : 'Agregar a cuenta'}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

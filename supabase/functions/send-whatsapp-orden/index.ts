@@ -3,7 +3,7 @@
  *
  * Secretos (Supabase → Edge Functions → Secrets):
  *   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID (obligatorios)
- *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sisteb (nombre exacto en Meta)
+ *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sist (nombre exacto en Meta)
  *   WHATSAPP_TEMPLATE_LANG     default es_MX
  *   WHATSAPP_TEST_TO           opcional: fuerza destino de prueba (solo dígitos)
  *   WHATSAPP_API_VERSION       default v25.0
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
   const cfg = leerConfigWhatsAppBase()
   const templateName =
-    Deno.env.get('WHATSAPP_TEMPLATE_NAME')?.trim() || 'orden_servicio_sisteb'
+    Deno.env.get('WHATSAPP_TEMPLATE_NAME')?.trim() || 'orden_servicio_sist'
 
   if (!validarConfigBase(cfg)) {
     return json(500, {

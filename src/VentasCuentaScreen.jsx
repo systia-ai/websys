@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
+import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -494,24 +496,21 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('Genere o seleccione una cuenta antes de agregar productos')
       return
     }
-    const movRow = {
-      cuenta_id: cuentaId,
-      producto_id: productoIdSel,
-      cantidad: cant,
-      descripcion: descProd.trim(),
-      costo: precio,
+    const stockDisp = Number(existencia)
+    if (Number.isFinite(stockDisp) && cant > stockDisp) {
+      onError?.(`Stock insuficiente. Disponible: ${stockDisp}`)
+      return
     }
     try {
-      let nuevoId
-      if (supabase) {
-        const { data, error } = await supabase.from('cuentamov').insert(movRow).select('*').single()
-        if (error) throw error
-        nuevoId = data?.id
-      } else {
-        nuevoId = nextLocalId()
-        const all = readLs(LS_CUENTAMOV, [])
-        writeLs(LS_CUENTAMOV, [{ id: nuevoId, ...movRow }, ...all])
-      }
+      const { movId: nuevoId } = await registrarVentaEnCuenta({
+        supabase,
+        cuentaId,
+        productoId: productoIdSel,
+        descripcion: descProd.trim(),
+        cantidad: cant,
+        precio,
+        nextLocalId,
+      })
       setLineas((prev) => [
         ...prev,
         {
@@ -532,7 +531,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       setPrecioProd('')
       setProductoIdSel(0)
       setMostrarCamposProducto(false)
-      onNotice?.('Producto agregado')
+      onNotice?.('Producto agregado · inventario actualizado')
     } catch (e) {
       onError?.(`Error al agregar línea: ${e.message}`)
     }
@@ -552,6 +551,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           )
         }
       } else if (L.tipo === 'cuentamov' && L.dbId != null) {
+        const prodId = Number(L.producto_id)
+        const cantLinea = Number(L.cantidad)
         if (supabase) {
           const { error } = await supabase.from('cuentamov').delete().eq('id', L.dbId)
           if (error) throw error
@@ -560,6 +561,9 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
             LS_CUENTAMOV,
             readLs(LS_CUENTAMOV, []).filter((x) => !sameId(x.id, L.dbId)),
           )
+        }
+        if (prodId > 0 && Number.isFinite(cantLinea) && cantLinea > 0) {
+          await reponerExistencia(supabase, prodId, cantLinea)
         }
       } else if (L.tipo === 'pago' && L.dbId != null) {
         if (supabase) {
@@ -937,6 +941,9 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 {productosFiltrados.map((p) => (
                   <li key={p.id}>
                     <button type="button" className="orden-resultado-card" onClick={() => seleccionarProducto(p)}>
+                      <span className="inventario-producto-emoji inline" aria-hidden="true">
+                        {emojiParaProducto(p, readIconosMap())}
+                      </span>
                       <strong>{p.serie}</strong>
                       <span className="muted small">{p.descripcion}</span>
                       <span className="muted small">Existencia: {p.existencia ?? '—'}</span>

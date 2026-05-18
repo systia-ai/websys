@@ -456,6 +456,137 @@ td {
   background: #2e7d32;
 }
 
+.inventario-clientes-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+}
+
+.inventario-cliente-opcion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border, #eee);
+  background: #fff;
+  cursor: pointer;
+}
+
+.inventario-cliente-opcion:hover {
+  background: #f5f8ff;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  color: #1565c0;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0 4px;
+  font: inherit;
+}
+
+.inventario-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.inventario-producto-emoji {
+  flex-shrink: 0;
+  font-size: 2.25rem;
+  line-height: 1;
+  width: 2.5rem;
+  text-align: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+}
+
+.inventario-producto-emoji.inline {
+  display: inline-block;
+  font-size: 1.5rem;
+  width: auto;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.inventario-card-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.inventario-emoji-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f5f8ff;
+  border-radius: 10px;
+  border: 1px solid #e3eaf5;
+}
+
+.inventario-emoji-preview {
+  font-size: 2.5rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.inventario-emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.inventario-emoji-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 1.35rem;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.inventario-emoji-btn:hover {
+  background: #e8f0fe;
+}
+
+.inventario-emoji-btn.activo {
+  border-color: #1565c0;
+  background: #e3f2fd;
+  box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.2);
+}
+
+.inventario-emoji-hint {
+  margin: 0;
+  text-align: center;
+}
+
+.inventario-vender-resumen {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orden-resultado-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
 .inventarios-module-wrap,
 .catalogo-pagos-module-wrap,
 .corte-caja-module-wrap,
@@ -2074,6 +2205,14 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 
 .btn-icon.danger:hover {
   background: #ffcdd2;
+}
+
+.btn-icon.venta {
+  background: #e8f5e9;
+}
+
+.btn-icon.venta:hover {
+  background: #c8e6c9;
 }
 
 .empty-card {

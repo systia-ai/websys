@@ -1217,12 +1217,6 @@ export default function ReparacionesOrden({
           <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>📲 Enviar por WhatsApp</h3>
-              <p className="muted small" style={{ margin: '4px 0 0' }}>
-                Elija qué notificación enviar al cliente ({telClienteUi || 'sin teléfono'}).
-                {supabase
-                  ? ' Cuando Meta apruebe las plantillas, el envío llegará al número configurado en pruebas o al cliente.'
-                  : ' Se abrirá WhatsApp con el mensaje listo para enviar manualmente.'}
-              </p>
             </div>
             <div className="modal-body wa-menu-body">
               <button
