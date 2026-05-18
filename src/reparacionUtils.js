@@ -16,22 +16,48 @@ export function esOrdenDuplicada(rep) {
 const LS_INSERT_LOCK = 'sistefix_rep_insert_lock'
 const LS_LAST_CREATED = 'sistefix_rep_last_created'
 
-/** Bloqueo global en sessionStorage (sobrevive remontajes de React / doble clic). */
-export function adquirirBloqueoInsercionOrden(maxEdadMs = 120_000) {
+/** Promesa de inserción en curso (una sola a la vez en toda la app). */
+let promesaInsercionOrden = null
+
+/**
+ * Ejecuta el guardado de una orden nueva de forma exclusiva.
+ * Si el usuario hace doble clic (o React remonta), reutiliza la misma promesa.
+ */
+export function ejecutarInsercionOrdenUnica(ejecutar) {
+  if (promesaInsercionOrden) {
+    return promesaInsercionOrden
+  }
+  promesaInsercionOrden = Promise.resolve()
+    .then(() => ejecutar())
+    .finally(() => {
+      promesaInsercionOrden = null
+    })
+  return promesaInsercionOrden
+}
+
+export function hayInsercionOrdenEnCurso() {
+  return promesaInsercionOrden != null
+}
+
+/** Bloqueo entre pestañas solo mientras dura el guardado (no minutos después). */
+export function iniciarBloqueoInsercionPestana() {
   try {
     const raw = sessionStorage.getItem(LS_INSERT_LOCK)
     if (raw) {
-      const { ts } = JSON.parse(raw)
-      if (Date.now() - Number(ts) < maxEdadMs) return false
+      const { inProgress, ts } = JSON.parse(raw)
+      if (inProgress && Date.now() - Number(ts) < 90_000) return false
     }
-    sessionStorage.setItem(LS_INSERT_LOCK, JSON.stringify({ ts: Date.now() }))
+    sessionStorage.setItem(
+      LS_INSERT_LOCK,
+      JSON.stringify({ inProgress: true, ts: Date.now() }),
+    )
     return true
   } catch {
     return true
   }
 }
 
-export function liberarBloqueoInsercionOrden() {
+export function finalizarBloqueoInsercionPestana() {
   try {
     sessionStorage.removeItem(LS_INSERT_LOCK)
   } catch {

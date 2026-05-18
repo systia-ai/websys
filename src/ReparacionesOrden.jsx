@@ -14,10 +14,11 @@ import {
   normalizarTelefonoWa,
 } from './whatsappUtils.js'
 import {
-  adquirirBloqueoInsercionOrden,
   esOrdenDuplicada,
+  ejecutarInsercionOrdenUnica,
+  finalizarBloqueoInsercionPestana,
+  iniciarBloqueoInsercionPestana,
   leerOrdenRecienCreadaEnSesion,
-  liberarBloqueoInsercionOrden,
   registrarOrdenCreadaEnSesion,
 } from './reparacionUtils.js'
 
@@ -377,32 +378,39 @@ export default function ReparacionesOrden({
 
   /**
    * Registra una orden nueva. Devuelve true solo si reparación + cuenta quedaron creadas.
-   * Evita doble inserción (doble clic) y revierte la reparación si falla la cuenta en Supabase.
+   * Una sola inserción a la vez (mutex global + bloqueo entre pestañas).
    */
-  async function insertarReparacion() {
+  function insertarReparacion() {
+    if (ordenRegistradaRef.current || ordenRegistrada) return Promise.resolve(false)
+    return ejecutarInsercionOrdenUnica(() => insertarReparacionCore())
+  }
+
+  async function insertarReparacionCore() {
     if (guardandoRef.current || ordenRegistradaRef.current || ordenRegistrada) return false
-    if (!adquirirBloqueoInsercionOrden()) {
-      const reciente = leerOrdenRecienCreadaEnSesion()
-      if (reciente) {
-        ordenRegistradaRef.current = true
-        await cargarReparacion(reciente)
-        setMsgExito(`La orden #${reciente} ya fue registrada en esta sesión.`)
-        setDialogExito(true)
-        return true
-      }
-      onNotice?.('La orden ya se está guardando. Espere un momento.')
+
+    const recienteSesion = leerOrdenRecienCreadaEnSesion()
+    if (recienteSesion) {
+      ordenRegistradaRef.current = true
+      await cargarReparacion(recienteSesion)
+      setOrdenRegistrada(true)
+      setMsgExito(`La orden #${recienteSesion} ya fue registrada.`)
+      setDialogExito(true)
+      return true
+    }
+
+    if (!iniciarBloqueoInsercionPestana()) {
+      onNotice?.('Ya se está registrando una orden en otra ventana. Espere un momento.')
       return false
     }
+
     guardandoRef.current = true
-    ordenRegistradaRef.current = true
     setGuardandoOrden(true)
-    let insertOk = false
     let newId
+    let existenteId = null
     try {
       const cid = await resolverClienteId()
       const eid = await resolverEquipoId()
       if (cid == null) {
-        ordenRegistradaRef.current = false
         setMsgExito(
           `No se encontró el cliente con nombre "${(s.clienteNombre ?? clienteDesdeBd?.nombre ?? '').trim() || '(vacío)'}" y teléfono "${(s.clienteTelefono ?? clienteDesdeBd?.telefono ?? '').trim() || '(vacío)'}".`,
         )
@@ -410,7 +418,6 @@ export default function ReparacionesOrden({
         return false
       }
       if (eid == null) {
-        ordenRegistradaRef.current = false
         setMsgExito(`No se encontró el equipo con serie "${serieEquipo}".`)
         setDialogExito(true)
         return false
@@ -434,12 +441,7 @@ export default function ReparacionesOrden({
         es_orden_duplicada: false,
       }
 
-      const existenteId = await buscarOrdenRecienteMismaSesion(
-        cid,
-        eid,
-        problemasReportados,
-        tipoReparacion,
-      )
+      existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
       if (existenteId) {
         newId = existenteId
       } else if (supabase) {
@@ -482,13 +484,13 @@ export default function ReparacionesOrden({
         }
       }
 
+      ordenRegistradaRef.current = true
       setIdReparacion(newId)
       setNumeroOrden(String(newId))
       setOrdenRegistrada(true)
       setClienteIdNum(cid)
       setFechaCreacionOrden(now)
       registrarOrdenCreadaEnSesion(newId)
-      insertOk = true
       const msgDuplicadoEvitado = existenteId
         ? `Ya existía la orden #${newId} con los mismos datos (se evitó un duplicado).`
         : `Se registró la orden de servicio con ID: ${newId}.`
@@ -497,14 +499,13 @@ export default function ReparacionesOrden({
       onNotice(existenteId ? 'Orden existente recuperada' : 'Orden registrada')
       return true
     } catch (e) {
-      ordenRegistradaRef.current = false
       setMsgExito(`Error: ${e.message}`)
       setDialogExito(true)
       return false
     } finally {
       guardandoRef.current = false
       setGuardandoOrden(false)
-      if (!insertOk) liberarBloqueoInsercionOrden()
+      finalizarBloqueoInsercionPestana()
     }
   }
 
@@ -1236,7 +1237,10 @@ export default function ReparacionesOrden({
             type="button"
             className="btn-primary wide"
             disabled={ordenRegistrada || guardandoOrden}
-            onClick={() => setConfirmGuardarAbierto(true)}
+            onClick={() => {
+              if (guardandoOrden || ordenRegistrada) return
+              setConfirmGuardarAbierto(true)
+            }}
           >
             {ordenRegistrada ? 'Orden Registrada' : 'Registrar Orden'}
           </button>
@@ -1477,11 +1481,11 @@ export default function ReparacionesOrden({
                 type="button"
                 className="btn-confirm-guardar"
                 disabled={guardandoOrden}
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.preventDefault()
                   if (guardandoRef.current || ordenRegistradaRef.current || ordenRegistrada) return
-                  setConfirmGuardarAbierto(false)
                   const ok = await insertarReparacion()
-                  if (!ok) setConfirmGuardarAbierto(true)
+                  if (ok) setConfirmGuardarAbierto(false)
                 }}
               >
                 {guardandoOrden ? 'Guardando…' : '✅ Confirmar y guardar'}
