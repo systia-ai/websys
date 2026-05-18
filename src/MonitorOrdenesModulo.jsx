@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { estatusEsEntregado } from './reparacionUtils.js'
+import { esOrdenDuplicada, estatusEsEntregado } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -133,6 +133,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
   const [gestionTecnicosAbierto, setGestionTecnicosAbierto] = useState(false)
   const [nuevoTecnico, setNuevoTecnico] = useState('')
+
+  const [modoSeleccion, setModoSeleccion] = useState(false)
+  const [idsSeleccionados, setIdsSeleccionados] = useState(() => new Set())
+  const [marcandoDuplicadas, setMarcandoDuplicadas] = useState(false)
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -288,6 +292,60 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     const nueva = eliminarTecnico(nombre)
     setTecnicosCatalogo(nueva)
     if (tecnicoFiltro === nombre) setTecnicoFiltro(TECNICO_TODAS)
+  }
+
+  function toggleSeleccionOrden(id) {
+    if (id == null) return
+    setIdsSeleccionados((prev) => {
+      const next = new Set(prev)
+      const key = String(id)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function salirModoSeleccion() {
+    setModoSeleccion(false)
+    setIdsSeleccionados(new Set())
+  }
+
+  async function marcarSeleccionComoDuplicadas(esDuplicada) {
+    const ids = [...idsSeleccionados].map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+    if (ids.length === 0) {
+      onError?.('Seleccione al menos una orden.')
+      return
+    }
+    const accion = esDuplicada ? 'marcar como duplicada' : 'quitar marca de duplicada'
+    if (!window.confirm(`¿${accion} ${ids.length} orden(es)?\n\nNúmeros: ${ids.join(', ')}`)) return
+
+    setMarcandoDuplicadas(true)
+    try {
+      if (supabase) {
+        const { error } = await supabase
+          .from('reparaciones')
+          .update({ es_orden_duplicada: esDuplicada })
+          .in('id', ids)
+        if (error) throw error
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (ids.includes(Number(r.id)) ? { ...r, es_orden_duplicada: esDuplicada } : r)),
+        )
+      }
+      onNotice?.(
+        esDuplicada
+          ? `${ids.length} orden(es) marcada(s) como duplicada(s).`
+          : `Se quitó la marca de duplicada en ${ids.length} orden(es).`,
+      )
+      salirModoSeleccion()
+      await cargarTodo()
+    } catch (e) {
+      onError?.(`Error al actualizar órdenes: ${e.message}`)
+    } finally {
+      setMarcandoDuplicadas(false)
+    }
   }
 
   function handleEditarOrden(rep) {
@@ -459,17 +517,56 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
           <p className="muted center">Cargando…</p>
         ) : (
           <>
-            <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
-              <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
-              <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
-              <span className="monitor-ordenes-conteo-texto">
-                {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales
-              </span>
-            </p>
+            <div className="monitor-ordenes-barra-acciones">
+              <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
+                <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
+                <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
+                <span className="monitor-ordenes-conteo-texto">
+                  {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales
+                  {modoSeleccion && idsSeleccionados.size > 0
+                    ? ` · ${idsSeleccionados.size} seleccionada(s)`
+                    : ''}
+                </span>
+              </p>
+              <div className="monitor-ordenes-duplicadas-acciones">
+                {!modoSeleccion ? (
+                  <button
+                    type="button"
+                    className="btn-agregar-equipo btn-monitor-seleccion"
+                    onClick={() => setModoSeleccion(true)}
+                  >
+                    ☑️ Seleccionar órdenes
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-agregar-equipo btn-monitor-duplicada"
+                      disabled={idsSeleccionados.size === 0 || marcandoDuplicadas}
+                      onClick={() => void marcarSeleccionComoDuplicadas(true)}
+                    >
+                      {marcandoDuplicadas ? 'Guardando…' : '⚠️ Marcar como orden duplicada'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary btn-monitor-quitar-duplicada"
+                      disabled={idsSeleccionados.size === 0 || marcandoDuplicadas}
+                      onClick={() => void marcarSeleccionComoDuplicadas(false)}
+                    >
+                      Quitar marca duplicada
+                    </button>
+                    <button type="button" className="secondary" onClick={salirModoSeleccion} disabled={marcandoDuplicadas}>
+                      Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
             <div className="monitor-ordenes-tabla-wrap table-wrap">
               <table className="monitor-ordenes-tabla">
                 <thead>
                   <tr>
+                    {modoSeleccion ? <th className="monitor-ordenes-col-sel" aria-label="Seleccionar" /> : null}
                     <th>Fecha de ingreso</th>
                     <th>Días en taller</th>
                     <th>No. orden</th>
@@ -484,7 +581,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <tbody>
                   {filasOrdenadas.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="monitor-ordenes-vacio">
+                      <td colSpan={modoSeleccion ? 10 : 9} className="monitor-ordenes-vacio">
                         No hay órdenes con los filtros seleccionados.
                       </td>
                     </tr>
@@ -493,8 +590,24 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       const { tipo, desc } = datosEquipo(rep)
                       const tech = String(rep.tecnico ?? '').trim()
                       const ent = estatusEsEntregado(rep?.estatus)
+                      const dup = esOrdenDuplicada(rep)
+                      const selKey = String(rep.id)
+                      const checked = idsSeleccionados.has(selKey)
                       return (
-                        <tr key={rep.id}>
+                        <tr
+                          key={rep.id}
+                          className={dup ? 'monitor-ordenes-fila--duplicada' : ''}
+                        >
+                          {modoSeleccion ? (
+                            <td className="monitor-ordenes-col-sel">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleSeleccionOrden(rep.id)}
+                                aria-label={`Seleccionar orden ${rep.id}`}
+                              />
+                            </td>
+                          ) : null}
                           <td>{formatearFechaMostrar(ymd)}</td>
                           <td
                             className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}
@@ -516,22 +629,33 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                               String(dias)
                             )}
                           </td>
-                          <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
+                          <td className="monitor-ordenes-num">
+                            {rep.id ?? '—'}
+                            {dup ? (
+                              <span className="monitor-ordenes-badge-duplicada" title="Orden duplicada">
+                                DUPLICADA
+                              </span>
+                            ) : null}
+                          </td>
                           <td>{nombreCliente(rep.cliente_id)}</td>
                           <td>{tipo}</td>
                           <td className="monitor-ordenes-col-texto">{desc}</td>
                           <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
                           <td>{tech || '—'}</td>
                           <td className="monitor-ordenes-acciones">
-                            <button
-                              type="button"
-                              className="btn-accion-editar"
-                              onClick={() => handleEditarOrden(rep)}
-                              title="Editar orden"
-                              aria-label={`Editar orden ${rep.id}`}
-                            >
-                              ✏️
-                            </button>
+                            {!modoSeleccion ? (
+                              <button
+                                type="button"
+                                className="btn-accion-editar"
+                                onClick={() => handleEditarOrden(rep)}
+                                title="Editar orden"
+                                aria-label={`Editar orden ${rep.id}`}
+                              >
+                                ✏️
+                              </button>
+                            ) : (
+                              <span className="muted small">—</span>
+                            )}
                           </td>
                         </tr>
                       )

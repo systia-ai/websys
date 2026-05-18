@@ -13,6 +13,13 @@ import {
   formatMontoAnticipoWa,
   normalizarTelefonoWa,
 } from './whatsappUtils.js'
+import {
+  adquirirBloqueoInsercionOrden,
+  esOrdenDuplicada,
+  leerOrdenRecienCreadaEnSesion,
+  liberarBloqueoInsercionOrden,
+  registrarOrdenCreadaEnSesion,
+} from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -180,10 +187,14 @@ export default function ReparacionesOrden({
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
 
-  const cargarReparacion = useCallback(async () => {
-    if (!repIdStrEsOrdenExistente(repIdStr)) return
-    const id = Number(repIdStr)
-    if (!Number.isFinite(id)) return
+  const cargarReparacion = useCallback(async (idOverride) => {
+    const id =
+      idOverride != null && Number.isFinite(Number(idOverride))
+        ? Number(idOverride)
+        : repIdStrEsOrdenExistente(repIdStr)
+          ? Number(repIdStr)
+          : null
+    if (id == null || !Number.isFinite(id)) return
     try {
       if (supabase) {
         const { data, error } = await supabase.from('reparaciones').select('*').eq('id', id).maybeSingle()
@@ -266,8 +277,51 @@ export default function ReparacionesOrden({
   }, [repIdStr, supabase, onError])
 
   useEffect(() => {
-    cargarReparacion()
-  }, [cargarReparacion])
+    if (repIdStrEsOrdenExistente(repIdStr)) {
+      void cargarReparacion()
+      return
+    }
+    const reciente = leerOrdenRecienCreadaEnSesion()
+    if (reciente) {
+      ordenRegistradaRef.current = true
+      void cargarReparacion(reciente)
+    }
+  }, [cargarReparacion, repIdStr])
+
+  async function buscarOrdenRecienteMismaSesion(cid, eid, problemas, tipoRep) {
+    const prob = String(problemas ?? '').trim()
+    const tipo = String(tipoRep ?? '').trim()
+    const since = new Date(Date.now() - 120_000).toISOString()
+    const coincide = (r) =>
+      !esOrdenDuplicada(r) &&
+      String(r.problemas_reportados ?? '').trim() === prob &&
+      String(r.tipo_reparacion ?? '').trim() === tipo
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('reparaciones')
+        .select('id, problemas_reportados, tipo_reparacion, es_orden_duplicada')
+        .eq('cliente_id', cid)
+        .eq('equipo_id', eid)
+        .gte('fecha_creacion', since)
+        .order('id', { ascending: false })
+        .limit(8)
+      if (error) throw error
+      const hit = (data ?? []).find(coincide)
+      return hit?.id ?? null
+    }
+    const all = readLs(LS_REP, [])
+    const hit = all
+      .filter(
+        (r) =>
+          Number(r.cliente_id) === Number(cid) &&
+          Number(r.equipo_id) === Number(eid) &&
+          String(r.fecha_creacion ?? r.created_at ?? '') >= since,
+      )
+      .sort((a, b) => Number(b.id) - Number(a.id))
+      .find(coincide)
+    return hit?.id ?? null
+  }
 
   async function resolverClienteId() {
     if (clienteIdNum != null) return clienteIdNum
@@ -326,14 +380,29 @@ export default function ReparacionesOrden({
    * Evita doble inserción (doble clic) y revierte la reparación si falla la cuenta en Supabase.
    */
   async function insertarReparacion() {
-    if (guardandoRef.current || ordenRegistradaRef.current) return false
-    if (ordenRegistrada) return false
+    if (guardandoRef.current || ordenRegistradaRef.current || ordenRegistrada) return false
+    if (!adquirirBloqueoInsercionOrden()) {
+      const reciente = leerOrdenRecienCreadaEnSesion()
+      if (reciente) {
+        ordenRegistradaRef.current = true
+        await cargarReparacion(reciente)
+        setMsgExito(`La orden #${reciente} ya fue registrada en esta sesión.`)
+        setDialogExito(true)
+        return true
+      }
+      onNotice?.('La orden ya se está guardando. Espere un momento.')
+      return false
+    }
     guardandoRef.current = true
+    ordenRegistradaRef.current = true
     setGuardandoOrden(true)
+    let insertOk = false
+    let newId
     try {
       const cid = await resolverClienteId()
       const eid = await resolverEquipoId()
       if (cid == null) {
+        ordenRegistradaRef.current = false
         setMsgExito(
           `No se encontró el cliente con nombre "${(s.clienteNombre ?? clienteDesdeBd?.nombre ?? '').trim() || '(vacío)'}" y teléfono "${(s.clienteTelefono ?? clienteDesdeBd?.telefono ?? '').trim() || '(vacío)'}".`,
         )
@@ -341,6 +410,7 @@ export default function ReparacionesOrden({
         return false
       }
       if (eid == null) {
+        ordenRegistradaRef.current = false
         setMsgExito(`No se encontró el equipo con serie "${serieEquipo}".`)
         setDialogExito(true)
         return false
@@ -361,9 +431,18 @@ export default function ReparacionesOrden({
         fecha_creacion: now,
         updated_at: now,
         tipo_reparacion: tipoReparacion || null,
+        es_orden_duplicada: false,
       }
-      let newId
-      if (supabase) {
+
+      const existenteId = await buscarOrdenRecienteMismaSesion(
+        cid,
+        eid,
+        problemasReportados,
+        tipoReparacion,
+      )
+      if (existenteId) {
+        newId = existenteId
+      } else if (supabase) {
         const { data: ins, error } = await supabase.from('reparaciones').insert(row).select('id').single()
         if (error) throw error
         newId = ins?.id
@@ -373,8 +452,6 @@ export default function ReparacionesOrden({
         writeLs(LS_REP, [{ id: newId, ...row }, ...all])
       }
       if (!newId) throw new Error('No se obtuvo ID de reparación')
-
-      ordenRegistradaRef.current = true
 
       const cuenta = {
         cliente_id: cid,
@@ -410,17 +487,24 @@ export default function ReparacionesOrden({
       setOrdenRegistrada(true)
       setClienteIdNum(cid)
       setFechaCreacionOrden(now)
-      setMsgExito(`Se registró la orden de servicio con ID: ${newId}.`)
+      registrarOrdenCreadaEnSesion(newId)
+      insertOk = true
+      const msgDuplicadoEvitado = existenteId
+        ? `Ya existía la orden #${newId} con los mismos datos (se evitó un duplicado).`
+        : `Se registró la orden de servicio con ID: ${newId}.`
+      setMsgExito(msgDuplicadoEvitado)
       setDialogExito(true)
-      onNotice('Orden registrada')
+      onNotice(existenteId ? 'Orden existente recuperada' : 'Orden registrada')
       return true
     } catch (e) {
+      ordenRegistradaRef.current = false
       setMsgExito(`Error: ${e.message}`)
       setDialogExito(true)
       return false
     } finally {
       guardandoRef.current = false
       setGuardandoOrden(false)
+      if (!insertOk) liberarBloqueoInsercionOrden()
     }
   }
 
@@ -1394,9 +1478,10 @@ export default function ReparacionesOrden({
                 className="btn-confirm-guardar"
                 disabled={guardandoOrden}
                 onClick={async () => {
-                  if (guardandoRef.current || ordenRegistradaRef.current) return
+                  if (guardandoRef.current || ordenRegistradaRef.current || ordenRegistrada) return
+                  setConfirmGuardarAbierto(false)
                   const ok = await insertarReparacion()
-                  if (ok) setConfirmGuardarAbierto(false)
+                  if (!ok) setConfirmGuardarAbierto(true)
                 }}
               >
                 {guardandoOrden ? 'Guardando…' : '✅ Confirmar y guardar'}

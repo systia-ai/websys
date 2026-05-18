@@ -1,4 +1,5 @@
 import { ESTATUS_ORDEN } from './catalogos.js'
+import { esOrdenDuplicada } from './reparacionUtils.js'
 
 export function estatusParaFiltroReporte(rep) {
   const st = String(rep?.estatus ?? '').trim().toUpperCase()
@@ -20,4 +21,13 @@ export function filtrarPorEstatus(rows, estatusSet) {
   if (!estatusSet || estatusSet.size === 0) return []
   if (estatusSet.size >= ESTATUS_ORDEN.length) return rows
   return rows.filter((r) => estatusSet.has(estatusParaFiltroReporte(r)))
+}
+
+/** Quita órdenes marcadas como duplicadas (no deben contar en reportes ni estadísticas). */
+export function excluirOrdenesDuplicadas(rows) {
+  return rows.filter((r) => !esOrdenDuplicada(r))
+}
+
+export function contarOrdenesDuplicadas(rows) {
+  return rows.filter((r) => esOrdenDuplicada(r)).length
 }

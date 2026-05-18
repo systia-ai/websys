@@ -5,6 +5,8 @@ import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
 import {
   crearSetEstatusTodos,
+  contarOrdenesDuplicadas,
+  excluirOrdenesDuplicadas,
   labelEstatusAplicados,
   filtrarPorEstatus,
 } from './reportesFiltros.js'
@@ -101,6 +103,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [periodoAplicado, setPeriodoAplicado] = useState(null)
   const [estatusAplicado, setEstatusAplicado] = useState('')
   const [sinColumnaFecha, setSinColumnaFecha] = useState(false)
+  const [duplicadasExcluidas, setDuplicadasExcluidas] = useState(0)
 
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
@@ -140,12 +143,22 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
           todos = readLs(LS_REP, [])
         }
         const { filas: porFecha, sinColumnaFecha: sinF } = aplicarFiltroFechas(todos, ini, fin)
-        const filas = filtrarPorEstatus(porFecha, estatusSet)
+        const porEstatus = filtrarPorEstatus(porFecha, estatusSet)
+        const nDup = contarOrdenesDuplicadas(porEstatus)
+        const filas = excluirOrdenesDuplicadas(porEstatus)
         setReparaciones(filas)
+        setDuplicadasExcluidas(nDup)
         setSinColumnaFecha(sinF)
         setPeriodoAplicado({ ini, fin })
         setEstatusAplicado(labelEstatusAplicados(estatusSet))
         setBusqueda('')
+        if (nDup > 0) {
+          onNotice?.(
+            nDup === 1
+              ? 'Se excluyó 1 orden marcada como duplicada del reporte y las estadísticas.'
+              : `Se excluyeron ${nDup} órdenes marcadas como duplicadas del reporte y las estadísticas.`,
+          )
+        }
         if (sinF && todos.length > 0) {
           onNotice?.('Las órdenes no tienen fecha reconocible; se muestran todas para el reporte.')
         }
@@ -254,6 +267,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     setPeriodoAplicado(null)
     setEstatusAplicado('')
     setSinColumnaFecha(false)
+    setDuplicadasExcluidas(0)
     setBusqueda('')
   }
 
@@ -266,6 +280,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         estatusAplicado={estatusAplicado}
         formatearFechaCorta={formatearFechaCorta}
         soloPeriodo={estadisticasDesdeReporte}
+        duplicadasExcluidas={duplicadasExcluidas}
         loading={loading}
         onVolver={estadisticasDesdeReporte ? () => setPantalla('resultados') : volverAElegirFechas}
         filtrosSlot={
@@ -419,6 +434,14 @@ p{margin:0 0 16px;line-height:1.5}
         {sinColumnaFecha ? (
           <p className="warning card-pad corte-caja-warning-inset">
             Las órdenes no incluyen fecha reconocible en los datos; se listaron todas para calcular el reporte.
+          </p>
+        ) : null}
+
+        {duplicadasExcluidas > 0 ? (
+          <p className="reportes-aviso-duplicadas card-pad" role="status">
+            Se excluyeron <strong>{duplicadasExcluidas}</strong>{' '}
+            {duplicadasExcluidas === 1 ? 'orden marcada como duplicada' : 'órdenes marcadas como duplicadas'}{' '}
+            del reporte y las estadísticas.
           </p>
         ) : null}
 

@@ -179,6 +179,7 @@ export default function ReportesEstadisticasView({
   estatusAplicado,
   formatearFechaCorta,
   soloPeriodo = false,
+  duplicadasExcluidas = 0,
   loading = false,
   filtrosSlot = null,
   onVolver,
@@ -226,6 +227,13 @@ export default function ReportesEstadisticasView({
           {' '}
           · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
         </p>
+
+        {duplicadasExcluidas > 0 ? (
+          <p className="reportes-aviso-duplicadas card-pad" role="status">
+            Las gráficas no incluyen <strong>{duplicadasExcluidas}</strong>{' '}
+            {duplicadasExcluidas === 1 ? 'orden duplicada' : 'órdenes duplicadas'} del periodo.
+          </p>
+        ) : null}
 
         {loading ? <p className="muted center card-pad">Actualizando gráficas…</p> : null}
 

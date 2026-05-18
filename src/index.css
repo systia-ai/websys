@@ -868,6 +868,17 @@ td {
   width: 100%;
 }
 
+.reportes-aviso-duplicadas {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #bf360c;
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+}
+
 .reportes-filtros-card {
   margin-bottom: 0;
 }
@@ -1362,6 +1373,63 @@ td {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.monitor-ordenes-barra-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.monitor-ordenes-barra-acciones .monitor-ordenes-conteo {
+  margin: 0;
+}
+
+.monitor-ordenes-duplicadas-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-monitor-seleccion {
+  background: linear-gradient(135deg, #546e7a 0%, #37474f 100%);
+}
+
+.btn-monitor-duplicada {
+  background: linear-gradient(135deg, #e65100 0%, #bf360c 100%);
+}
+
+.monitor-ordenes-col-sel {
+  width: 40px;
+  text-align: center;
+}
+
+.monitor-ordenes-col-sel input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.monitor-ordenes-fila--duplicada {
+  background: #fff3e0;
+}
+
+.monitor-ordenes-fila--duplicada td {
+  opacity: 0.92;
+}
+
+.monitor-ordenes-badge-duplicada {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #bf360c;
+  background: #ffe0b2;
+  vertical-align: middle;
 }
 
 .monitor-ordenes-label-inline {
