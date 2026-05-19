@@ -2,12 +2,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { estatusEsEntregado } from './reparacionUtils.js'
+import {
+  aYmdLocalDesdeRaw,
+  estatusEsEntregado,
+  fechaEntregaYmd,
+  fechaIngresoYmd,
+  repEnRangoFechasMonitor,
+} from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
+const LS_CUENTAS = 'sistefix_local_cuentas'
+const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function readLs(key, fallback) {
   try {
@@ -15,33 +23,6 @@ function readLs(key, fallback) {
   } catch {
     return fallback
   }
-}
-
-/** Convierte timestamp o fecha a YYYY-MM-DD en calendario local (coherente con `<input type="date">`). */
-function aYmdLocalDesdeRaw(raw) {
-  if (raw == null || raw === '') return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-/** Fecha de ingreso al taller (Supabase guarda `fecha_creacion` al registrar la orden). */
-function fechaIngresoYmd(rep) {
-  const raw =
-    rep.fecha_ingreso ??
-    rep.fechaIngreso ??
-    rep.fecha_registro ??
-    rep.fecha_creacion ??
-    rep.created_at ??
-    rep.fecha ??
-    rep.updated_at
-  return aYmdLocalDesdeRaw(raw)
 }
 
 function fechaIngresoTime(rep) {
@@ -114,6 +95,8 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])
+  const [cuentas, setCuentas] = useState([])
+  const [pagos, setPagos] = useState([])
   const [loading, setLoading] = useState(true)
 
   /** Estatus incluidos en el listado (por defecto solo INGRESADO). */
@@ -122,9 +105,9 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
-  /** '' = sin límite; yyyy-mm-dd = fecha de ingreso >= este día (incluye el día) */
+  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega >= este día */
   const [fechaDesde, setFechaDesde] = useState('')
-  /** '' = sin límite; yyyy-mm-dd = fecha de ingreso <= este día (incluye el día) */
+  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega <= este día */
   const [fechaHasta, setFechaHasta] = useState('')
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
@@ -138,10 +121,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     setLoading(true)
     try {
       if (supabase) {
-        const [r1, r2, r3] = await Promise.all([
+        const [r1, r2, r3, r4, r5] = await Promise.all([
           supabase.from('reparaciones').select('*'),
           supabase.from('clientes').select('*'),
           supabase.from('equipos').select('*'),
+          supabase.from('cuentas').select('*'),
+          supabase.from('pagosclientes').select('*'),
         ])
         if (r1.error) throw r1.error
         if (r2.error) throw r2.error
@@ -149,16 +134,32 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         setReparaciones(r1.data ?? [])
         setClientes((r2.data ?? []).map((x) => normalizeClienteRow(x)))
         setEquipos(r3.data ?? [])
+        if (r4.error) {
+          console.warn('Monitor: no se cargaron cuentas para fechas de entrega:', r4.error.message)
+          setCuentas([])
+        } else {
+          setCuentas(r4.data ?? [])
+        }
+        if (r5.error) {
+          console.warn('Monitor: no se cargaron pagos para fechas de entrega:', r5.error.message)
+          setPagos([])
+        } else {
+          setPagos(r5.data ?? [])
+        }
       } else {
         setReparaciones(readLs(LS_REP, []))
         setClientes(readLs(LS_CLIENTES, []).map((x) => normalizeClienteRow(x)))
         setEquipos(readLs(LS_EQUIPOS, []))
+        setCuentas(readLs(LS_CUENTAS, []))
+        setPagos(readLs(LS_PAGOS, []))
       }
     } catch (e) {
       onError?.(`Error al cargar monitor: ${e.message}`)
       setReparaciones([])
       setClientes([])
       setEquipos([])
+      setCuentas([])
+      setPagos([])
     } finally {
       setLoading(false)
     }
@@ -175,6 +176,42 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     }
     return m
   }, [equipos])
+
+  const entregaDesdePagosPorRepara = useMemo(() => {
+    const reparaPorCuenta = new Map()
+    for (const c of cuentas) {
+      const rid = c?.repara_id ?? c?.reparacion_id
+      if (rid != null && c?.id != null) reparaPorCuenta.set(String(c.id), String(rid))
+    }
+    const m = new Map()
+    for (const p of pagos) {
+      const rid = reparaPorCuenta.get(String(p?.cuenta_id))
+      if (!rid) continue
+      const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+      if (!y) continue
+      const prev = m.get(rid)
+      if (!prev || y > prev) m.set(rid, y)
+    }
+    return m
+  }, [cuentas, pagos])
+
+  const cuentaPorReparaId = useMemo(() => {
+    const m = new Map()
+    for (const c of cuentas) {
+      const rid = c?.repara_id ?? c?.reparacion_id
+      if (rid == null) continue
+      const key = String(rid)
+      const prev = m.get(key)
+      if (!prev) {
+        m.set(key, c)
+        continue
+      }
+      const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+      const tPrev = new Date(prev.updated_at ?? prev.created_at ?? 0).getTime()
+      if (tNew >= tPrev) m.set(key, c)
+    }
+    return m
+  }, [cuentas])
 
   const tecnicosLista = useMemo(() => {
     const haySin = reparaciones.some((r) => !String(r.tecnico ?? '').trim())
@@ -205,11 +242,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     const hasta = String(fechaHasta ?? '').trim()
     if (desde || hasta) {
       filtradas = filtradas.filter((r) => {
-        const ymd = fechaIngresoYmd(r)
-        if (ymd == null) return false
-        if (desde && ymd < desde) return false
-        if (hasta && ymd > hasta) return false
-        return true
+        const rid = String(r.id)
+        const cuenta = cuentaPorReparaId.get(rid)
+        const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
+        return repEnRangoFechasMonitor(r, desde, hasta, cuenta, ymdPago)
       })
     }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
@@ -247,8 +283,25 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       if (b.t == null) return -1
       return ordenFecha === 'asc' ? ta - tb : tb - ta
     })
-    return conTiempo.map(({ rep, ymd, dias }) => ({ rep, ymd, dias }))
-  }, [reparaciones, estatusSeleccionados, ordenFecha, tecnicoFiltro, fechaDesde, fechaHasta, busqueda, clientes])
+    return conTiempo.map(({ rep, ymd, dias }) => {
+      const rid = String(rep.id)
+      const cuenta = cuentaPorReparaId.get(rid)
+      const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
+      const ymdEntrega = fechaEntregaYmd(rep, cuenta, ymdPago)
+      return { rep, ymd, ymdEntrega, dias, cuenta }
+    })
+  }, [
+    reparaciones,
+    estatusSeleccionados,
+    ordenFecha,
+    tecnicoFiltro,
+    fechaDesde,
+    fechaHasta,
+    busqueda,
+    clientes,
+    cuentaPorReparaId,
+    entregaDesdePagosPorRepara,
+  ])
 
   const rangoFechasInvalido = useMemo(() => {
     const d = String(fechaDesde ?? '').trim()
@@ -372,7 +425,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
             <div className="monitor-ordenes-rango-fechas">
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Desde</span>
+                  <span>Desde (ingreso o entrega)</span>
                   <input
                     type="date"
                     value={fechaDesde}
@@ -382,7 +435,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   />
                 </label>
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Hasta</span>
+                  <span>Hasta (ingreso o entrega)</span>
                   <input
                     type="date"
                     value={fechaHasta}
@@ -489,13 +542,20 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       </td>
                     </tr>
                   ) : (
-                    filasOrdenadas.map(({ rep, ymd, dias }) => {
+                    filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
                       const { tipo, desc } = datosEquipo(rep)
                       const tech = String(rep.tecnico ?? '').trim()
                       const ent = estatusEsEntregado(rep?.estatus)
                       return (
                         <tr key={rep.id}>
-                          <td>{formatearFechaMostrar(ymd)}</td>
+                          <td className="monitor-ordenes-fechas-celda">
+                            <span>{formatearFechaMostrar(ymd)}</span>
+                            {ent && ymdEntrega && ymdEntrega !== ymd ? (
+                              <span className="monitor-ordenes-fecha-entrega" title="Fecha de entrega">
+                                📦 Entregado: {formatearFechaMostrar(ymdEntrega)}
+                              </span>
+                            ) : null}
+                          </td>
                           <td
                             className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}
                             title={

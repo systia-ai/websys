@@ -1557,6 +1557,21 @@ td {
   font-size: 1.1rem;
 }
 
+.monitor-ordenes-fechas-celda {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 7.5rem;
+}
+
+.monitor-ordenes-fecha-entrega {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #2e7d32;
+  line-height: 1.3;
+}
+
 .monitor-ordenes-gestion-tecnicos-btn {
   margin-left: 8px;
   border: 1px solid #1e88e5;

@@ -3,6 +3,7 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
 import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
 import { esProductoContable, etiquetaExistencia } from './productoUtils.js'
+import { marcarReparacionEntregadaSupabase, patchReparacionEntregada } from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -352,13 +353,14 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
         if (error) throw error
         nuevoId = data?.id
+        const nowLiq = new Date().toISOString()
         const { error: eCu } = await supabase
           .from('cuentas')
-          .update({ total: 0, estatus: 'LIQUIDADA' })
+          .update({ total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq })
           .eq('id', cuentaId)
         if (eCu) throw eCu
         if (reparaIdCuenta != null) {
-          await supabase.from('reparaciones').update({ estatus: 'ENTREGADA' }).eq('id', reparaIdCuenta)
+          await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
         }
       } else {
         nuevoId = nextLocalId()
@@ -371,9 +373,10 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         )
         if (reparaIdCuenta != null) {
           const lr = readLs(LS_REP, [])
+          const patchEnt = patchReparacionEntregada()
           writeLs(
             LS_REP,
-            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, estatus: 'ENTREGADA' } : r)),
+            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
           )
         }
       }
@@ -616,23 +619,32 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
     if (!cuentaId) return
     try {
+      const nowLiq = new Date().toISOString()
       if (supabase) {
-        const { error } = await supabase.from('cuentas').update({ estatus: 'LIQUIDADA' }).eq('id', cuentaId)
+        const { error } = await supabase
+          .from('cuentas')
+          .update({ estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq })
+          .eq('id', cuentaId)
         if (error) throw error
         if (reparaIdCuenta != null) {
-          await supabase.from('reparaciones').update({ estatus: 'ENTREGADA' }).eq('id', reparaIdCuenta)
+          await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
         }
       } else {
         const list = readLs(LS_CUENTAS, [])
         writeLs(
           LS_CUENTAS,
-          list.map((c) => (sameId(c.id, cuentaId) ? { ...c, estatus: 'LIQUIDADA' } : c)),
+          list.map((c) =>
+            sameId(c.id, cuentaId)
+              ? { ...c, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+              : c,
+          ),
         )
         if (reparaIdCuenta != null) {
           const lr = readLs(LS_REP, [])
+          const patchEnt = patchReparacionEntregada()
           writeLs(
             LS_REP,
-            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, estatus: 'ENTREGADA' } : r)),
+            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
           )
         }
       }

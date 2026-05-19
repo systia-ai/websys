@@ -15,6 +15,7 @@ import {
 } from './whatsappUtils.js'
 import {
   esOrdenDuplicada,
+  estatusEsEntregado,
   ejecutarInsercionOrdenUnica,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
@@ -525,6 +526,9 @@ export default function ReparacionesOrden({
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
+    }
+    if (estatusEsEntregado(estatus)) {
+      patch.fecha_entrega = now.slice(0, 10)
     }
     try {
       if (supabase) {

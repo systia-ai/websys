@@ -3,6 +3,99 @@ export function estatusEsEntregado(estatus) {
   return /ENTREGAD[OA]\b/i.test(String(estatus ?? '').trim())
 }
 
+/** Convierte timestamp o fecha a YYYY-MM-DD en calendario local. */
+export function aYmdLocalDesdeRaw(raw) {
+  if (raw == null || raw === '') return null
+  const s = String(raw).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Fecha de ingreso al taller. */
+export function fechaIngresoYmd(rep) {
+  const raw =
+    rep?.fecha_ingreso ??
+    rep?.fechaIngreso ??
+    rep?.fecha_registro ??
+    rep?.fecha_creacion ??
+    rep?.created_at ??
+    rep?.fecha
+  return aYmdLocalDesdeRaw(raw)
+}
+
+/**
+ * Fecha de entrega (órdenes ENTREGADO/A).
+ * Usa cuenta liquidada si se pasa (repara_id → cuenta).
+ */
+export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = null) {
+  if (!estatusEsEntregado(rep?.estatus)) return null
+  const desdeRep = aYmdLocalDesdeRaw(
+    rep?.fecha_entrega ?? rep?.fechaEntrega ?? rep?.fecha_entregada ?? rep?.fecha_entrega_cliente,
+  )
+  if (desdeRep) return desdeRep
+  if (ymdDesdePagos) return ymdDesdePagos
+  if (cuentaVinculada) {
+    const desdeCuenta = aYmdLocalDesdeRaw(
+      cuentaVinculada.fecha_liquidada ??
+        cuentaVinculada.fechaLiquidada ??
+        cuentaVinculada.updated_at ??
+        cuentaVinculada.created_at,
+    )
+    if (desdeCuenta) return desdeCuenta
+  }
+  return aYmdLocalDesdeRaw(rep?.updated_at)
+}
+
+/**
+ * Rango Desde/Hasta del monitor: ingreso en rango o (si entregada) entrega en rango.
+ */
+export function repEnRangoFechasMonitor(rep, desde, hasta, cuentaVinculada = null, ymdDesdePagos = null) {
+  const d = String(desde ?? '').trim()
+  const h = String(hasta ?? '').trim()
+  if (!d && !h) return true
+  const fechas = [fechaIngresoYmd(rep)]
+  const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
+  if (ent) fechas.push(ent)
+  const validas = fechas.filter(Boolean)
+  if (validas.length === 0) return false
+  return validas.some((ymd) => {
+    if (d && ymd < d) return false
+    if (h && ymd > h) return false
+    return true
+  })
+}
+
+/** Campos al marcar orden entregada (Ventas / actualización de estatus). */
+export function patchReparacionEntregada(estatus = 'ENTREGADA') {
+  const now = new Date().toISOString()
+  return {
+    estatus,
+    updated_at: now,
+    fecha_entrega: now.slice(0, 10),
+  }
+}
+
+/** Actualiza reparación a entregada; omite fecha_entrega si la columna no existe en BD. */
+export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
+  const patch = patchReparacionEntregada()
+  const first = await supabase.from('reparaciones').update(patch).eq('id', reparaId)
+  if (!first.error) return
+  const msg = String(first.error.message ?? '').toLowerCase()
+  if (msg.includes('fecha_entrega') || msg.includes('column')) {
+    const { fecha_entrega: _f, ...rest } = patch
+    const retry = await supabase.from('reparaciones').update(rest).eq('id', reparaId)
+    if (!retry.error) return
+    throw retry.error
+  }
+  throw first.error
+}
+
 /** Reparación aún en taller (no entregada). */
 export function isReparacionActiva(rep) {
   return !estatusEsEntregado(rep?.estatus)
