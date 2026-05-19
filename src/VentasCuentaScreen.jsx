@@ -497,6 +497,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
   }
 
+  function resolverContableProducto(productoId, fallbackContable = true) {
+    const p = todosProductos.find((x) => sameId(x.id, productoId))
+    if (p) return esProductoContable(p)
+    return fallbackContable
+  }
+
   function seleccionarProducto(p) {
     setRecientesProductosIds(registrarProductoRecienteVentas(p.id))
     const esContable = esProductoContable(p)
@@ -539,7 +545,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('Genere o seleccione una cuenta antes de agregar productos')
       return
     }
-    if (productoContableSel) {
+    const esContableVenta = resolverContableProducto(productoIdSel, productoContableSel)
+    if (esContableVenta) {
       const stockDisp = Number(existencia)
       if (Number.isFinite(stockDisp) && cant > stockDisp) {
         onError?.(`Stock insuficiente. Disponible: ${stockDisp}`)
@@ -563,7 +570,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           tipo: 'cuentamov',
           dbId: nuevoId,
           producto_id: productoIdSel,
-          contable: productoContableSel,
+          contable: esContableVenta,
           cantidad: cant,
           descripcion: `[VENTA] ${descProd.trim()}`,
           precioUnitario: precio,
@@ -580,7 +587,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       setProductoContableSel(true)
       setMostrarCamposProducto(false)
       onNotice?.(
-        productoContableSel ? 'Producto agregado · inventario actualizado' : 'Servicio agregado a la cuenta',
+        esContableVenta ? 'Producto agregado · inventario actualizado' : 'Servicio agregado a la cuenta',
       )
     } catch (e) {
       onError?.(`Error al agregar línea: ${e.message}`)
@@ -795,16 +802,47 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           <div className="ventas-form-producto form-stack card-pad">
             <label>
               Serie
-              <input value={serieProd} onChange={(e) => setSerieProd(e.target.value.toUpperCase())} />
+              <input
+                value={serieProd}
+                onChange={(e) => {
+                  const serie = e.target.value.toUpperCase()
+                  setSerieProd(serie)
+                  const esC = esProductoContable({ serie, descripcion: descProd, contable: productoContableSel })
+                  setProductoContableSel(esC)
+                  setExistencia(
+                    esC
+                      ? String(todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ?? existencia)
+                      : etiquetaExistencia({ serie, descripcion: descProd }),
+                  )
+                }}
+              />
             </label>
             <label>
               Descripcion
-              <input value={descProd} onChange={(e) => setDescProd(e.target.value.toUpperCase())} />
+              <input
+                value={descProd}
+                onChange={(e) => {
+                  const descripcion = e.target.value.toUpperCase()
+                  setDescProd(descripcion)
+                  const esC = esProductoContable({ serie: serieProd, descripcion, contable: productoContableSel })
+                  setProductoContableSel(esC)
+                  setExistencia(
+                    esC
+                      ? String(todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ?? existencia)
+                      : etiquetaExistencia({ serie: serieProd, descripcion }),
+                  )
+                }}
+              />
             </label>
             <label>
-              Existencia
+              {productoContableSel ? 'Existencia' : 'Stock'}
               <input value={existencia} onChange={(e) => setExistencia(e.target.value)} readOnly />
             </label>
+            {!productoContableSel ? (
+              <p className="ventas-servicio-aviso muted small">
+                Servicio: no requiere existencia en inventario.
+              </p>
+            ) : null}
             <label>
               Cantidad
               <input value={cantProd} onChange={(e) => setCantProd(e.target.value)} />
@@ -818,7 +856,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <input value={subtotalProdV} readOnly />
             </label>
             <button type="button" className="btn-primary-ventas" onClick={() => void agregarProductoLinea()}>
-              ➕ AGREGAR PRODUCTO
+              {productoContableSel ? '➕ AGREGAR PRODUCTO' : '➕ AGREGAR SERVICIO'}
             </button>
           </div>
         ) : null}
