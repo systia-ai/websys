@@ -3,6 +3,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sameId } from './clienteUtils.js'
 
 const LS_CATALOGO = 'sistefix_local_catalogopagos'
+const LS_VISTA_CATALOGO_PAGOS = 'sistefix_catalogo_pagos_vista'
+
+function leerVistaCatalogoPagos() {
+  try {
+    return localStorage.getItem(LS_VISTA_CATALOGO_PAGOS) === 'tabla' ? 'tabla' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
 
 function readLs(key, fallback) {
   try {
@@ -37,6 +46,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [vista, setVista] = useState(leerVistaCatalogoPagos)
 
   const [dialogo, setDialogo] = useState(false)
   const [editando, setEditando] = useState(null)
@@ -72,6 +82,15 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
     if (!t) return items
     return items.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
   }, [items, busqueda])
+
+  function cambiarVista(modo) {
+    setVista(modo)
+    try {
+      localStorage.setItem(LS_VISTA_CATALOGO_PAGOS, modo)
+    } catch {
+      /* ignore */
+    }
+  }
 
   function abrirNuevo() {
     setEditando(null)
@@ -191,11 +210,84 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
           />
         </div>
 
+        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
+          <span className="inventario-vista-label">Ver como:</span>
+          <div className="inventario-vista-toggle">
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('lista')}
+              aria-pressed={vista === 'lista'}
+            >
+              📋 Lista
+            </button>
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('tabla')}
+              aria-pressed={vista === 'tabla'}
+            >
+              ▦ Tabla
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <p className="muted center">Cargando…</p>
         ) : filtrados.length === 0 ? (
           <div className="empty-card">
             <p>{busqueda.trim() ? 'No se encontraron resultados' : 'No hay conceptos en el catálogo'}</p>
+          </div>
+        ) : vista === 'tabla' ? (
+          <div className="inventario-tabla-wrap catalogo-pagos-tabla-wrap">
+            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
+            <div className="inventario-tabla-scroll" role="region" aria-label="Catálogo de pagos en tabla" tabIndex={0}>
+              <div className="inventario-tabla-grid catalogo-pagos-tabla-grid">
+                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
+                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--concepto">Concepto</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Monto por defecto</span>
+                  </div>
+                  <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
+                </div>
+                {filtrados.map((c) => (
+                  <div key={c.id} className="inventario-tabla-fila-grupo" role="row">
+                    <div className="inventario-tabla-grupo-celdas">
+                      <button
+                        type="button"
+                        className="inventario-tabla-link inventario-celda inventario-celda--concepto"
+                        onClick={() => abrirEditar(c)}
+                      >
+                        {c.concepto || '—'}
+                      </button>
+                      <span className="inventario-celda inventario-celda--monto-cat">
+                        ${Number(c.cantidad ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="inventario-tabla-acciones">
+                      <button
+                        type="button"
+                        className="btn-icon edit"
+                        onClick={() => abrirEditar(c)}
+                        title="Editar"
+                        aria-label="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon danger"
+                        onClick={() => setEliminar(c)}
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <ul className="equipo-list inventario-list">

@@ -3,6 +3,13 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
 import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
 import { esProductoContable, etiquetaExistencia } from './productoUtils.js'
+import {
+  leerRecientesProductosVentas,
+  mergeRecientesProductos,
+  ordenarProductosMasRecientes,
+  recientesProductosDesdeCuentamov,
+  registrarProductoRecienteVentas,
+} from './productosRecientesVentas.js'
 import { marcarReparacionEntregadaSupabase, patchReparacionEntregada } from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -110,6 +117,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const [formaPago, setFormaPago] = useState('EFECTIVO')
   const [todosProductos, setTodosProductos] = useState([])
   const [busqProd, setBusqProd] = useState('')
+  /** Orden del selector: productos usados más recientemente primero. */
+  const [recientesProductosIds, setRecientesProductosIds] = useState(() => leerRecientesProductosVentas())
   const [serieProd, setSerieProd] = useState('')
   const [descProd, setDescProd] = useState('')
   const [existencia, setExistencia] = useState('')
@@ -135,14 +144,17 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
 
   const productosFiltrados = useMemo(() => {
     const t = busqProd.trim().toLowerCase()
-    if (!t) return todosProductos
-    return todosProductos.filter(
-      (p) =>
-        String(p.serie ?? '')
-          .toLowerCase()
-          .includes(t) || String(p.descripcion ?? '').toLowerCase().includes(t),
-    )
-  }, [todosProductos, busqProd])
+    let lista = todosProductos
+    if (t) {
+      lista = lista.filter(
+        (p) =>
+          String(p.serie ?? '')
+            .toLowerCase()
+            .includes(t) || String(p.descripcion ?? '').toLowerCase().includes(t),
+      )
+    }
+    return ordenarProductosMasRecientes(lista, recientesProductosIds)
+  }, [todosProductos, busqProd, recientesProductosIds])
 
   const catFiltrado = useMemo(() => {
     const t = busqCat.trim().toLowerCase()
@@ -471,6 +483,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       } else {
         setTodosProductos(readLs(LS_PRODUCTOS, []))
       }
+      let desdeMovs = []
+      try {
+        desdeMovs = await recientesProductosDesdeCuentamov(supabase, () => readLs(LS_CUENTAMOV, []))
+      } catch (eMov) {
+        console.warn('No se pudo ordenar por uso reciente en cuentamov:', eMov.message)
+      }
+      setRecientesProductosIds(mergeRecientesProductos(leerRecientesProductosVentas(), desdeMovs))
       setBusqProd('')
       setModalProductos(true)
     } catch (e) {
@@ -479,6 +498,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   }
 
   function seleccionarProducto(p) {
+    setRecientesProductosIds(registrarProductoRecienteVentas(p.id))
     const esContable = esProductoContable(p)
     setProductoIdSel(Number(p.id) || 0)
     setProductoContableSel(esContable)
@@ -550,6 +570,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           subtotal: sub,
         },
       ])
+      setRecientesProductosIds(registrarProductoRecienteVentas(productoIdSel))
       setSerieProd('')
       setDescProd('')
       setExistencia('')

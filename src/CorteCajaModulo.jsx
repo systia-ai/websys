@@ -1,6 +1,17 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { formatFechaLegibleEsMx } from './reparacionUtils.js'
+
+const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
+
+function leerVistaCorte() {
+  try {
+    return localStorage.getItem(LS_VISTA_CORTE) === 'tabla' ? 'tabla' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
 
 /** Misma clave que Ventas (`pagosclientes`); la tabla `pagocliente` no existe en muchos proyectos Supabase. */
 const LS_PAGOS_CLIENTES = 'sistefix_local_pagosclientes'
@@ -84,9 +95,15 @@ function nombreCliente(clientes, clienteId) {
 
 function formatearFechaCorta(ymdStr) {
   if (!ymdStr || ymdStr.length < 10) return ymdStr
-  const [y, m, d] = ymdStr.slice(0, 10).split('-').map(Number)
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymdStr
-  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatFechaLegibleEsMx(ymdStr, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function emojiFormaPago(forma) {
+  const f = String(forma ?? 'EFECTIVO').trim().toUpperCase()
+  if (f === 'TRANSFERENCIA') return '🏦'
+  if (f === 'TARJETA') return '💳'
+  if (f === 'OTRO') return '📎'
+  return '💵'
 }
 
 function escapeHtml(s) {
@@ -114,6 +131,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
   const [clientes, setClientes] = useState([])
   const [loadingCorte, setLoadingCorte] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [vista, setVista] = useState(leerVistaCorte)
 
   const cargarClientes = useCallback(async () => {
     try {
@@ -221,6 +239,15 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     })
   }, [pagos, busqueda, clientes])
 
+  function cambiarVista(modo) {
+    setVista(modo)
+    try {
+      localStorage.setItem(LS_VISTA_CORTE, modo)
+    } catch {
+      /* ignore */
+    }
+  }
+
   function volverAElegirFechas() {
     setPantalla('fechas')
     setPagos([])
@@ -295,20 +322,36 @@ td{font-size:0.9rem}
           <span className="servicios-appbar-placeholder" aria-hidden />
         </header>
 
-        <div className="servicios-body">
-          <section className="corte-caja-fechas-card card-pad">
-            <h2 className="corte-caja-fechas-titulo">Consultar periodo</h2>
-            <p className="muted small corte-caja-fechas-desc">
-              Seleccione la fecha inicio y la fecha fin para ver el corte de caja de ese periodo.
+        <div className="servicios-body corte-caja-body">
+          <section className="corte-caja-hero-card card-pad">
+            <header className="corte-caja-hero-header">
+              <span className="corte-caja-hero-emoji" aria-hidden="true">
+                📅
+              </span>
+              <h2 className="corte-caja-hero-titulo">Consultar periodo</h2>
+            </header>
+            <p className="corte-caja-hero-tip">
+              <span className="corte-caja-hero-tip-ico" aria-hidden="true">
+                💡
+              </span>
+              Elija fecha inicio y fin para ver pagos, totales por forma de pago y el detalle del corte.
             </p>
-            <div className="corte-caja-fechas-grid form-stack">
-              <label>
-                Fecha inicio
-                <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+            <div className="corte-caja-fechas-grid">
+              <label className="corte-caja-fecha-campo">
+                <span className="corte-caja-fecha-label">
+                  <span aria-hidden="true">🗓️</span> Fecha inicio
+                </span>
+                <div className="corte-caja-fecha-input-wrap">
+                  <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+                </div>
               </label>
-              <label>
-                Fecha fin
-                <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
+              <label className="corte-caja-fecha-campo">
+                <span className="corte-caja-fecha-label">
+                  <span aria-hidden="true">📆</span> Fecha fin
+                </span>
+                <div className="corte-caja-fecha-input-wrap">
+                  <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
+                </div>
               </label>
             </div>
             <button
@@ -317,7 +360,7 @@ td{font-size:0.9rem}
               onClick={() => void onConsultarCorte()}
               disabled={loadingCorte}
             >
-              {loadingCorte ? 'Consultando…' : 'CONSULTAR CORTE'}
+              {loadingCorte ? '⏳ Consultando…' : '🔎 CONSULTAR CORTE'}
             </button>
           </section>
         </div>
@@ -336,45 +379,67 @@ td{font-size:0.9rem}
           Corte de caja
         </h1>
         <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={volverAElegirFechas}>
-          Fechas
+          📅 Fechas
         </button>
       </header>
 
-      <div className="servicios-body">
+      <div className="servicios-body corte-caja-body">
         {periodoAplicado ? (
-          <p className="corte-caja-periodo-banner card-pad">
-            <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} — {formatearFechaCorta(periodoAplicado.fin)}
-          </p>
+          <div className="corte-caja-periodo-banner card-pad" role="status">
+            <span className="corte-caja-periodo-ico" aria-hidden="true">
+              📆
+            </span>
+            <span>
+              <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} —{' '}
+              {formatearFechaCorta(periodoAplicado.fin)}
+            </span>
+          </div>
         ) : null}
 
         {sinColumnaFecha ? (
-          <p className="warning card-pad corte-caja-warning-inset">
-            Los movimientos no incluyen fecha en la base de datos; se listan todos los registros.
+          <p className="corte-caja-warning-inset card-pad">
+            <span aria-hidden="true">⚠️</span> Los movimientos no incluyen fecha en la base de datos; se listan todos
+            los registros.
           </p>
         ) : null}
 
         <section className="corte-caja-resumen card-pad">
-          <h2 className="corte-caja-resumen-titulo">Resumen del periodo</h2>
+          <header className="corte-caja-resumen-header">
+            <span className="corte-caja-resumen-ico" aria-hidden="true">
+              📊
+            </span>
+            <h2 className="corte-caja-resumen-titulo">Resumen del periodo</h2>
+          </header>
           <div className="corte-caja-stats">
-            <div className="corte-caja-stat total">
-              <span className="label">Cantidad de pagos</span>
+            <div className="corte-caja-stat corte-caja-stat--total">
+              <span className="label">
+                <span aria-hidden="true">🧾</span> Cantidad de pagos
+              </span>
               <strong>{resumen.cantidadPagos}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Efectivo</span>
+            <div className="corte-caja-stat corte-caja-stat--efectivo">
+              <span className="label">
+                <span aria-hidden="true">💵</span> Efectivo
+              </span>
               <strong>${resumen.porForma.EFECTIVO.toFixed(2)}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Transferencia</span>
+            <div className="corte-caja-stat corte-caja-stat--transferencia">
+              <span className="label">
+                <span aria-hidden="true">🏦</span> Transferencia
+              </span>
               <strong>${resumen.porForma.TRANSFERENCIA.toFixed(2)}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Tarjeta</span>
+            <div className="corte-caja-stat corte-caja-stat--tarjeta">
+              <span className="label">
+                <span aria-hidden="true">💳</span> Tarjeta
+              </span>
               <strong>${resumen.porForma.TARJETA.toFixed(2)}</strong>
             </div>
             {resumen.porForma.OTRO > 0 ? (
-              <div className="corte-caja-stat">
-                <span className="label">Otras</span>
+              <div className="corte-caja-stat corte-caja-stat--otro">
+                <span className="label">
+                  <span aria-hidden="true">📎</span> Otras
+                </span>
                 <strong>${resumen.porForma.OTRO.toFixed(2)}</strong>
               </div>
             ) : null}
@@ -401,6 +466,28 @@ td{font-size:0.9rem}
           />
         </div>
 
+        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
+          <span className="inventario-vista-label">Ver como:</span>
+          <div className="inventario-vista-toggle">
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('lista')}
+              aria-pressed={vista === 'lista'}
+            >
+              📋 Lista
+            </button>
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('tabla')}
+              aria-pressed={vista === 'tabla'}
+            >
+              ▦ Tabla
+            </button>
+          </div>
+        </div>
+
         {loadingCorte ? (
           <p className="muted center">Cargando…</p>
         ) : filtrados.length === 0 ? (
@@ -413,22 +500,84 @@ td{font-size:0.9rem}
                   : 'No hay movimientos en el periodo seleccionado'}
             </p>
           </div>
+        ) : vista === 'tabla' ? (
+          <div className="inventario-tabla-wrap corte-caja-tabla-wrap">
+            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
+            <div className="inventario-tabla-scroll" role="region" aria-label="Movimientos del corte en tabla" tabIndex={0}>
+              <div className="inventario-tabla-grid corte-caja-tabla-grid">
+                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
+                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Monto</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--concepto">Concepto</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--cliente-corte">Cliente</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--cuenta-corte">Cuenta</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--forma-corte">Forma</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--fecha-corte">Fecha</span>
+                  </div>
+                </div>
+                {filtrados.map((p) => {
+                  const fp = String(p.forma_pago ?? 'EFECTIVO').trim().toUpperCase()
+                  const ymd = extractDateYmd(p)
+                  return (
+                    <div key={p.id} className="inventario-tabla-fila-grupo" role="row">
+                      <div className="inventario-tabla-grupo-celdas">
+                        <span className="inventario-celda inventario-celda--monto-cat corte-caja-monto-celda">
+                          ${Number(p.pago ?? 0).toFixed(2)}
+                        </span>
+                        <span className="inventario-celda inventario-celda--concepto">{String(p.concepto ?? '—')}</span>
+                        <span className="inventario-celda inventario-celda--cliente-corte">
+                          {nombreCliente(clientes, p.cliente_id)}
+                        </span>
+                        <span className="inventario-celda inventario-celda--cuenta-corte">
+                          {p.cuenta_id != null && p.cuenta_id !== '' ? `#${p.cuenta_id}` : '—'}
+                        </span>
+                        <span className={`inventario-celda inventario-celda--forma-corte corte-caja-chip corte-caja-chip--${fp.toLowerCase()}`}>
+                          {emojiFormaPago(fp)} {fp}
+                        </span>
+                        <span className="inventario-celda inventario-celda--fecha-corte">
+                          {ymd ? formatearFechaCorta(ymd) : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         ) : (
           <ul className="equipo-list inventario-list corte-caja-lista">
-            {filtrados.map((p) => (
-              <li key={p.id} className="equipo-card inventario-card corte-caja-card corte-caja-card--solo-lectura">
-                <div className="equipo-card-main inventario-card-main corte-caja-fila-lectura">
-                  <strong>${Number(p.pago ?? 0).toFixed(2)}</strong>
-                  <span className="muted">{String(p.concepto ?? '—')}</span>
-                  <span className="muted small">
-                    {nombreCliente(clientes, p.cliente_id)}
-                    {p.cuenta_id != null && p.cuenta_id !== '' ? ` · Cuenta #${p.cuenta_id}` : ''}
-                    {extractDateYmd(p) ? ` · ${extractDateYmd(p)}` : ''}
-                  </span>
-                  <span className="corte-caja-chip">{String(p.forma_pago ?? 'EFECTIVO')}</span>
-                </div>
-              </li>
-            ))}
+            {filtrados.map((p) => {
+              const fp = String(p.forma_pago ?? 'EFECTIVO').trim().toUpperCase()
+              const ymd = extractDateYmd(p)
+              return (
+                <li key={p.id} className="equipo-card inventario-card corte-caja-card corte-caja-card--solo-lectura">
+                  <div className="equipo-card-main inventario-card-main corte-caja-fila-lectura">
+                    <strong className="corte-caja-monto-lista">${Number(p.pago ?? 0).toFixed(2)}</strong>
+                    <span className="corte-caja-concepto-lista">
+                      <span aria-hidden="true">📝</span> {String(p.concepto ?? '—')}
+                    </span>
+                    <span className="muted small corte-caja-meta-lista">
+                      <span aria-hidden="true">👤</span> {nombreCliente(clientes, p.cliente_id)}
+                      {p.cuenta_id != null && p.cuenta_id !== '' ? (
+                        <>
+                          {' '}
+                          · <span aria-hidden="true">🧾</span> Cuenta #{p.cuenta_id}
+                        </>
+                      ) : null}
+                      {ymd ? (
+                        <>
+                          {' '}
+                          · <span aria-hidden="true">📅</span> {formatearFechaCorta(ymd)}
+                        </>
+                      ) : null}
+                    </span>
+                    <span className={`corte-caja-chip corte-caja-chip--${fp.toLowerCase()}`}>
+                      {emojiFormaPago(fp)} {fp}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

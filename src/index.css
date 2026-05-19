@@ -967,6 +967,31 @@ td {
   min-width: 160px;
 }
 
+/* Tabla catálogo de pagos */
+.catalogo-pagos-tabla-grid {
+  min-width: 520px;
+}
+
+.inventario-celda--concepto {
+  flex: 1 1 220px;
+  min-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventario-celda--monto-cat {
+  flex: 0 0 150px;
+  min-width: 130px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.catalogo-pagos-tabla-grid .inventario-celda--monto-cat {
+  text-align: right;
+  justify-content: flex-end;
+}
+
 .inventario-vender-resumen {
   display: flex;
   align-items: center;
@@ -1012,28 +1037,106 @@ td {
   background: #6a1b9a;
 }
 
-.corte-caja-fechas-card {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  max-width: 420px;
+.corte-caja-body {
+  max-width: 960px;
   margin: 0 auto;
 }
 
-.corte-caja-fechas-titulo {
-  margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  color: #37474f;
+.corte-caja-hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 480px;
+  margin: 0 auto;
+  background: linear-gradient(145deg, #f0f9ff 0%, #e8f4fc 42%, #e1f5fe 100%);
+  border: 1px solid #81d4fa;
+  border-radius: 14px;
+  box-shadow:
+    0 6px 24px rgba(3, 169, 244, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
-.corte-caja-fechas-desc {
-  margin: 0 0 16px 0;
+.corte-caja-hero-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.corte-caja-hero-emoji {
+  font-size: 1.75rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(2, 119, 189, 0.25));
+}
+
+.corte-caja-hero-titulo {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #01579b;
+}
+
+.corte-caja-hero-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #b3e5fc;
+  background: linear-gradient(180deg, #fff 0%, #f0f9ff 100%);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #0277bd;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.corte-caja-hero-tip-ico {
+  font-size: 1.2rem;
+  flex-shrink: 0;
 }
 
 .corte-caja-fechas-grid {
   display: grid;
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.corte-caja-fecha-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.corte-caja-fecha-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0277bd;
+}
+
+.corte-caja-fecha-input-wrap {
+  background: #fff;
+  border: 2px solid #90caf9;
+  border-radius: 10px;
+  padding: 4px 10px;
+  box-shadow: 0 0 12px rgba(144, 202, 249, 0.35);
+}
+
+.corte-caja-fecha-input-wrap:focus-within {
+  border-color: #1976d2;
+  box-shadow: 0 0 16px rgba(25, 118, 210, 0.35);
+}
+
+.corte-caja-fecha-input-wrap input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  padding: 8px 4px;
+  color: #0d47a1;
 }
 
 .btn-consultar-corte-caja {
@@ -1041,6 +1144,8 @@ td {
   min-height: 52px;
   font-size: 1rem;
   font-weight: 700;
+  background: linear-gradient(180deg, #1976d2 0%, #1565c0 100%);
+  box-shadow: 0 4px 14px rgba(21, 101, 192, 0.35);
 }
 
 .btn-imprimir-corte-caja {
@@ -1048,31 +1153,68 @@ td {
   min-height: 48px;
   font-size: 0.95rem;
   font-weight: 700;
-  background: #37474f;
+  background: linear-gradient(180deg, #455a64 0%, #37474f 100%);
   margin-bottom: 4px;
+  box-shadow: 0 4px 12px rgba(55, 71, 79, 0.25);
 }
 
 .btn-imprimir-corte-caja:disabled {
   background: #9e9e9e;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .corte-caja-periodo-banner {
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(145deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 1px solid #64b5f6;
+  border-radius: 12px;
   margin-bottom: 8px;
   font-size: 0.95rem;
+  color: #0d47a1;
+  box-shadow: 0 0 14px rgba(100, 181, 246, 0.4);
+}
+
+.corte-caja-periodo-ico {
+  font-size: 1.35rem;
+  flex-shrink: 0;
 }
 
 .corte-caja-warning-inset {
   margin-bottom: 8px;
+  background: linear-gradient(180deg, #fff8e1 0%, #ffecb3 100%);
+  border: 1px solid #ffca28;
+  border-radius: 10px;
+  color: #e65100;
+  font-size: 0.9rem;
+}
+
+.corte-caja-card.corte-caja-card--solo-lectura {
+  border-color: #90caf9;
+  background: linear-gradient(180deg, #f5fbff 0%, #fff 100%);
+  box-shadow: 0 2px 10px rgba(25, 118, 210, 0.08);
 }
 
 .corte-caja-card--solo-lectura .corte-caja-fila-lectura {
   cursor: default;
   width: 100%;
   flex: 1;
+}
+
+.corte-caja-monto-lista {
+  color: #1b5e20;
+  font-size: 1.1rem;
+}
+
+.corte-caja-concepto-lista {
+  font-weight: 600;
+  color: #1565c0;
+}
+
+.corte-caja-meta-lista {
+  line-height: 1.4;
 }
 
 .reportes-por-estatus {
@@ -1969,64 +2111,164 @@ td {
 }
 
 .corte-caja-resumen {
-  background: #fff8e1;
-  border: 1px solid #ffe082;
-  border-radius: 10px;
+  background: linear-gradient(145deg, #fffde7 0%, #fff8e1 55%, #ffecb3 100%);
+  border: 1px solid #ffd54f;
+  border-radius: 12px;
   margin-bottom: 4px;
+  box-shadow:
+    0 4px 18px rgba(255, 193, 7, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.corte-caja-resumen-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.corte-caja-resumen-ico {
+  font-size: 1.5rem;
 }
 
 .corte-caja-resumen-titulo {
-  margin: 0 0 10px 0;
-  font-size: 1rem;
-  color: #5d4037;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e65100;
 }
 
 .corte-caja-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
 }
 
 .corte-caja-stat {
-  background: #fff;
-  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #fafafa 100%);
+  border-radius: 10px;
   padding: 10px 12px;
-  border: 1px solid #eee;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .corte-caja-stat .label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.72rem;
   text-transform: uppercase;
   color: #78909c;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
 }
 
 .corte-caja-stat strong {
   font-size: 1.05rem;
   color: #37474f;
+  font-variant-numeric: tabular-nums;
 }
 
-.corte-caja-stat.total {
-  grid-column: span 2;
-  background: #fff3e0;
+.corte-caja-stat--total {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #e8f5e9 0%, #c8e6c9 100%);
+  border-color: #81c784;
+}
+
+.corte-caja-stat--total strong {
+  font-size: 1.3rem;
+  color: #2e7d32;
+}
+
+.corte-caja-stat--efectivo {
+  border-color: #a5d6a7;
+  background: linear-gradient(180deg, #f1f8e9 0%, #fff 100%);
+}
+
+.corte-caja-stat--transferencia {
+  border-color: #90caf9;
+  background: linear-gradient(180deg, #e3f2fd 0%, #fff 100%);
+}
+
+.corte-caja-stat--tarjeta {
+  border-color: #ce93d8;
+  background: linear-gradient(180deg, #f3e5f5 0%, #fff 100%);
+}
+
+.corte-caja-stat--otro {
   border-color: #ffcc80;
 }
 
-.corte-caja-stat.total strong {
-  font-size: 1.25rem;
-  color: #e65100;
-}
-
 .corte-caja-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 6px;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 700;
   background: #eceff1;
   color: #455a64;
+  border: 1px solid #cfd8dc;
+}
+
+.corte-caja-chip--efectivo {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #2e7d32;
+}
+
+.corte-caja-chip--transferencia {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1565c0;
+}
+
+.corte-caja-chip--tarjeta {
+  background: #f3e5f5;
+  border-color: #ce93d8;
+  color: #6a1b9a;
+}
+
+.corte-caja-chip--otro {
+  background: #fff3e0;
+  border-color: #ffcc80;
+  color: #e65100;
+}
+
+.corte-caja-tabla-grid {
+  min-width: 920px;
+}
+
+.inventario-celda--cliente-corte {
+  flex: 1 1 140px;
+  min-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventario-celda--cuenta-corte {
+  flex: 0 0 80px;
+  min-width: 70px;
+}
+
+.inventario-celda--forma-corte {
+  flex: 0 0 130px;
+  min-width: 110px;
+  white-space: nowrap;
+}
+
+.inventario-celda--fecha-corte {
+  flex: 0 0 120px;
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.corte-caja-monto-celda {
+  font-weight: 700;
+  color: #1b5e20;
 }
 
 .equipo-main {
