@@ -18,6 +18,7 @@ import {
   ejecutarInsercionOrdenUnica,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
+  insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   registrarOrdenCreadaEnSesion,
 } from './reparacionUtils.js'
@@ -301,7 +302,7 @@ export default function ReparacionesOrden({
     if (supabase) {
       const { data, error } = await supabase
         .from('reparaciones')
-        .select('id, problemas_reportados, tipo_reparacion, es_orden_duplicada')
+        .select('id, problemas_reportados, tipo_reparacion')
         .eq('cliente_id', cid)
         .eq('equipo_id', eid)
         .gte('fecha_creacion', since)
@@ -438,15 +439,13 @@ export default function ReparacionesOrden({
         fecha_creacion: now,
         updated_at: now,
         tipo_reparacion: tipoReparacion || null,
-        es_orden_duplicada: false,
       }
 
       existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
       if (existenteId) {
         newId = existenteId
       } else if (supabase) {
-        const { data: ins, error } = await supabase.from('reparaciones').insert(row).select('id').single()
-        if (error) throw error
+        const ins = await insertarReparacionSupabase(supabase, row)
         newId = ins?.id
       } else {
         const all = readLs(LS_REP, [])

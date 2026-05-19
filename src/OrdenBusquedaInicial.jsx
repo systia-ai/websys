@@ -56,6 +56,23 @@ function mapConClienteRow(rep, clientes, equipos) {
   return { ...w, clienteRow: cli }
 }
 
+/** Coincidencia por texto en orden, cliente y equipo (no por ID numérico). */
+function repCoincideBusquedaTexto(rep, term, clientes, equipos) {
+  const t = String(term ?? '').trim().toUpperCase()
+  if (!t) return false
+  const cli = clientes.find((c) => sameId(c.id, rep.cliente_id))
+  const eq = equipos.find((e) => sameId(e.id, rep.equipo_id))
+  const campos = [
+    rep.descripcion_equipo,
+    rep.problemas_reportados,
+    cli?.nombre,
+    eq?.serie,
+    eq?.tipo_equipo,
+    eq?.descripcion,
+  ]
+  return campos.some((v) => String(v ?? '').toUpperCase().includes(t))
+}
+
 function buildSessionFromDetalleFixed(row) {
   const { rep, nombreCliente, serieEquipo, tipoEquipo, clienteRow } = row
   const c = normalizeClienteRow(clienteRow ?? { nombre: nombreCliente })
@@ -149,17 +166,8 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
         setTituloResultados('Orden Encontrada (1)')
         setSubtituloResultados('Orden encontrada por ID exacto:')
       } else {
-        const term = no.toUpperCase()
         lista = reps
-          .filter(
-            (r) =>
-              String(r.descripcion_equipo ?? '')
-                .toUpperCase()
-                .includes(term) ||
-              String(r.problemas_reportados ?? '')
-                .toUpperCase()
-                .includes(term),
-          )
+          .filter((r) => repCoincideBusquedaTexto(r, no, clientes, equipos))
           .map((r) => mapConClienteRow(r, clientes, equipos))
         if (st) {
           lista = lista.filter((row) => String(row.rep.estatus ?? '').toUpperCase() === st.toUpperCase())
@@ -169,16 +177,16 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
           lista.length
             ? 'Selecciona una orden para cargar sus datos:'
             : st
-              ? `No se encontraron órdenes con texto '${no}' y estatus '${st}'`
-              : `No se encontraron órdenes con texto: ${no}`,
+              ? `No se encontraron órdenes con '${no}' y estatus '${st}'`
+              : `No se encontraron órdenes con: ${no}`,
         )
       }
 
       if (!lista.length) {
         onError?.(
           st
-            ? `No se encontraron órdenes con número '${no}' y estatus '${st}'`
-            : `No se encontraron órdenes con el número: ${no}`,
+            ? `No se encontraron órdenes con '${no}' y estatus '${st}'`
+            : `No se encontraron órdenes con: ${no}`,
         )
         return
       }
@@ -246,27 +254,55 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
   return (
     <div className="orden-busqueda-root">
       <div className="orden-busqueda-card card-pad">
-        <p className="orden-busqueda-lector muted small">
-          <strong>Lector óptico</strong>: puede escanear al campo No de Orden (los saltos de línea se normalizan al buscar).
-        </p>
-        <label className="rep-block">
-          <span>No de Orden</span>
-          <input
-            className="orden-busqueda-orden-input"
-            value={numeroOrden}
-            onChange={(e) => setNumeroOrden(e.target.value)}
-            placeholder="No de Orden (use lector óptico)"
-            autoComplete="off"
-          />
+        <header className="orden-busqueda-header">
+          <span className="orden-busqueda-header-emoji" aria-hidden="true">
+            📋
+          </span>
+          <h2 className="orden-busqueda-titulo">Buscar orden de servicio</h2>
+        </header>
+
+        <div className="orden-busqueda-tip orden-busqueda-tip--lector">
+          <span className="orden-busqueda-tip-ico" aria-hidden="true">
+            📷
+          </span>
+          <p>
+            <strong>Lector óptico</strong>: escanee en el campo de búsqueda (los saltos de línea se normalizan al buscar).
+          </p>
+        </div>
+
+        <label className="orden-busqueda-campo">
+          <span className="orden-busqueda-campo-label">
+            <span className="orden-busqueda-campo-ico" aria-hidden="true">
+              🔍
+            </span>
+            Buscar orden
+          </span>
+          <div className="orden-busqueda-input-wrap orden-busqueda-input-wrap--principal">
+            <input
+              className="orden-busqueda-orden-input"
+              value={numeroOrden}
+              onChange={(e) => setNumeroOrden(e.target.value)}
+              placeholder="Nº orden, cliente, serie o tipo de equipo"
+              autoComplete="off"
+            />
+          </div>
         </label>
-        <label className="rep-block">
-          <span>Estatus</span>
-          <input
-            value={estatus}
-            onChange={(e) => setEstatus(e.target.value.toUpperCase())}
-            placeholder="Seleccionar estatus (opcional)"
-            list="estatus-orden-busqueda"
-          />
+
+        <label className="orden-busqueda-campo">
+          <span className="orden-busqueda-campo-label">
+            <span className="orden-busqueda-campo-ico" aria-hidden="true">
+              📌
+            </span>
+            Estatus
+          </span>
+          <div className="orden-busqueda-input-wrap">
+            <input
+              value={estatus}
+              onChange={(e) => setEstatus(e.target.value.toUpperCase())}
+              placeholder="Opcional — ej. ENTREGADO"
+              list="estatus-orden-busqueda"
+            />
+          </div>
           <datalist id="estatus-orden-busqueda">
             {estatusLista.map((x) => (
               <option key={x} value={x} />
@@ -274,11 +310,19 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
           </datalist>
         </label>
         <button type="button" className="btn-buscar-orden" disabled={loading} onClick={abrirBuscar}>
-          {loading ? 'Buscando…' : '🔍 BUSCAR ORDEN DE SERVICIO'}
+          {loading ? '⏳ Buscando…' : '🔍 Buscar orden de servicio'}
         </button>
-        <p className="muted small orden-busqueda-ayuda">
-          Si deja <strong>No de Orden</strong> vacío, al pulsar buscar se abrirá el <strong>rango de fechas</strong> (igual que en la app Android).
-        </p>
+
+        <div className="orden-busqueda-tip orden-busqueda-tip--ayuda">
+          <span className="orden-busqueda-tip-ico" aria-hidden="true">
+            💡
+          </span>
+          <p className="orden-busqueda-ayuda">
+            Por <strong>🔢 número</strong> (exacto si es solo números), <strong>👤 cliente</strong>,{' '}
+            <strong>🏷️ serie</strong> o <strong>🖨️ tipo de equipo</strong>. Campo vacío →{' '}
+            <strong>📅 rango de fechas</strong>.
+          </p>
+        </div>
       </div>
 
       {modalFechas && (

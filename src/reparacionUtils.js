@@ -13,6 +13,41 @@ export function esOrdenDuplicada(rep) {
   return rep?.es_orden_duplicada === true || rep?.es_orden_duplicada === 1
 }
 
+/** Supabase/PostgREST cuando la migración `es_orden_duplicada` aún no está aplicada. */
+export function esErrorColumnaEsOrdenDuplicada(error) {
+  const msg = String(error?.message ?? error ?? '').toLowerCase()
+  const code = String(error?.code ?? '')
+  if (code === 'PGRST204' || code === '42703') {
+    return msg.includes('es_orden_duplicada') || msg.includes('duplicad')
+  }
+  return (
+    msg.includes('es_orden_duplicada') ||
+    (msg.includes('column') && msg.includes('duplicad'))
+  )
+}
+
+/** Quita el campo opcional antes de INSERT si la columna no existe en la BD. */
+export function filaReparacionSinCampoDuplicada(row) {
+  if (!row || typeof row !== 'object') return row
+  const { es_orden_duplicada: _omit, ...rest } = row
+  return rest
+}
+
+/**
+ * Inserta en `reparaciones`. Si la columna es_orden_duplicada no existe, reintenta sin ese campo.
+ */
+export async function insertarReparacionSupabase(supabase, row) {
+  const first = await supabase.from('reparaciones').insert(row).select('id').single()
+  if (!first.error) return first.data
+  if (esErrorColumnaEsOrdenDuplicada(first.error)) {
+    const sinDup = filaReparacionSinCampoDuplicada(row)
+    const retry = await supabase.from('reparaciones').insert(sinDup).select('id').single()
+    if (!retry.error) return retry.data
+    throw retry.error
+  }
+  throw first.error
+}
+
 const LS_INSERT_LOCK = 'sistefix_rep_insert_lock'
 const LS_LAST_CREATED = 'sistefix_rep_last_created'
 
