@@ -1,4 +1,5 @@
 import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
+import { formatFechaLegibleEsMx } from './reparacionUtils.js'
 
 /**
  * Utilidades para abrir conversaciones de WhatsApp via wa.me.
@@ -47,14 +48,7 @@ export function normalizarTelefonoWa(raw, defaultPais = PAIS_DEFAULT) {
  * @returns {string}
  */
 export function formatFechaOrdenMensaje(isoOrDate) {
-  if (isoOrDate == null || isoOrDate === '') {
-    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-  const d = isoOrDate instanceof Date ? isoOrDate : new Date(String(isoOrDate))
-  if (Number.isNaN(d.getTime())) {
-    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  return formatFechaLegibleEsMx(isoOrDate, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function textoDescripcionEquipoWa({ descripcionEquipo, tipoEquipo, serieEquipo }) {

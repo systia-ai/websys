@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
+import { formatFechaLegibleEsMx } from './reparacionUtils.js'
 
 /** Tamaño carta (216 × 279 mm), orientación vertical. */
 export const ORDEN_PDF_FORMAT = 'letter'
@@ -32,14 +33,7 @@ function dashIfEmpty(v) {
 }
 
 function formatFechaOrdenPdf(fechaCreacion) {
-  if (fechaCreacion == null || fechaCreacion === '') {
-    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-  const d = fechaCreacion instanceof Date ? fechaCreacion : new Date(String(fechaCreacion))
-  if (Number.isNaN(d.getTime())) {
-    return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+  return formatFechaLegibleEsMx(fechaCreacion, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function temaEstatus(estatus) {

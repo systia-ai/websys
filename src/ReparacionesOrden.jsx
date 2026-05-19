@@ -14,9 +14,12 @@ import {
   normalizarTelefonoWa,
 } from './whatsappUtils.js'
 import {
+  aYmdLocalDesdeRaw,
   esOrdenDuplicada,
   estatusEsEntregado,
   ejecutarInsercionOrdenUnica,
+  fechaEntregaYmd,
+  fechaIngresoYmd,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   insertarReparacionSupabase,
@@ -187,8 +190,117 @@ export default function ReparacionesOrden({
   const [clienteDesdeBd, setClienteDesdeBd] = useState(null)
   /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
   const [fechaCreacionOrden, setFechaCreacionOrden] = useState(null)
+  const [fechaIngresoOrden, setFechaIngresoOrden] = useState(null)
+  const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
+  const [cuentaOrden, setCuentaOrden] = useState(null)
+  const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
+
+  const fechasEntregaBanner = useMemo(() => {
+    if (!estatusEsEntregado(estatus)) return null
+    const rep = {
+      estatus,
+      fecha_ingreso: fechaIngresoOrden,
+      fecha_creacion: fechaCreacionOrden,
+      fecha_entrega: fechaEntregaOrden,
+    }
+    const ymdIng = fechaIngresoYmd(rep)
+    const ymdEnt = fechaEntregaYmd(rep, cuentaOrden, ymdEntregaDesdePagos)
+    return {
+      ingreso: ymdIng ? formatFechaOrdenMensaje(ymdIng) : '—',
+      entrega: ymdEnt ? formatFechaOrdenMensaje(ymdEnt) : '—',
+    }
+  }, [
+    estatus,
+    fechaIngresoOrden,
+    fechaCreacionOrden,
+    fechaEntregaOrden,
+    cuentaOrden,
+    ymdEntregaDesdePagos,
+  ])
+
+  const aplicarFechasDesdeReparacion = useCallback((data) => {
+    setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
+    setFechaIngresoOrden(data.fecha_ingreso ?? data.fechaIngreso ?? null)
+    setFechaEntregaOrden(data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null)
+  }, [])
+
+  const cargarCuentaYEntregaAux = useCallback(
+    async (reparaId) => {
+      if (reparaId == null || !Number.isFinite(Number(reparaId))) {
+        setCuentaOrden(null)
+        setYmdEntregaDesdePagos(null)
+        return
+      }
+      const rid = Number(reparaId)
+      try {
+        if (supabase) {
+          const { data: cuentas, error } = await supabase
+            .from('cuentas')
+            .select('*')
+            .eq('repara_id', rid)
+          if (error) throw error
+          const lista = cuentas ?? []
+          let cuenta = null
+          for (const c of lista) {
+            if (!cuenta) {
+              cuenta = c
+              continue
+            }
+            const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+            const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
+            if (tNew >= tPrev) cuenta = c
+          }
+          setCuentaOrden(cuenta)
+          if (!cuenta?.id) {
+            setYmdEntregaDesdePagos(null)
+            return
+          }
+          const { data: pagos, error: eP } = await supabase
+            .from('pagosclientes')
+            .select('*')
+            .eq('cuenta_id', cuenta.id)
+          if (eP) throw eP
+          let ymd = null
+          for (const p of pagos ?? []) {
+            const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+            if (y && (!ymd || y > ymd)) ymd = y
+          }
+          setYmdEntregaDesdePagos(ymd)
+        } else {
+          const lista = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
+          let cuenta = null
+          for (const c of lista) {
+            if (!cuenta) {
+              cuenta = c
+              continue
+            }
+            const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+            const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
+            if (tNew >= tPrev) cuenta = c
+          }
+          setCuentaOrden(cuenta)
+          if (!cuenta?.id) {
+            setYmdEntregaDesdePagos(null)
+            return
+          }
+          const pagos = readLs(LS_PAGOS, []).filter((p) => sameId(p.cuenta_id, cuenta.id))
+          let ymd = null
+          for (const p of pagos) {
+            const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+            if (y && (!ymd || y > ymd)) ymd = y
+          }
+          setYmdEntregaDesdePagos(ymd)
+        }
+      } catch (e) {
+        console.warn('No se cargaron datos de entrega para la orden:', e.message)
+        setCuentaOrden(null)
+        setYmdEntregaDesdePagos(null)
+      }
+    },
+    [supabase],
+  )
 
   const cargarReparacion = useCallback(async (idOverride) => {
     const id =
@@ -209,7 +321,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
-        setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
+        aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -224,6 +336,12 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
+        if (estatusEsEntregado(data.estatus)) {
+          await cargarCuentaYEntregaAux(data.id)
+        } else {
+          setCuentaOrden(null)
+          setYmdEntregaDesdePagos(null)
+        }
         if (supabase && data.equipo_id) {
           const { data: eq } = await supabase.from('equipos').select('*').eq('id', data.equipo_id).maybeSingle()
           if (eq) {
@@ -247,7 +365,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
-        setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
+        aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
         setTecnico2(t2)
@@ -262,6 +380,12 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
+        if (estatusEsEntregado(data.estatus)) {
+          await cargarCuentaYEntregaAux(data.id)
+        } else {
+          setCuentaOrden(null)
+          setYmdEntregaDesdePagos(null)
+        }
         const eq = readLs(LS_EQUIPOS, []).find((e) => sameId(e.id, data.equipo_id))
         if (eq) {
           setSerieEquipo(eq.serie ?? '')
@@ -277,7 +401,7 @@ export default function ReparacionesOrden({
     } catch (e) {
       onError(`Error al cargar orden: ${e.message}`)
     }
-  }, [repIdStr, supabase, onError])
+  }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, cargarCuentaYEntregaAux])
 
   useEffect(() => {
     if (repIdStrEsOrdenExistente(repIdStr)) {
@@ -529,6 +653,7 @@ export default function ReparacionesOrden({
     }
     if (estatusEsEntregado(estatus)) {
       patch.fecha_entrega = now.slice(0, 10)
+      setFechaEntregaOrden(patch.fecha_entrega)
     }
     try {
       if (supabase) {
@@ -562,6 +687,9 @@ export default function ReparacionesOrden({
         }
       }
 
+      if (estatusEsEntregado(estatus)) {
+        await cargarCuentaYEntregaAux(id)
+      }
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
       setDialogExito(true)
@@ -1010,6 +1138,11 @@ export default function ReparacionesOrden({
       ) : null}
 
       <div className="rep-scroll">
+        {fechasEntregaBanner ? (
+          <div className="rep-orden-fechas-entrega-banner" role="status" aria-live="polite">
+            Ingresada ({fechasEntregaBanner.ingreso}) &amp; entregada ({fechasEntregaBanner.entrega})
+          </div>
+        ) : null}
         <div className="rep-block highlight">
           <label>No de Orden</label>
           <div className="rep-orden-numero-row">

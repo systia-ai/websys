@@ -3,18 +3,45 @@ export function estatusEsEntregado(estatus) {
   return /ENTREGAD[OA]\b/i.test(String(estatus ?? '').trim())
 }
 
+/**
+ * Date en calendario local. Las cadenas `YYYY-MM-DD` no se parsean como UTC
+ * (evita mostrar un día menos en México).
+ */
+export function fechaALocalDate(raw) {
+  if (raw == null || raw === '') return null
+  if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw
+  const s = String(raw).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 /** Convierte timestamp o fecha a YYYY-MM-DD en calendario local. */
 export function aYmdLocalDesdeRaw(raw) {
   if (raw == null || raw === '') return null
   const s = String(raw).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
+  const d = fechaALocalDate(raw)
+  if (!d) return null
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/** Fecha legible en español (calendario local). */
+export function formatFechaLegibleEsMx(
+  raw,
+  opts = { day: 'numeric', month: 'long', year: 'numeric' },
+) {
+  const d = fechaALocalDate(raw)
+  if (!d) {
+    return new Date().toLocaleDateString('es-MX', opts)
+  }
+  return d.toLocaleDateString('es-MX', opts)
 }
 
 /** Fecha de ingreso al taller. */
@@ -63,7 +90,7 @@ function ymdEnRango(ymd, desde, hasta) {
 
 /**
  * Rango Desde/Hasta del monitor.
- * @param {'ingreso'|'entrega'|'ambas'} modo — ingreso: solo fecha de ingreso; entrega: solo entrega; ambas: cualquiera.
+ * @param {'todas'|'ingreso'|'entrega'|'ambas'} modo
  */
 export function repEnRangoFechasMonitor(
   rep,
@@ -73,6 +100,7 @@ export function repEnRangoFechasMonitor(
   ymdDesdePagos = null,
   modo = 'ingreso',
 ) {
+  if (modo === 'todas') return true
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   if (!d && !h) return true
@@ -83,6 +111,46 @@ export function repEnRangoFechasMonitor(
   const fechas = [ing, ent].filter(Boolean)
   if (fechas.length === 0) return false
   return fechas.some((ymd) => ymdEnRango(ymd, d, h))
+}
+
+/**
+ * ¿La orden cumple el filtro del monitor? (estatus operativo y/o fechas de ingreso o entrega).
+ */
+export function repCoincideFiltroMonitor(
+  rep,
+  {
+    estatusSeleccionados,
+    desde,
+    hasta,
+    cuentaVinculada = null,
+    ymdDesdePagos = null,
+    filtroIngresadasEnFechas = false,
+    filtroEntregadasEnFechas = false,
+    estatusParaFiltroFn = (r) => String(r?.estatus ?? '').trim().toUpperCase(),
+  },
+) {
+  const sel = estatusSeleccionados
+  const st = estatusParaFiltroFn(rep)
+  const matchOp = sel.size > 0 && sel.has(st)
+
+  const d = String(desde ?? '').trim()
+  const h = String(hasta ?? '').trim()
+  const hayRango = Boolean(d || h)
+
+  if (!hayRango) return matchOp
+
+  const matchIng = repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ingreso')
+  const matchEnt = repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
+
+  let matchFecha = false
+  if (filtroIngresadasEnFechas && matchIng) matchFecha = true
+  if (filtroEntregadasEnFechas && matchEnt) matchFecha = true
+
+  if (filtroIngresadasEnFechas || filtroEntregadasEnFechas) {
+    return matchOp || matchFecha
+  }
+
+  return matchOp && repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
 }
 
 /** Campos al marcar orden entregada (Ventas / actualización de estatus). */

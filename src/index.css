@@ -1573,10 +1573,9 @@ td {
   font-family: inherit;
 }
 
-.monitor-ordenes-rango-ayuda {
-  margin: 0 0 10px;
-  grid-column: 1 / -1;
-  line-height: 1.45;
+.monitor-ordenes-rango-inputs--off {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .monitor-ordenes-fecha-ingreso {
@@ -1773,6 +1772,20 @@ td {
   border-radius: 8px;
   padding: 12px 14px;
   margin: 0;
+}
+
+.monitor-ordenes-fieldset--fechas-tipo {
+  border-color: #90caf9;
+  background: linear-gradient(180deg, #f5fbff 0%, #fff 100%);
+}
+
+.monitor-ordenes-estatus-grid--fechas-tipo {
+  gap: 12px 20px;
+}
+
+.monitor-ordenes-check--fecha-ingreso span,
+.monitor-ordenes-check--fecha-entrega span {
+  font-weight: 600;
 }
 
 .monitor-ordenes-legend {
@@ -3206,6 +3219,20 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.rep-orden-fechas-entrega-banner {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid #a5d6a7;
+  background: linear-gradient(180deg, #e8f5e9 0%, #f1f8e9 100%);
+  box-shadow: 0 0 14px rgba(129, 199, 132, 0.45);
+  color: #1b5e20;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .rep-block {

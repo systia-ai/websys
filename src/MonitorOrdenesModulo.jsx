@@ -7,7 +7,7 @@ import {
   estatusEsEntregado,
   fechaEntregaYmd,
   fechaIngresoYmd,
-  repEnRangoFechasMonitor,
+  repCoincideFiltroMonitor,
 } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
@@ -16,15 +16,16 @@ const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
-const LS_FILTRO_FECHA_MONITOR = 'sistefix_monitor_filtro_fecha'
+const LS_FILTRO_INGRESADAS_FECHA = 'sistefix_monitor_filtro_ingresadas_fecha'
+const LS_FILTRO_ENTREGADAS_FECHA = 'sistefix_monitor_filtro_entregadas_fecha'
 
-function leerFiltroFechaMonitor() {
+function leerFlagLs(key, defaultVal = true) {
   try {
-    const v = localStorage.getItem(LS_FILTRO_FECHA_MONITOR)
-    if (v === 'entrega' || v === 'ambas') return v
-    return 'ingreso'
+    const v = localStorage.getItem(key)
+    if (v == null) return defaultVal
+    return v === '1'
   } catch {
-    return 'ingreso'
+    return defaultVal
   }
 }
 
@@ -50,16 +51,6 @@ function fechaIngresoTime(rep) {
   if (raw == null) return null
   const n = new Date(raw).getTime()
   return Number.isNaN(n) ? null : n
-}
-
-function fechaEntregaTime(rep, cuenta, ymdPago) {
-  return ymdATime(fechaEntregaYmd(rep, cuenta, ymdPago))
-}
-
-function etiquetaFiltroFechaTipo(modo) {
-  if (modo === 'entrega') return 'entrega al cliente'
-  if (modo === 'ambas') return 'ingreso o entrega'
-  return 'ingreso al taller'
 }
 
 function hoyYmdLocal() {
@@ -130,11 +121,16 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
-  /** 'ingreso' | 'entrega' | 'ambas' — qué fecha usa el rango Desde/Hasta */
-  const [filtroFechaTipo, setFiltroFechaTipo] = useState(leerFiltroFechaMonitor)
-  /** '' = sin límite; yyyy-mm-dd según filtroFechaTipo */
+  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega en el rango */
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
+  /** Ingresadas / entregadas en Desde–Hasta (por fecha, no por estatus actual). */
+  const [filtroIngresadasEnFechas, setFiltroIngresadasEnFechas] = useState(() =>
+    leerFlagLs(LS_FILTRO_INGRESADAS_FECHA),
+  )
+  const [filtroEntregadasEnFechas, setFiltroEntregadasEnFechas] = useState(() =>
+    leerFlagLs(LS_FILTRO_ENTREGADAS_FECHA),
+  )
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
@@ -249,9 +245,20 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   const filasOrdenadas = useMemo(() => {
     const sel = estatusSeleccionados
+    const desde = String(fechaDesde ?? '').trim()
+    const hasta = String(fechaHasta ?? '').trim()
     let filtradas = reparaciones.filter((r) => {
-      const st = estatusParaFiltro(r)
-      return sel.size === 0 ? false : sel.has(st)
+      const rid = String(r.id)
+      return repCoincideFiltroMonitor(r, {
+        estatusSeleccionados: sel,
+        desde,
+        hasta,
+        cuentaVinculada: cuentaPorReparaId.get(rid),
+        ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
+        filtroIngresadasEnFechas,
+        filtroEntregadasEnFechas,
+        estatusParaFiltroFn: estatusParaFiltro,
+      })
     })
     if (tecnicoFiltro === TECNICO_SIN) {
       filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
@@ -262,16 +269,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         if (!t) return false
         const partes = t.split(/\s*&\s*/).map((x) => x.trim()).filter(Boolean)
         return partes.includes(want)
-      })
-    }
-    const desde = String(fechaDesde ?? '').trim()
-    const hasta = String(fechaHasta ?? '').trim()
-    if (desde || hasta) {
-      filtradas = filtradas.filter((r) => {
-        const rid = String(r.id)
-        const cuenta = cuentaPorReparaId.get(rid)
-        const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
-        return repEnRangoFechasMonitor(r, desde, hasta, cuenta, ymdPago, filtroFechaTipo)
       })
     }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
@@ -300,14 +297,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
       const ymdIng = fechaIngresoYmd(r)
       const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
-      const tIng = fechaIngresoTime(r)
-      const tEnt = fechaEntregaTime(r, cuenta, ymdPago)
-      const t =
-        filtroFechaTipo === 'entrega' && tEnt != null
-          ? tEnt
-          : filtroFechaTipo === 'ambas' && tEnt != null && tIng != null
-            ? Math.max(tIng, tEnt)
-            : tIng
+      const t = fechaIngresoTime(r)
       return {
         rep: r,
         t,
@@ -333,23 +323,15 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     estatusSeleccionados,
     ordenFecha,
     tecnicoFiltro,
-    filtroFechaTipo,
     fechaDesde,
     fechaHasta,
+    filtroIngresadasEnFechas,
+    filtroEntregadasEnFechas,
     busqueda,
     clientes,
     cuentaPorReparaId,
     entregaDesdePagosPorRepara,
   ])
-
-  function cambiarFiltroFechaTipo(modo) {
-    setFiltroFechaTipo(modo)
-    try {
-      localStorage.setItem(LS_FILTRO_FECHA_MONITOR, modo)
-    } catch {
-      /* ignore */
-    }
-  }
 
   const rangoFechasInvalido = useMemo(() => {
     const d = String(fechaDesde ?? '').trim()
@@ -369,6 +351,30 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   function seleccionarSolo(est) {
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
+  }
+
+  function toggleFiltroIngresadasEnFechas() {
+    setFiltroIngresadasEnFechas((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(LS_FILTRO_INGRESADAS_FECHA, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
+
+  function toggleFiltroEntregadasEnFechas() {
+    setFiltroEntregadasEnFechas((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(LS_FILTRO_ENTREGADAS_FECHA, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
   }
 
   function nombreCliente(cid) {
@@ -458,8 +464,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   ⚙️ Gestionar
                 </button>
               </span>
-              <select value={tecnicoFiltro} onChange={(e) => setTecnicoFiltro(e.target.value)}>
-                <option value={TECNICO_TODAS}>Todas las órdenes</option>
+              <select
+                value={tecnicoFiltro}
+                onChange={(e) => setTecnicoFiltro(e.target.value)}
+                aria-label="Filtrar por técnico"
+              >
+                <option value={TECNICO_TODAS}>Todos los técnicos</option>
                 {tecnicosLista.haySin ? (
                   <option value={TECNICO_SIN}>(Sin técnico asignado)</option>
                 ) : null}
@@ -471,25 +481,9 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
               </select>
             </label>
             <div className="monitor-ordenes-rango-fechas">
-              <label className="monitor-ordenes-label-inline monitor-ordenes-label-filtro-fecha">
-                <span>Filtrar por fecha de</span>
-                <select
-                  value={filtroFechaTipo}
-                  onChange={(e) => cambiarFiltroFechaTipo(e.target.value)}
-                  aria-label="Tipo de fecha para el rango"
-                >
-                  <option value="ingreso">📥 Ingreso al taller</option>
-                  <option value="entrega">📦 Entrega al cliente</option>
-                  <option value="ambas">📥📦 Ingreso o entrega</option>
-                </select>
-              </label>
-              <p className="monitor-ordenes-rango-ayuda muted small">
-                Ej.: ingreso <strong>11 may</strong> → «Ingreso» y ese día. Entrega <strong>16 may</strong> → «Entrega» y
-                estatus <strong>ENTREGADO</strong>.
-              </p>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Desde ({etiquetaFiltroFechaTipo(filtroFechaTipo)})</span>
+                  <span>Desde</span>
                   <input
                     type="date"
                     value={fechaDesde}
@@ -499,7 +493,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   />
                 </label>
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Hasta ({etiquetaFiltroFechaTipo(filtroFechaTipo)})</span>
+                  <span>Hasta</span>
                   <input
                     type="date"
                     value={fechaHasta}
@@ -552,8 +546,29 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
               </div>
             </label>
           </div>
+          <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--fechas-tipo">
+            <legend className="monitor-ordenes-legend">Ingresadas / entregadas en el rango (Desde–Hasta)</legend>
+            <div className="monitor-ordenes-estatus-grid monitor-ordenes-estatus-grid--fechas-tipo">
+              <label className="monitor-ordenes-check monitor-ordenes-check--fecha-ingreso">
+                <input
+                  type="checkbox"
+                  checked={filtroIngresadasEnFechas}
+                  onChange={toggleFiltroIngresadasEnFechas}
+                />
+                <span>📥 Ingresadas (fecha de ingreso)</span>
+              </label>
+              <label className="monitor-ordenes-check monitor-ordenes-check--fecha-entrega">
+                <input
+                  type="checkbox"
+                  checked={filtroEntregadasEnFechas}
+                  onChange={toggleFiltroEntregadasEnFechas}
+                />
+                <span>📦 Entregadas (fecha de entrega)</span>
+              </label>
+            </div>
+          </fieldset>
           <fieldset className="monitor-ordenes-fieldset">
-            <legend className="monitor-ordenes-legend">Estatus a listar</legend>
+            <legend className="monitor-ordenes-legend">Estatus actual de la orden</legend>
             <div className="monitor-ordenes-estatus-grid">
               {ESTATUS_ORDEN.map((est) => {
                 const st = String(est).trim().toUpperCase()
