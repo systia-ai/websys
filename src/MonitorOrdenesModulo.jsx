@@ -16,6 +16,17 @@ const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
+const LS_FILTRO_FECHA_MONITOR = 'sistefix_monitor_filtro_fecha'
+
+function leerFiltroFechaMonitor() {
+  try {
+    const v = localStorage.getItem(LS_FILTRO_FECHA_MONITOR)
+    if (v === 'entrega' || v === 'ambas') return v
+    return 'ingreso'
+  } catch {
+    return 'ingreso'
+  }
+}
 
 function readLs(key, fallback) {
   try {
@@ -25,16 +36,30 @@ function readLs(key, fallback) {
   }
 }
 
+function ymdATime(ymd) {
+  if (!ymd || ymd.length < 10) return null
+  const [y, m, d] = ymd.split('-').map(Number)
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null
+  return new Date(y, m - 1, d).getTime()
+}
+
 function fechaIngresoTime(rep) {
-  const ymd = fechaIngresoYmd(rep)
-  if (ymd) {
-    const [y, m, d] = ymd.split('-').map(Number)
-    return new Date(y, m - 1, d).getTime()
-  }
-  const raw = rep.fecha_creacion ?? rep.created_at ?? rep.updated_at
+  const t = ymdATime(fechaIngresoYmd(rep))
+  if (t != null) return t
+  const raw = rep.fecha_creacion ?? rep.created_at
   if (raw == null) return null
-  const t = new Date(raw).getTime()
-  return Number.isNaN(t) ? null : t
+  const n = new Date(raw).getTime()
+  return Number.isNaN(n) ? null : n
+}
+
+function fechaEntregaTime(rep, cuenta, ymdPago) {
+  return ymdATime(fechaEntregaYmd(rep, cuenta, ymdPago))
+}
+
+function etiquetaFiltroFechaTipo(modo) {
+  if (modo === 'entrega') return 'entrega al cliente'
+  if (modo === 'ambas') return 'ingreso o entrega'
+  return 'ingreso al taller'
 }
 
 function hoyYmdLocal() {
@@ -105,9 +130,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
-  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega >= este día */
+  /** 'ingreso' | 'entrega' | 'ambas' — qué fecha usa el rango Desde/Hasta */
+  const [filtroFechaTipo, setFiltroFechaTipo] = useState(leerFiltroFechaMonitor)
+  /** '' = sin límite; yyyy-mm-dd según filtroFechaTipo */
   const [fechaDesde, setFechaDesde] = useState('')
-  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega <= este día */
   const [fechaHasta, setFechaHasta] = useState('')
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
@@ -245,7 +271,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         const rid = String(r.id)
         const cuenta = cuentaPorReparaId.get(rid)
         const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
-        return repEnRangoFechasMonitor(r, desde, hasta, cuenta, ymdPago)
+        return repEnRangoFechasMonitor(r, desde, hasta, cuenta, ymdPago, filtroFechaTipo)
       })
     }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
@@ -268,12 +294,30 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         return blob.includes(q)
       })
     }
-    const conTiempo = filtradas.map((r) => ({
-      rep: r,
-      t: fechaIngresoTime(r),
-      ymd: fechaIngresoYmd(r),
-      dias: diasEnTaller(r),
-    }))
+    const conTiempo = filtradas.map((r) => {
+      const rid = String(r.id)
+      const cuenta = cuentaPorReparaId.get(rid)
+      const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
+      const ymdIng = fechaIngresoYmd(r)
+      const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
+      const tIng = fechaIngresoTime(r)
+      const tEnt = fechaEntregaTime(r, cuenta, ymdPago)
+      const t =
+        filtroFechaTipo === 'entrega' && tEnt != null
+          ? tEnt
+          : filtroFechaTipo === 'ambas' && tEnt != null && tIng != null
+            ? Math.max(tIng, tEnt)
+            : tIng
+      return {
+        rep: r,
+        t,
+        ymd: ymdIng,
+        ymdEntrega: ymdEnt,
+        dias: diasEnTaller(r),
+        cuenta,
+        ymdPago,
+      }
+    })
     conTiempo.sort((a, b) => {
       const ta = a.t ?? 0
       const tb = b.t ?? 0
@@ -283,18 +327,13 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       if (b.t == null) return -1
       return ordenFecha === 'asc' ? ta - tb : tb - ta
     })
-    return conTiempo.map(({ rep, ymd, dias }) => {
-      const rid = String(rep.id)
-      const cuenta = cuentaPorReparaId.get(rid)
-      const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
-      const ymdEntrega = fechaEntregaYmd(rep, cuenta, ymdPago)
-      return { rep, ymd, ymdEntrega, dias, cuenta }
-    })
+    return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({ rep, ymd, ymdEntrega, dias }))
   }, [
     reparaciones,
     estatusSeleccionados,
     ordenFecha,
     tecnicoFiltro,
+    filtroFechaTipo,
     fechaDesde,
     fechaHasta,
     busqueda,
@@ -302,6 +341,15 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     cuentaPorReparaId,
     entregaDesdePagosPorRepara,
   ])
+
+  function cambiarFiltroFechaTipo(modo) {
+    setFiltroFechaTipo(modo)
+    try {
+      localStorage.setItem(LS_FILTRO_FECHA_MONITOR, modo)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const rangoFechasInvalido = useMemo(() => {
     const d = String(fechaDesde ?? '').trim()
@@ -423,9 +471,25 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
               </select>
             </label>
             <div className="monitor-ordenes-rango-fechas">
+              <label className="monitor-ordenes-label-inline monitor-ordenes-label-filtro-fecha">
+                <span>Filtrar por fecha de</span>
+                <select
+                  value={filtroFechaTipo}
+                  onChange={(e) => cambiarFiltroFechaTipo(e.target.value)}
+                  aria-label="Tipo de fecha para el rango"
+                >
+                  <option value="ingreso">📥 Ingreso al taller</option>
+                  <option value="entrega">📦 Entrega al cliente</option>
+                  <option value="ambas">📥📦 Ingreso o entrega</option>
+                </select>
+              </label>
+              <p className="monitor-ordenes-rango-ayuda muted small">
+                Ej.: ingreso <strong>11 may</strong> → «Ingreso» y ese día. Entrega <strong>16 may</strong> → «Entrega» y
+                estatus <strong>ENTREGADO</strong>.
+              </p>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Desde (ingreso o entrega)</span>
+                  <span>Desde ({etiquetaFiltroFechaTipo(filtroFechaTipo)})</span>
                   <input
                     type="date"
                     value={fechaDesde}
@@ -435,7 +499,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   />
                 </label>
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-                  <span>Hasta (ingreso o entrega)</span>
+                  <span>Hasta ({etiquetaFiltroFechaTipo(filtroFechaTipo)})</span>
                   <input
                     type="date"
                     value={fechaHasta}
@@ -524,6 +588,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <thead>
                   <tr>
                     <th>Fecha de ingreso</th>
+                    <th>Fecha de entrega</th>
                     <th>Días en taller</th>
                     <th>No. orden</th>
                     <th>Cliente</th>
@@ -537,7 +602,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <tbody>
                   {filasOrdenadas.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="monitor-ordenes-vacio">
+                      <td colSpan={10} className="monitor-ordenes-vacio">
                         No hay órdenes con los filtros seleccionados.
                       </td>
                     </tr>
@@ -548,13 +613,11 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       const ent = estatusEsEntregado(rep?.estatus)
                       return (
                         <tr key={rep.id}>
-                          <td className="monitor-ordenes-fechas-celda">
-                            <span>{formatearFechaMostrar(ymd)}</span>
-                            {ent && ymdEntrega && ymdEntrega !== ymd ? (
-                              <span className="monitor-ordenes-fecha-entrega" title="Fecha de entrega">
-                                📦 Entregado: {formatearFechaMostrar(ymdEntrega)}
-                              </span>
-                            ) : null}
+                          <td className="monitor-ordenes-fecha-ingreso">{formatearFechaMostrar(ymd)}</td>
+                          <td
+                            className={`monitor-ordenes-fecha-entrega-celda${ent ? ' monitor-ordenes-fecha-entrega-celda--ok' : ''}`}
+                          >
+                            {ent && ymdEntrega ? formatearFechaMostrar(ymdEntrega) : '—'}
                           </td>
                           <td
                             className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}

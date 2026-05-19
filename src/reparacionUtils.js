@@ -52,23 +52,37 @@ export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = nul
   return aYmdLocalDesdeRaw(rep?.updated_at)
 }
 
+function ymdEnRango(ymd, desde, hasta) {
+  if (!ymd) return false
+  const d = String(desde ?? '').trim()
+  const h = String(hasta ?? '').trim()
+  if (d && ymd < d) return false
+  if (h && ymd > h) return false
+  return true
+}
+
 /**
- * Rango Desde/Hasta del monitor: ingreso en rango o (si entregada) entrega en rango.
+ * Rango Desde/Hasta del monitor.
+ * @param {'ingreso'|'entrega'|'ambas'} modo — ingreso: solo fecha de ingreso; entrega: solo entrega; ambas: cualquiera.
  */
-export function repEnRangoFechasMonitor(rep, desde, hasta, cuentaVinculada = null, ymdDesdePagos = null) {
+export function repEnRangoFechasMonitor(
+  rep,
+  desde,
+  hasta,
+  cuentaVinculada = null,
+  ymdDesdePagos = null,
+  modo = 'ingreso',
+) {
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   if (!d && !h) return true
-  const fechas = [fechaIngresoYmd(rep)]
+  const ing = fechaIngresoYmd(rep)
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
-  if (ent) fechas.push(ent)
-  const validas = fechas.filter(Boolean)
-  if (validas.length === 0) return false
-  return validas.some((ymd) => {
-    if (d && ymd < d) return false
-    if (h && ymd > h) return false
-    return true
-  })
+  if (modo === 'ingreso') return ymdEnRango(ing, d, h)
+  if (modo === 'entrega') return ymdEnRango(ent, d, h)
+  const fechas = [ing, ent].filter(Boolean)
+  if (fechas.length === 0) return false
+  return fechas.some((ymd) => ymdEnRango(ymd, d, h))
 }
 
 /** Campos al marcar orden entregada (Ventas / actualización de estatus). */
