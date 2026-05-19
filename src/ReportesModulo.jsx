@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
+import { formatFechaLegibleEsMx } from './reparacionUtils.js'
 import {
   crearSetEstatusTodos,
   contarOrdenesDuplicadas,
@@ -10,6 +11,16 @@ import {
   labelEstatusAplicados,
   filtrarPorEstatus,
 } from './reportesFiltros.js'
+
+const LS_VISTA_REPORTES = 'sistefix_reportes_vista'
+
+function leerVistaReportes() {
+  try {
+    return localStorage.getItem(LS_VISTA_REPORTES) === 'tabla' ? 'tabla' : 'lista'
+  } catch {
+    return 'lista'
+  }
+}
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -74,9 +85,7 @@ function nombreCliente(clientes, clienteId) {
 
 function formatearFechaCorta(ymdStr) {
   if (!ymdStr || ymdStr.length < 10) return ymdStr
-  const [y, m, d] = ymdStr.slice(0, 10).split('-').map(Number)
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymdStr
-  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatFechaLegibleEsMx(ymdStr, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function escapeHtml(s) {
@@ -109,6 +118,16 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [vista, setVista] = useState(leerVistaReportes)
+
+  function cambiarVista(modo) {
+    setVista(modo)
+    try {
+      localStorage.setItem(LS_VISTA_REPORTES, modo)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const cargarClientes = useCallback(async () => {
     try {
@@ -373,7 +392,7 @@ p{margin:0 0 16px;line-height:1.5}
           </h1>
           <span className="servicios-appbar-placeholder" aria-hidden />
         </header>
-        <div className="servicios-body">
+        <div className="servicios-body corte-caja-body reportes-body">
           <ReportesFiltrosCard
             fechaInicio={fechaInicio}
             fechaFin={fechaFin}
@@ -390,7 +409,7 @@ p{margin:0 0 16px;line-height:1.5}
                 onClick={() => void onGenerarReporte()}
                 disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
               >
-                {loading ? 'Generando…' : 'GENERAR REPORTE'}
+                {loading ? '⏳ Generando…' : '📋 GENERAR REPORTE'}
               </button>
               <button
                 type="button"
@@ -398,7 +417,7 @@ p{margin:0 0 16px;line-height:1.5}
                 onClick={() => void onVerEstadisticas()}
                 disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
               >
-                📈 VER ESTADÍSTICAS
+                {loading ? '⏳ Cargando…' : '📈 VER ESTADÍSTICAS'}
               </button>
             </div>
           </ReportesFiltrosCard>
@@ -418,59 +437,80 @@ p{margin:0 0 16px;line-height:1.5}
           Reportes
         </h1>
         <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={volverAElegirFechas}>
-          Periodo
+          📅 Periodo
         </button>
       </header>
 
-      <div className="servicios-body">
+      <div className="servicios-body corte-caja-body reportes-body">
         {periodoAplicado ? (
-          <p className="corte-caja-periodo-banner card-pad">
-            <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} — {formatearFechaCorta(periodoAplicado.fin)}
-            {' '}
-            · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
-          </p>
+          <div className="corte-caja-periodo-banner card-pad" role="status">
+            <span className="corte-caja-periodo-ico" aria-hidden="true">
+              📆
+            </span>
+            <span>
+              <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} —{' '}
+              {formatearFechaCorta(periodoAplicado.fin)} · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
+            </span>
+          </div>
         ) : null}
 
         {sinColumnaFecha ? (
-          <p className="warning card-pad corte-caja-warning-inset">
-            Las órdenes no incluyen fecha reconocible en los datos; se listaron todas para calcular el reporte.
+          <p className="corte-caja-warning-inset card-pad">
+            <span aria-hidden="true">⚠️</span> Las órdenes no incluyen fecha reconocible; se listaron todas para el
+            reporte.
           </p>
         ) : null}
 
         {duplicadasExcluidas > 0 ? (
           <p className="reportes-aviso-duplicadas card-pad" role="status">
-            Se excluyeron <strong>{duplicadasExcluidas}</strong>{' '}
-            {duplicadasExcluidas === 1 ? 'orden marcada como duplicada' : 'órdenes marcadas como duplicadas'}{' '}
-            del reporte y las estadísticas.
+            <span aria-hidden="true">🔄</span> Se excluyeron <strong>{duplicadasExcluidas}</strong>{' '}
+            {duplicadasExcluidas === 1 ? 'orden duplicada' : 'órdenes duplicadas'} del reporte y las estadísticas.
           </p>
         ) : null}
 
         <section className="corte-caja-resumen card-pad reportes-resumen">
-          <h2 className="corte-caja-resumen-titulo">Resumen</h2>
+          <header className="corte-caja-resumen-header">
+            <span className="corte-caja-resumen-ico" aria-hidden="true">
+              📊
+            </span>
+            <h2 className="corte-caja-resumen-titulo">Resumen del periodo</h2>
+          </header>
           <div className="corte-caja-stats reportes-stats">
-            <div className="corte-caja-stat total">
-              <span className="label">Total órdenes</span>
+            <div className="corte-caja-stat corte-caja-stat--total">
+              <span className="label">
+                <span aria-hidden="true">🧾</span> Total órdenes
+              </span>
               <strong>{resumen.total}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Activas</span>
+            <div className="corte-caja-stat reportes-stat--activas">
+              <span className="label">
+                <span aria-hidden="true">🔧</span> Activas
+              </span>
               <strong>{resumen.activas}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Entregadas</span>
+            <div className="corte-caja-stat reportes-stat--entregadas">
+              <span className="label">
+                <span aria-hidden="true">✅</span> Entregadas
+              </span>
               <strong>{resumen.entregadas}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Suma pagos</span>
+            <div className="corte-caja-stat corte-caja-stat--tarjeta">
+              <span className="label">
+                <span aria-hidden="true">💵</span> Suma pagos
+              </span>
               <strong>${resumen.totalPagos.toFixed(2)}</strong>
             </div>
-            <div className="corte-caja-stat">
-              <span className="label">Suma costo reparación</span>
+            <div className="corte-caja-stat corte-caja-stat--otro">
+              <span className="label">
+                <span aria-hidden="true">🛠️</span> Suma costo reparación
+              </span>
               <strong>${resumen.totalCosto.toFixed(2)}</strong>
             </div>
           </div>
           <div className="reportes-por-estatus">
-            <h3 className="reportes-subtitulo">Por estatus</h3>
+            <h3 className="reportes-subtitulo">
+              <span aria-hidden="true">🏷️</span> Por estatus
+            </h3>
             <ul className="reportes-estatus-lista">
               {Object.entries(resumen.porEstatus)
                 .filter(([, n]) => n > 0)
@@ -514,6 +554,28 @@ p{margin:0 0 16px;line-height:1.5}
           />
         </div>
 
+        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
+          <span className="inventario-vista-label">Ver como:</span>
+          <div className="inventario-vista-toggle">
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('lista')}
+              aria-pressed={vista === 'lista'}
+            >
+              📋 Lista
+            </button>
+            <button
+              type="button"
+              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
+              onClick={() => cambiarVista('tabla')}
+              aria-pressed={vista === 'tabla'}
+            >
+              ▦ Tabla
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <p className="muted center">Cargando…</p>
         ) : filtrados.length === 0 ? (
@@ -526,22 +588,84 @@ p{margin:0 0 16px;line-height:1.5}
                   : 'No hay órdenes en el periodo y filtro seleccionados'}
             </p>
           </div>
+        ) : vista === 'tabla' ? (
+          <div className="inventario-tabla-wrap reportes-tabla-wrap">
+            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
+            <div className="inventario-tabla-scroll" role="region" aria-label="Órdenes del reporte en tabla" tabIndex={0}>
+              <div className="inventario-tabla-grid reportes-tabla-grid">
+                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
+                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--orden-rep">No.</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--cliente-corte">Cliente</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--forma-corte">Estatus</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Equipo / tipo</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--fecha-corte">Fecha</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Pago</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--costo-rep">Costo</span>
+                  </div>
+                </div>
+                {filtrados.map((r) => {
+                  const ymd = extractDateYmd(r)
+                  return (
+                    <div key={r.id} className="inventario-tabla-fila-grupo" role="row">
+                      <div className="inventario-tabla-grupo-celdas">
+                        <span className="inventario-celda inventario-celda--orden-rep">#{r.id}</span>
+                        <span className="inventario-celda inventario-celda--cliente-corte">
+                          {nombreCliente(clientes, r.cliente_id)}
+                        </span>
+                        <span className="inventario-celda inventario-celda--forma-corte corte-caja-chip">
+                          {String(r.estatus ?? '—')}
+                        </span>
+                        <span className="inventario-celda inventario-celda--desc">
+                          {String(r.descripcion_equipo ?? r.tipo_reparacion ?? '—')}
+                        </span>
+                        <span className="inventario-celda inventario-celda--fecha-corte">
+                          {ymd ? formatearFechaCorta(ymd) : '—'}
+                        </span>
+                        <span className="inventario-celda inventario-celda--monto-cat corte-caja-monto-celda">
+                          ${Number(r.pago ?? 0).toFixed(2)}
+                        </span>
+                        <span className="inventario-celda inventario-celda--costo-rep">
+                          ${Number(r.costo_reparacion ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         ) : (
           <ul className="equipo-list inventario-list reportes-lista">
-            {filtrados.map((r) => (
-              <li key={r.id} className="equipo-card inventario-card reportes-card">
-                <div className="equipo-card-main inventario-card-main reportes-fila">
-                  <strong>Orden #{r.id}</strong>
-                  <span className="muted">{nombreCliente(clientes, r.cliente_id)}</span>
-                  <span className="corte-caja-chip">{String(r.estatus ?? '—')}</span>
-                  <span className="muted small">{String(r.descripcion_equipo ?? r.tipo_reparacion ?? '—')}</span>
-                  <span className="muted small">
-                    Pago ${Number(r.pago ?? 0).toFixed(2)} · Costo ${Number(r.costo_reparacion ?? 0).toFixed(2)}
-                    {extractDateYmd(r) ? ` · ${extractDateYmd(r)}` : ''}
-                  </span>
-                </div>
-              </li>
-            ))}
+            {filtrados.map((r) => {
+              const ymd = extractDateYmd(r)
+              return (
+                <li key={r.id} className="equipo-card inventario-card reportes-card corte-caja-card--solo-lectura">
+                  <div className="equipo-card-main inventario-card-main reportes-fila">
+                    <strong>
+                      <span aria-hidden="true">📋</span> Orden #{r.id}
+                    </strong>
+                    <span className="reportes-cliente-lista">
+                      <span aria-hidden="true">👤</span> {nombreCliente(clientes, r.cliente_id)}
+                    </span>
+                    <span className="corte-caja-chip">{String(r.estatus ?? '—')}</span>
+                    <span className="muted small">
+                      <span aria-hidden="true">🖨️</span> {String(r.descripcion_equipo ?? r.tipo_reparacion ?? '—')}
+                    </span>
+                    <span className="muted small reportes-meta-lista">
+                      <span aria-hidden="true">💵</span> Pago ${Number(r.pago ?? 0).toFixed(2)} ·{' '}
+                      <span aria-hidden="true">🛠️</span> Costo ${Number(r.costo_reparacion ?? 0).toFixed(2)}
+                      {ymd ? (
+                        <>
+                          {' '}
+                          · <span aria-hidden="true">📅</span> {formatearFechaCorta(ymd)}
+                        </>
+                      ) : null}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

@@ -30,16 +30,26 @@ export default function ReportesFiltrosCard({
   }
 
   return (
-    <section className="monitor-ordenes-filtros card-pad reportes-filtros-card">
-      <h2 className="monitor-ordenes-filtros-titulo">Filtros</h2>
-      <p className="muted small reportes-filtros-desc">
+    <section className="corte-caja-hero-card card-pad reportes-filtros-card">
+      <header className="corte-caja-hero-header">
+        <span className="corte-caja-hero-emoji" aria-hidden="true">
+          🔎
+        </span>
+        <h2 className="corte-caja-hero-titulo">Filtros del reporte</h2>
+      </header>
+      <p className="corte-caja-hero-tip">
+        <span className="corte-caja-hero-tip-ico" aria-hidden="true">
+          💡
+        </span>
         Rango de fechas de la orden y estatus a incluir (puede elegir varios).
       </p>
 
-      <div className="monitor-ordenes-rango-fechas reportes-filtros-fechas">
-        <div className="monitor-ordenes-rango-inputs">
-          <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-            <span>Desde</span>
+      <div className="corte-caja-fechas-grid reportes-filtros-fechas">
+        <label className="corte-caja-fecha-campo">
+          <span className="corte-caja-fecha-label">
+            <span aria-hidden="true">🗓️</span> Desde
+          </span>
+          <div className="corte-caja-fecha-input-wrap">
             <input
               type="date"
               value={fechaInicio}
@@ -47,9 +57,13 @@ export default function ReportesFiltrosCard({
               onChange={(e) => onFechaInicio(e.target.value)}
               aria-label="Fecha inicial"
             />
-          </label>
-          <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
-            <span>Hasta</span>
+          </div>
+        </label>
+        <label className="corte-caja-fecha-campo">
+          <span className="corte-caja-fecha-label">
+            <span aria-hidden="true">📆</span> Hasta
+          </span>
+          <div className="corte-caja-fecha-input-wrap">
             <input
               type="date"
               value={fechaFin}
@@ -57,23 +71,23 @@ export default function ReportesFiltrosCard({
               onChange={(e) => onFechaFin(e.target.value)}
               aria-label="Fecha final"
             />
-          </label>
-        </div>
-        {rangoInvalido ? (
-          <p className="monitor-ordenes-rango-aviso" role="alert">
-            La fecha inicial no puede ser posterior a la final.
-          </p>
-        ) : null}
+          </div>
+        </label>
       </div>
+      {rangoInvalido ? (
+        <p className="reportes-rango-aviso" role="alert">
+          <span aria-hidden="true">⚠️</span> La fecha inicial no puede ser posterior a la final.
+        </p>
+      ) : null}
 
-      <fieldset className="monitor-ordenes-fieldset">
+      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--fechas-tipo reportes-estatus-fieldset">
         <legend className="monitor-ordenes-legend">Estatus a incluir</legend>
         <div className="reportes-estatus-acciones">
           <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(crearSetEstatusTodos())}>
-            Todos
+            ✓ Todos
           </button>
           <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(new Set())}>
-            Ninguno
+            ✕ Ninguno
           </button>
         </div>
         <div className="monitor-ordenes-estatus-grid">

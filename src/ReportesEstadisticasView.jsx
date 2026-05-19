@@ -357,18 +357,21 @@ export default function ReportesEstadisticasView({
         <span className="servicios-appbar-placeholder" aria-hidden />
       </header>
 
-      <div className="servicios-body">
+      <div className="servicios-body corte-caja-body reportes-body">
         {filtrosSlot}
 
-        <p className="corte-caja-periodo-banner card-pad">
-          <strong>Periodo:</strong> {periodoTxt}
-          {' '}
-          · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
-        </p>
+        <div className="corte-caja-periodo-banner card-pad" role="status">
+          <span className="corte-caja-periodo-ico" aria-hidden="true">
+            📆
+          </span>
+          <span>
+            <strong>Periodo:</strong> {periodoTxt} · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
+          </span>
+        </div>
 
         {duplicadasExcluidas > 0 ? (
           <p className="reportes-aviso-duplicadas card-pad" role="status">
-            Las gráficas no incluyen <strong>{duplicadasExcluidas}</strong>{' '}
+            <span aria-hidden="true">🔄</span> Las gráficas no incluyen <strong>{duplicadasExcluidas}</strong>{' '}
             {duplicadasExcluidas === 1 ? 'orden duplicada' : 'órdenes duplicadas'} del periodo.
           </p>
         ) : null}
@@ -379,7 +382,9 @@ export default function ReportesEstadisticasView({
             role="group"
             aria-label="Agrupar gráficas por periodo"
           >
-            <span className="reportes-agrupacion-label">Ver gráficas:</span>
+            <span className="reportes-agrupacion-label">
+              <span aria-hidden="true">📉</span> Ver gráficas:
+            </span>
             <div className="reportes-agrupacion-opciones">
               {AGRUPACIONES_ESTADISTICAS.map((opt) => (
                 <button
@@ -401,27 +406,36 @@ export default function ReportesEstadisticasView({
         {!soloPeriodo ? (
           <section className="reportes-kpi-grid card-pad">
             <div className="reportes-kpi">
-              <span className="label">Órdenes</span>
+              <span className="label">
+                <span aria-hidden="true">🧾</span> Órdenes
+              </span>
               <strong>{resumen.total}</strong>
             </div>
             <div className="reportes-kpi">
-              <span className="label">Pagos</span>
+              <span className="label">
+                <span aria-hidden="true">💵</span> Pagos
+              </span>
               <strong>${resumen.totalPagos.toFixed(2)}</strong>
             </div>
             <div className="reportes-kpi">
-              <span className="label">Costo reparación</span>
+              <span className="label">
+                <span aria-hidden="true">🛠️</span> Costo reparación
+              </span>
               <strong>${resumen.totalCosto.toFixed(2)}</strong>
             </div>
             <div className="reportes-kpi">
-              <span className="label">Entregadas</span>
+              <span className="label">
+                <span aria-hidden="true">✅</span> Entregadas
+              </span>
               <strong>{resumen.entregadas}</strong>
             </div>
           </section>
         ) : null}
 
         {!loading && !conFecha ? (
-          <p className="warning card-pad">
-            No hay fechas en las órdenes de este reporte; las gráficas por periodo no están disponibles.
+          <p className="corte-caja-warning-inset card-pad">
+            <span aria-hidden="true">⚠️</span> No hay fechas en las órdenes; las gráficas por periodo no están
+            disponibles.
           </p>
         ) : !loading && conFecha ? (
           <GraficasTemporales
