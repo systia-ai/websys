@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes } from 'react-router-dom'
 import './setPublicAssetsBase.js'
 import './index.css'
 import App from './App.jsx'
+import { AuthProvider } from './AuthContext.jsx'
 import EtiquetaPublica from './EtiquetaPublica.jsx'
 
 export function Root() {
@@ -11,7 +12,14 @@ export function Root() {
     <HashRouter>
       <Routes>
         <Route path="/etiqueta" element={<EtiquetaPublica />} />
-        <Route path="/*" element={<App />} />
+        <Route
+          path="/*"
+          element={
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          }
+        />
       </Routes>
     </HashRouter>
   )

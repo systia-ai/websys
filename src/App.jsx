@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { useAuth } from './AuthContext.jsx'
 import { normalizeClienteRow } from './clienteUtils.js'
 import ServiciosEquipos from './ServiciosEquipos.jsx'
 import ClientesModulo from './ClientesModulo.jsx'
@@ -28,14 +28,8 @@ const homeMenuItems = [
   { key: 'monitor_ordenes', title: 'MONITOR de ORDENES', table: 'reparaciones' },
 ]
 
-function getSupabaseClient() {
-  const url = import.meta.env.VITE_SUPABASE_URL
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
-  if (!url || !key) return null
-  return createClient(url, key)
-}
-
 function App() {
+  const { supabase, user, signOut, requiresAuth } = useAuth()
   const [activeModule, setActiveModule] = useState('home')
   /** Cliente elegido en el módulo Clientes para preasignar en Servicios (equipos), como `savedStateHandle` en Android. */
   const [clienteVinculoServicios, setClienteVinculoServicios] = useState(null)
@@ -61,8 +55,6 @@ function App() {
   const limpiarRetornoOrdenesClientes = useCallback(() => {
     setClientesRetornoOrdenes(null)
   }, [])
-  const supabase = useMemo(() => getSupabaseClient(), [])
-
   const activeModuleRef = useRef(activeModule)
   /** Historial de pantallas para «atrás» / salir (no siempre inicio). */
   const navStackRef = useRef(['home'])
@@ -240,6 +232,16 @@ function App() {
                 <p>Centro de Servicio EPSON · Sistema de gestión integral</p>
               </div>
             </div>
+            {requiresAuth && user ? (
+              <div className="home-header-session">
+                <span className="home-header-user muted small" title={user.email}>
+                  {user.email}
+                </span>
+                <button type="button" className="home-header-signout" onClick={() => signOut()}>
+                  Cerrar sesión
+                </button>
+              </div>
+            ) : null}
           </header>
           <section className="grid home-menu-grid">
           {homeMenuItems.map((m) => (
