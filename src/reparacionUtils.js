@@ -124,8 +124,6 @@ export function repCoincideFiltroMonitor(
     hasta,
     cuentaVinculada = null,
     ymdDesdePagos = null,
-    filtroIngresadasEnFechas = false,
-    filtroEntregadasEnFechas = false,
     estatusParaFiltroFn = (r) => String(r?.estatus ?? '').trim().toUpperCase(),
   },
 ) {
@@ -139,18 +137,10 @@ export function repCoincideFiltroMonitor(
 
   if (!hayRango) return matchOp
 
-  const matchIng = repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ingreso')
-  const matchEnt = repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
-
-  let matchFecha = false
-  if (filtroIngresadasEnFechas && matchIng) matchFecha = true
-  if (filtroEntregadasEnFechas && matchEnt) matchFecha = true
-
-  if (filtroIngresadasEnFechas || filtroEntregadasEnFechas) {
-    return matchOp || matchFecha
-  }
-
-  return matchOp && repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
+  return (
+    matchOp &&
+    repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
+  )
 }
 
 /** Campos al marcar orden entregada (Ventas / actualización de estatus). */

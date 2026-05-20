@@ -16,19 +16,6 @@ const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
-const LS_FILTRO_INGRESADAS_FECHA = 'sistefix_monitor_filtro_ingresadas_fecha'
-const LS_FILTRO_ENTREGADAS_FECHA = 'sistefix_monitor_filtro_entregadas_fecha'
-
-function leerFlagLs(key, defaultVal = true) {
-  try {
-    const v = localStorage.getItem(key)
-    if (v == null) return defaultVal
-    return v === '1'
-  } catch {
-    return defaultVal
-  }
-}
-
 function readLs(key, fallback) {
   try {
     return JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback))
@@ -124,13 +111,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   /** '' = sin límite; yyyy-mm-dd = ingreso o entrega en el rango */
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
-  /** Ingresadas / entregadas en Desde–Hasta (por fecha, no por estatus actual). */
-  const [filtroIngresadasEnFechas, setFiltroIngresadasEnFechas] = useState(() =>
-    leerFlagLs(LS_FILTRO_INGRESADAS_FECHA),
-  )
-  const [filtroEntregadasEnFechas, setFiltroEntregadasEnFechas] = useState(() =>
-    leerFlagLs(LS_FILTRO_ENTREGADAS_FECHA),
-  )
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
@@ -255,8 +235,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         hasta,
         cuentaVinculada: cuentaPorReparaId.get(rid),
         ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
-        filtroIngresadasEnFechas,
-        filtroEntregadasEnFechas,
         estatusParaFiltroFn: estatusParaFiltro,
       })
     })
@@ -325,8 +303,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     tecnicoFiltro,
     fechaDesde,
     fechaHasta,
-    filtroIngresadasEnFechas,
-    filtroEntregadasEnFechas,
     busqueda,
     clientes,
     cuentaPorReparaId,
@@ -351,30 +327,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   function seleccionarSolo(est) {
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
-  }
-
-  function toggleFiltroIngresadasEnFechas() {
-    setFiltroIngresadasEnFechas((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem(LS_FILTRO_INGRESADAS_FECHA, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
-  }
-
-  function toggleFiltroEntregadasEnFechas() {
-    setFiltroEntregadasEnFechas((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem(LS_FILTRO_ENTREGADAS_FECHA, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
   }
 
   function nombreCliente(cid) {
@@ -428,6 +380,11 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     return { tipo, desc }
   }
 
+  const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
+  const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
+  const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
+  const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
+
   return (
     <div className="servicios-root inventarios-root monitor-ordenes-root">
       <header className="servicios-appbar">
@@ -443,22 +400,35 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
       <div className="servicios-body">
         <section className="monitor-ordenes-filtros card-pad">
-          <h2 className="monitor-ordenes-filtros-titulo">Filtros</h2>
-          <div className="monitor-ordenes-filtros-doble">
-            <label className="monitor-ordenes-label-inline">
-              <span>Orden por fecha de registro</span>
+          <h2 className="monitor-ordenes-filtros-titulo">
+            <span className="monitor-ordenes-filtros-titulo-icon" aria-hidden="true">
+              🔎
+            </span>
+            Filtros
+          </h2>
+
+          <div className="monitor-ordenes-filtros-grid">
+            <label className="monitor-ordenes-label-inline monitor-ordenes-tile">
+              <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+              <span className="monitor-ordenes-tile-label">Orden por fecha de registro</span>
               <select value={ordenFecha} onChange={(e) => setOrdenFecha(e.target.value)}>
                 <option value="asc">Más antigua primero</option>
                 <option value="desc">Más reciente primero</option>
               </select>
             </label>
-            <label className="monitor-ordenes-label-inline">
-              <span>
+            <label
+              className={`monitor-ordenes-label-inline monitor-ordenes-tile${tileActive(filtroTecnicoActivo)}`}
+            >
+              <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+              <span className="monitor-ordenes-tile-label">
                 Técnico{' '}
                 <button
                   type="button"
                   className="monitor-ordenes-gestion-tecnicos-btn"
-                  onClick={() => setGestionTecnicosAbierto(true)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setGestionTecnicosAbierto(true)
+                  }}
                   title="Agregar o eliminar técnicos del catálogo"
                 >
                   ⚙️ Gestionar
@@ -480,9 +450,14 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 ))}
               </select>
             </label>
-            <div className="monitor-ordenes-rango-fechas">
+
+            <div
+              className={`monitor-ordenes-filtros-rango monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroRangoActivo)}`}
+            >
+              <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+              <span className="monitor-ordenes-filtros-grupo-titulo">Rango de fechas</span>
               <div className="monitor-ordenes-rango-inputs">
-                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
+                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha monitor-ordenes-tile-inner">
                   <span>Desde</span>
                   <input
                     type="date"
@@ -492,7 +467,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                     aria-label="Fecha inicial del rango"
                   />
                 </label>
-                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha">
+                <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha monitor-ordenes-tile-inner">
                   <span>Hasta</span>
                   <input
                     type="date"
@@ -520,10 +495,18 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <p className="monitor-ordenes-rango-aviso" role="alert">
                   La fecha inicial no puede ser posterior a la final.
                 </p>
-              ) : null}
+              ) : (
+                <p className="monitor-ordenes-rango-hint muted small">
+                  Filtra por fecha de ingreso o de entrega dentro del rango.
+                </p>
+              )}
             </div>
-            <label className="monitor-ordenes-label-inline monitor-ordenes-busqueda-wrap">
-              <span>Buscador</span>
+
+            <label
+              className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroBusquedaActivo)}`}
+            >
+              <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+              <span className="monitor-ordenes-tile-label">Buscador</span>
               <div className="monitor-ordenes-fecha-desde">
                 <input
                   type="search"
@@ -546,38 +529,35 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
               </div>
             </label>
           </div>
-          <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--fechas-tipo">
-            <legend className="monitor-ordenes-legend">Ingresadas / entregadas en el rango (Desde–Hasta)</legend>
-            <div className="monitor-ordenes-estatus-grid monitor-ordenes-estatus-grid--fechas-tipo">
-              <label className="monitor-ordenes-check monitor-ordenes-check--fecha-ingreso">
-                <input
-                  type="checkbox"
-                  checked={filtroIngresadasEnFechas}
-                  onChange={toggleFiltroIngresadasEnFechas}
-                />
-                <span>📥 Ingresadas (fecha de ingreso)</span>
-              </label>
-              <label className="monitor-ordenes-check monitor-ordenes-check--fecha-entrega">
-                <input
-                  type="checkbox"
-                  checked={filtroEntregadasEnFechas}
-                  onChange={toggleFiltroEntregadasEnFechas}
-                />
-                <span>📦 Entregadas (fecha de entrega)</span>
-              </label>
-            </div>
-          </fieldset>
-          <fieldset className="monitor-ordenes-fieldset">
-            <legend className="monitor-ordenes-legend">Estatus actual de la orden</legend>
+
+          <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
+            <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
             <div className="monitor-ordenes-estatus-grid">
               {ESTATUS_ORDEN.map((est) => {
                 const st = String(est).trim().toUpperCase()
                 const checked = estatusSeleccionados.has(st)
                 return (
-                  <label key={est} className="monitor-ordenes-check">
-                    <input type="checkbox" checked={checked} onChange={() => toggleEstatus(est)} />
-                    <span>{est}</span>
-                    <button type="button" className="monitor-ordenes-solo" onClick={() => seleccionarSolo(est)} title="Solo este">
+                  <label
+                    key={est}
+                    className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
+                  >
+                    <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                    <input
+                      type="checkbox"
+                      className="monitor-ordenes-check-input"
+                      checked={checked}
+                      onChange={() => toggleEstatus(est)}
+                    />
+                    <span className="monitor-ordenes-check-text">{est}</span>
+                    <button
+                      type="button"
+                      className="monitor-ordenes-solo"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        seleccionarSolo(est)
+                      }}
+                      title="Solo este"
+                    >
                       Solo
                     </button>
                   </label>
