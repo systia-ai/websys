@@ -22,6 +22,7 @@ import {
   fechaIngresoYmd,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
+  actualizarReparacionSupabase,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   registrarOrdenCreadaEnSesion,
@@ -314,7 +315,10 @@ export default function ReparacionesOrden({
       if (supabase) {
         const { data, error } = await supabase.from('reparaciones').select('*').eq('id', id).maybeSingle()
         if (error) throw error
-        if (!data) return
+        if (!data) {
+          onError(`No se encontró la orden #${id} en la base de datos.`)
+          return
+        }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
         setEstatus(data.estatus ?? 'INGRESADO')
@@ -358,7 +362,10 @@ export default function ReparacionesOrden({
       } else {
         const all = readLs(LS_REP, [])
         const data = all.find((r) => r.id === id)
-        if (!data) return
+        if (!data) {
+          onError(`No se encontró la orden #${id} en la base de datos.`)
+          return
+        }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
         setEstatus(data.estatus ?? 'INGRESADO')
@@ -636,7 +643,12 @@ export default function ReparacionesOrden({
   async function actualizarOrden() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
-    if (!id) return
+    if (!id) {
+      onError(
+        'No hay número de orden cargado. Abra la orden desde Clientes, Equipos o el Monitor (✏️), o búsquela en «Orden de servicio».',
+      )
+      return
+    }
     actualizandoRef.current = true
     setActualizandoOrden(true)
     const now = new Date().toISOString()
@@ -657,8 +669,7 @@ export default function ReparacionesOrden({
     }
     try {
       if (supabase) {
-        const { error } = await supabase.from('reparaciones').update(patch).eq('id', id)
-        if (error) throw error
+        await actualizarReparacionSupabase(supabase, id, patch)
       } else {
         const all = readLs(LS_REP, [])
         writeLs(
@@ -1368,6 +1379,13 @@ export default function ReparacionesOrden({
           {correoClienteUi ? <span>Email: {correoClienteUi}</span> : null}
         </div>
 
+        {ordenRegistrada && (esOrdenExistente || idReparacion != null) ? (
+          <p className="rep-aviso-actualizar" role="note">
+            Para guardar cambios (estatus, técnico, problema, solución, etc.), use{' '}
+            <strong>Actualizar orden</strong>. El botón «Orden registrada» solo aplica al dar de alta una orden nueva.
+          </p>
+        ) : null}
+
         <div className="rep-actions">
           <button
             type="button"
@@ -1378,12 +1396,12 @@ export default function ReparacionesOrden({
               setConfirmGuardarAbierto(true)
             }}
           >
-            {ordenRegistrada ? 'Orden Registrada' : 'Registrar Orden'}
+            {ordenRegistrada ? 'Orden registrada' : 'Registrar orden'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
             <button
               type="button"
-              className="btn-secondary wide"
+              className="btn-secondary wide btn-actualizar-orden"
               disabled={actualizandoOrden}
               onClick={() => void actualizarOrden()}
             >

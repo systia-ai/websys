@@ -153,19 +153,49 @@ export function patchReparacionEntregada(estatus = 'ENTREGADA') {
   }
 }
 
+function esErrorColumnaDesconocida(error, nombreColumna) {
+  const msg = String(error?.message ?? error ?? '').toLowerCase()
+  const code = String(error?.code ?? '')
+  const col = String(nombreColumna ?? '').toLowerCase()
+  if (!col) return msg.includes('column') || code === 'PGRST204' || code === '42703'
+  return (
+    msg.includes(col) ||
+    (msg.includes('column') && msg.includes(col.replace(/_/g, ''))) ||
+    code === 'PGRST204' ||
+    code === '42703'
+  )
+}
+
+/** UPDATE en reparaciones; reintenta sin columnas opcionales si la BD aún no las tiene. */
+export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
+  let payload = { ...patch }
+  for (let intento = 0; intento < 6; intento += 1) {
+    const { error } = await supabase.from('reparaciones').update(payload).eq('id', reparaId)
+    if (!error) return
+    const msg = String(error.message ?? '').toLowerCase()
+    if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
+      throw new Error(
+        'No tiene permiso para actualizar esta orden en la base de datos. Revise la sesión de Supabase o las políticas RLS del proyecto.',
+      )
+    }
+    if (payload.fecha_entrega != null && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
+      const { fecha_entrega: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if (payload.es_orden_duplicada != null && esErrorColumnaDesconocida(error, 'es_orden_duplicada')) {
+      const { es_orden_duplicada: _d, ...rest } = payload
+      payload = rest
+      continue
+    }
+    throw error
+  }
+  throw new Error('No se pudo actualizar la orden tras varios intentos.')
+}
+
 /** Actualiza reparación a entregada; omite fecha_entrega si la columna no existe en BD. */
 export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
-  const patch = patchReparacionEntregada()
-  const first = await supabase.from('reparaciones').update(patch).eq('id', reparaId)
-  if (!first.error) return
-  const msg = String(first.error.message ?? '').toLowerCase()
-  if (msg.includes('fecha_entrega') || msg.includes('column')) {
-    const { fecha_entrega: _f, ...rest } = patch
-    const retry = await supabase.from('reparaciones').update(rest).eq('id', reparaId)
-    if (!retry.error) return
-    throw retry.error
-  }
-  throw first.error
+  await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada())
 }
 
 /** Reparación aún en taller (no entregada). */

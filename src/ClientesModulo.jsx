@@ -8,6 +8,7 @@ const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_EQUIPOS = 'sistefix_local_equipos'
+const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function nextLocalClienteId(list) {
   const max = list.reduce((m, r) => {
@@ -65,6 +66,8 @@ export default function ClientesModulo({
   const [clienteCuentasPanel, setClienteCuentasPanel] = useState(null)
   const [cuentasEncontradas, setCuentasEncontradas] = useState([])
   const [repsPorReparaId, setRepsPorReparaId] = useState({})
+  const [equiposPorIdCuentas, setEquiposPorIdCuentas] = useState({})
+  const [pagosClienteCuentas, setPagosClienteCuentas] = useState([])
   const [loadingCuentas, setLoadingCuentas] = useState(false)
   const [cuentaTitle, setCuentaTitle] = useState('Cuentas del Cliente')
   const [cuentaSubtitle, setCuentaSubtitle] = useState('')
@@ -254,8 +257,31 @@ export default function ClientesModulo({
             }
           }
         }
+        const eqMap = {}
+        let pagosTodos = []
+        if (supabase) {
+          const [eqRes, pagRes] = await Promise.all([
+            supabase.from('equipos').select('*'),
+            supabase.from('pagosclientes').select('*'),
+          ])
+          if (!eqRes.error) {
+            for (const e of eqRes.data ?? []) {
+              if (e?.id != null) eqMap[String(e.id)] = e
+            }
+          }
+          if (!pagRes.error) pagosTodos = pagRes.data ?? []
+        } else {
+          for (const e of readLs(LS_EQUIPOS, [])) {
+            if (e?.id != null) eqMap[String(e.id)] = e
+          }
+          pagosTodos = readLs(LS_PAGOS, [])
+        }
+        const idsCuenta = new Set(cuentasCliente.map((c) => String(c.id)))
+        const pagosDelCliente = pagosTodos.filter((p) => idsCuenta.has(String(p?.cuenta_id)))
         setCuentasEncontradas(cuentasCliente)
         setRepsPorReparaId(map)
+        setEquiposPorIdCuentas(eqMap)
+        setPagosClienteCuentas(pagosDelCliente)
         setCuentaSubtitle(
           cuentasCliente.length === 0
             ? 'No se encontraron cuentas para este cliente'
@@ -266,6 +292,8 @@ export default function ClientesModulo({
         setCuentaSubtitle(`Error al buscar cuentas: ${e.message}`)
         setCuentasEncontradas([])
         setRepsPorReparaId({})
+        setEquiposPorIdCuentas({})
+        setPagosClienteCuentas([])
       } finally {
         setLoadingCuentas(false)
       }
@@ -601,6 +629,8 @@ export default function ClientesModulo({
           subtitle={cuentaSubtitle}
           cuentas={cuentasEncontradas}
           repsPorReparaId={repsPorReparaId}
+          equiposPorId={equiposPorIdCuentas}
+          pagosCliente={pagosClienteCuentas}
           loading={loadingCuentas}
           onClose={cerrarPanelCuentas}
           onSelectCuenta={(cuenta) => irVentasConCuenta(cuenta)}

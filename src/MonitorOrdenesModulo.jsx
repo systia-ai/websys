@@ -88,20 +88,36 @@ function estatusParaFiltro(rep) {
 
 const TECNICO_TODAS = ''
 const TECNICO_SIN = '__sin_tecnico__'
-const TIPO_SERVICIO_SIN = '__SIN_TIPO__'
 
-function tipoServicioDeRep(rep, equipoPorId) {
-  let t = String(rep?.tipo_reparacion ?? '').trim().toUpperCase()
-  if (!t && rep?.equipo_id != null) {
-    const eq = equipoPorId.get(String(rep.equipo_id))
-    t = String(eq?.tipo_reparacion ?? '').trim().toUpperCase()
-  }
-  return t || TIPO_SERVICIO_SIN
+const TIPOS_SERVICIO_FILTRO = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
+
+function sinAcentos(s) {
+  return String(s)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
 }
 
-function etiquetaTipoServicio(tipo) {
-  if (tipo === TIPO_SERVICIO_SIN) return '(Sin tipo)'
-  return tipo
+/** Alinea variantes (acentos, mayúsculas) con el catálogo; null si no coincide. */
+function claveCanonicaTipoServicio(raw) {
+  const t = String(raw ?? '').trim()
+  if (!t) return null
+  const norm = sinAcentos(t)
+  for (const cat of TIPOS_REPARACION) {
+    const c = String(cat).trim().toUpperCase()
+    if (norm === sinAcentos(cat)) return c
+  }
+  return null
+}
+
+function tipoServicioDeRep(rep, equipoPorId) {
+  let raw = String(rep?.tipo_reparacion ?? '').trim()
+  if (!raw && rep?.equipo_id != null) {
+    const eq = equipoPorId.get(String(rep.equipo_id))
+    raw = String(eq?.tipo_reparacion ?? '').trim()
+  }
+  return claveCanonicaTipoServicio(raw)
 }
 
 /**
@@ -121,7 +137,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => new Set(['INGRESADO']))
   /** Tipos de servicio incluidos (por defecto todos los del catálogo). */
   const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
-    () => new Set(TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())),
+    () => new Set(TIPOS_SERVICIO_FILTRO),
   )
   /** 'asc' = más antigua primero, 'desc' = más reciente primero */
   const [ordenFecha, setOrdenFecha] = useState('asc')
@@ -242,29 +258,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     return { nombres, haySin }
   }, [reparaciones, tecnicosCatalogo])
 
-  const tiposServicioLista = useMemo(() => {
-    const ordenCat = new Map(TIPOS_REPARACION.map((t, i) => [String(t).trim().toUpperCase(), i]))
-    const extra = new Set()
-    let haySin = false
-    for (const r of reparaciones) {
-      const t = tipoServicioDeRep(r, equipoPorId)
-      if (t === TIPO_SERVICIO_SIN) haySin = true
-      else if (!ordenCat.has(t)) extra.add(t)
-    }
-    const items = [...TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())]
-    for (const t of extra) items.push(t)
-    if (haySin) items.push(TIPO_SERVICIO_SIN)
-    return items.sort((a, b) => {
-      const ia = ordenCat.get(a)
-      const ib = ordenCat.get(b)
-      if (ia != null && ib != null) return ia - ib
-      if (ia != null) return -1
-      if (ib != null) return 1
-      if (a === TIPO_SERVICIO_SIN) return 1
-      if (b === TIPO_SERVICIO_SIN) return -1
-      return a.localeCompare(b, 'es', { sensitivity: 'base' })
-    })
-  }, [reparaciones, equipoPorId])
+  const tiposServicioLista = TIPOS_SERVICIO_FILTRO
 
   const filasOrdenadas = useMemo(() => {
     const sel = estatusSeleccionados
@@ -283,7 +277,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     })
     const tiposSel = tiposServicioSeleccionados
     if (tiposSel.size > 0) {
-      filtradas = filtradas.filter((r) => tiposSel.has(tipoServicioDeRep(r, equipoPorId)))
+      filtradas = filtradas.filter((r) => {
+        const t = tipoServicioDeRep(r, equipoPorId)
+        return t != null && tiposSel.has(t)
+      })
     }
     if (tecnicoFiltro === TECNICO_SIN) {
       filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
@@ -447,10 +444,6 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
   const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
-  const filtroTipoServicioActivo =
-    tiposServicioSeleccionados.size > 0 &&
-    tiposServicioSeleccionados.size < tiposServicioLista.length
-
   return (
     <div className="servicios-root inventarios-root monitor-ordenes-root">
       <header className="servicios-appbar">
@@ -632,10 +625,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
             </div>
           </fieldset>
 
-          <fieldset
-            className={`monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroTipoServicioActivo)}`}
-          >
-            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+          <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Tipo de servicio</legend>
             <div className="monitor-ordenes-estatus-grid">
               {tiposServicioLista.map((tipo) => {
@@ -652,7 +642,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       checked={checked}
                       onChange={() => toggleTipoServicio(tipo)}
                     />
-                    <span className="monitor-ordenes-check-text">{etiquetaTipoServicio(tipo)}</span>
+                    <span className="monitor-ordenes-check-text">{tipo}</span>
                     <button
                       type="button"
                       className="monitor-ordenes-solo"

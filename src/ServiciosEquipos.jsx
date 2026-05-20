@@ -123,11 +123,17 @@ export default function ServiciosEquipos({
     setLoading(true)
     try {
       if (supabase) {
-        const { data, error } = await supabase.from('equipos').select('*').order('id', { ascending: false })
-        if (error) throw error
-        setEquipos(data ?? [])
+        const [eqRes, cliRes] = await Promise.all([
+          supabase.from('equipos').select('*').order('id', { ascending: false }),
+          supabase.from('clientes').select('*').order('id', { ascending: false }),
+        ])
+        if (eqRes.error) throw eqRes.error
+        if (cliRes.error) throw cliRes.error
+        setEquipos(eqRes.data ?? [])
+        setClientes((cliRes.data ?? []).map(normalizeClienteRow))
       } else {
         setEquipos(readLs(LS_EQUIPOS, []))
+        setClientes(readLs(LS_CLIENTES, []).map(normalizeClienteRow))
       }
     } catch (e) {
       onError(`Error al cargar equipos: ${e.message}`)
@@ -140,15 +146,39 @@ export default function ServiciosEquipos({
     cargarEquipos()
   }, [cargarEquipos])
 
+  const clientePorId = useMemo(() => {
+    const m = new Map()
+    for (const c of clientes) {
+      if (c?.id != null) m.set(String(c.id), c)
+    }
+    return m
+  }, [clientes])
+
+  function nombreClienteEquipo(eq) {
+    const cid = eq?.cliente_id
+    if (cid == null || cid === '') return '—'
+    const c = clientePorId.get(String(cid))
+    const nombre = String(c?.nombre ?? '').trim()
+    return nombre || `Cliente #${cid}`
+  }
+
   const filtrados = useMemo(() => {
     const t = search.trim().toLowerCase()
     if (!t) return equipos
-    return equipos.filter((eq) =>
-      [eq.serie, eq.tipo_equipo, eq.descripcion, eq.tipo_reparacion]
+    return equipos.filter((eq) => {
+      const blob = [
+        eq.serie,
+        eq.tipo_equipo,
+        eq.descripcion,
+        eq.tipo_reparacion,
+        nombreClienteEquipo(eq),
+      ]
         .filter(Boolean)
-        .some((s) => String(s).toLowerCase().includes(t)),
-    )
-  }, [equipos, search])
+        .map((s) => String(s).toLowerCase())
+        .join(' ')
+      return blob.includes(t)
+    })
+  }, [equipos, search, clientePorId])
 
   async function cargarClientesLista() {
     setClientesLoading(true)
@@ -635,7 +665,7 @@ export default function ServiciosEquipos({
             🔍
           </span>
           <input
-            placeholder="Buscar por serie, tipo, descripción o tipo de reparación..."
+            placeholder="Buscar por serie, cliente, tipo, descripción o reparación..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -677,6 +707,7 @@ export default function ServiciosEquipos({
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
                     <span className="inventario-tabla-th inventario-celda inventario-celda--serie">Serie</span>
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--cliente">Cliente</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--tipo-equipo">Tipo</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Descripción</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--tipo-rep">Reparación</span>
@@ -694,6 +725,9 @@ export default function ServiciosEquipos({
                       >
                         {eq.serie || 'Sin serie'}
                       </button>
+                      <span className="inventario-celda inventario-celda--cliente equipos-celda-cliente">
+                        {nombreClienteEquipo(eq)}
+                      </span>
                       <span className="inventario-celda inventario-celda--tipo-equipo">{eq.tipo_equipo || '—'}</span>
                       <span className="inventario-celda inventario-celda--desc">{eq.descripcion || '—'}</span>
                       <span className="inventario-celda inventario-celda--tipo-rep">{eq.tipo_reparacion || '—'}</span>
@@ -729,6 +763,9 @@ export default function ServiciosEquipos({
               <li key={eq.id} className="equipo-card">
                 <button type="button" className="equipo-card-main" onClick={() => clickFilaEquipo(eq)}>
                   <strong>{eq.serie || 'Sin serie'}</strong>
+                  <span className="equipo-card-cliente muted">
+                    Cliente: {nombreClienteEquipo(eq)}
+                  </span>
                   <span className="muted">Tipo: {eq.tipo_equipo || '—'}</span>
                   {eq.descripcion ? <span className="muted small">{eq.descripcion}</span> : null}
                   {eq.tipo_reparacion ? <span className="muted small">Reparación: {eq.tipo_reparacion}</span> : null}
@@ -906,12 +943,23 @@ export default function ServiciosEquipos({
           <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Reparaciones del Equipo</h3>
+              <p className="equipo-modal-resumen muted small">
+                <span>
+                  <strong>Serie:</strong> {modalRep.serie || '—'}
+                </span>
+                <span>
+                  <strong>Cliente:</strong> {nombreClienteEquipo(modalRep)}
+                </span>
+                <span>
+                  <strong>Tipo:</strong> {modalRep.tipo_equipo || '—'}
+                </span>
+              </p>
               <p className="muted small">
                 {repsLoading
                   ? 'Buscando…'
                   : repsEquipo.length > 0
-                    ? `Se encontraron ${repsEquipo.length} reparación(es) para “${modalRep.serie}”`
-                    : `No se encontraron reparaciones para “${modalRep.serie}”`}
+                    ? `Se encontraron ${repsEquipo.length} reparación(es) para este equipo`
+                    : 'No se encontraron reparaciones para este equipo'}
               </p>
             </div>
             <div className="modal-body">
