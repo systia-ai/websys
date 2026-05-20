@@ -11,6 +11,15 @@ export function useAuth() {
   return ctx
 }
 
+function LoginAvatar() {
+  return (
+    <div className="auth-login-avatar" aria-hidden>
+      <span className="auth-login-avatar-orbit" />
+      <span className="auth-login-avatar-s">S</span>
+    </div>
+  )
+}
+
 function LoginScreen({ supabase, onSignedIn }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -48,14 +57,11 @@ function LoginScreen({ supabase, onSignedIn }) {
   }
 
   return (
-    <div className="auth-login-root">
+    <div className="auth-login-shell home-page-shell">
+      <div className="home-page-bg" aria-hidden />
+      <div className="auth-login-inner home-page-inner">
       <div className="auth-login-card">
-        <img
-          className="auth-login-logo"
-          src={`${import.meta.env.BASE_URL}assets/sistebit-logo.png`}
-          alt="Sistebit"
-          decoding="async"
-        />
+        <LoginAvatar />
         <h1 className="auth-login-title">Sistefix Web</h1>
         <p className="auth-login-sub">Acceso para personal del taller</p>
         <form className="auth-login-form" onSubmit={handleSubmit}>
@@ -95,6 +101,7 @@ function LoginScreen({ supabase, onSignedIn }) {
         <p className="auth-login-hint muted small">
           Si no tiene cuenta, pida al administrador que la cree en Supabase (Authentication → Users).
         </p>
+      </div>
       </div>
     </div>
   )
@@ -149,8 +156,11 @@ export function AuthProvider({ children }) {
 
   if (!authReady) {
     return (
-      <div className="auth-login-root">
-        <p className="auth-login-loading muted">Verificando sesión…</p>
+      <div className="auth-login-shell home-page-shell">
+        <div className="home-page-bg" aria-hidden />
+        <div className="auth-login-inner home-page-inner">
+          <p className="auth-login-loading muted">Verificando sesión…</p>
+        </div>
       </div>
     )
   }
