@@ -4501,6 +4501,50 @@ input.full {
   cursor: pointer;
 }
 
+.ventas-liquidar-aviso {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  color: #1b5e20;
+}
+
+.ventas-liquidar-aviso p {
+  margin: 0 0 12px;
+  line-height: 1.45;
+}
+
+.ventas-liquidar-aviso--modal {
+  margin-bottom: 14px;
+}
+
+.ventas-sin-adeudo-aviso {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eceff1;
+}
+
+.btn-liquidar-cuenta--inline {
+  width: 100%;
+  margin: 0;
+}
+
+.ventas-pago-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ventas-pago-acciones .btn-agregar-pago-ventas {
+  margin: 0;
+}
+
+.btn-pagar-adeudo-total--principal {
+  margin-bottom: 0;
+}
+
 .btn-agregar-pago-ventas {
   width: 100%;
   border: 0;

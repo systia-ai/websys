@@ -1379,13 +1379,6 @@ export default function ReparacionesOrden({
           {correoClienteUi ? <span>Email: {correoClienteUi}</span> : null}
         </div>
 
-        {ordenRegistrada && (esOrdenExistente || idReparacion != null) ? (
-          <p className="rep-aviso-actualizar" role="note">
-            Para guardar cambios (estatus, técnico, problema, solución, etc.), use{' '}
-            <strong>Actualizar orden</strong>. El botón «Orden registrada» solo aplica al dar de alta una orden nueva.
-          </p>
-        ) : null}
-
         <div className="rep-actions">
           <button
             type="button"

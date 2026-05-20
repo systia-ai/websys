@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { aYmdLocalDesdeRaw, isReparacionActiva } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, isReparacionActiva, sincronizarCuentaLiquidadaSiSaldoCero } from './reparacionUtils.js'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
 
@@ -282,7 +282,29 @@ export default function ClientesModulo({
         }
         const idsCuenta = new Set(cuentasCliente.map((c) => String(c.id)))
         const pagosDelCliente = pagosTodos.filter((p) => idsCuenta.has(String(p?.cuenta_id)))
-        setCuentasEncontradas(cuentasCliente)
+        let cuentasFinales = cuentasCliente
+        if (supabase) {
+          cuentasFinales = await Promise.all(
+            cuentasCliente.map((cu) => {
+              const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
+              return sincronizarCuentaLiquidadaSiSaldoCero(supabase, cu, cu.repara_id ?? null, pagosC)
+            }),
+          )
+        } else {
+          cuentasFinales = cuentasCliente.map((cu) => {
+            if (String(cu.estatus ?? '').toUpperCase() === 'LIQUIDADA') return cu
+            if (Math.abs(Number(cu.total ?? 0)) > 0.0001) return cu
+            const nowLiq = new Date().toISOString()
+            const list = readLs(LS_CUENTAS, [])
+            const actualizada = { ...cu, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
+            writeLs(
+              LS_CUENTAS,
+              list.map((c) => (sameId(c.id, cu.id) ? actualizada : c)),
+            )
+            return actualizada
+          })
+        }
+        setCuentasEncontradas(cuentasFinales)
         setRepsPorReparaId(map)
         setEquiposPorIdCuentas(eqMap)
         setPagosClienteCuentas(pagosDelCliente)

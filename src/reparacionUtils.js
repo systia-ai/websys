@@ -275,6 +275,66 @@ export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
   await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada())
 }
 
+/**
+ * Si el adeudo ya está cubierto (total $0 o pagos ≥ total) pero sigue PENDIENTE, marca LIQUIDADA en BD.
+ */
+export async function sincronizarCuentaLiquidadaSiSaldoCero(
+  supabase,
+  cuenta,
+  reparaId = null,
+  pagosCuenta = [],
+) {
+  if (!cuenta?.id) return cuenta
+  const est = String(cuenta.estatus ?? '').trim().toUpperCase()
+  if (est === 'LIQUIDADA') return cuenta
+
+  const totalCuenta = Number(cuenta.total ?? 0)
+  const sumPagos = (pagosCuenta ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
+  const saldoCero = Math.abs(totalCuenta) <= 0.0001
+  const pagosCubren = totalCuenta > 0.0001 && sumPagos >= totalCuenta - 0.01
+  if (!saldoCero && !pagosCubren) return cuenta
+  if (!saldoCero && (pagosCuenta ?? []).length === 0) return cuenta
+
+  const nowLiq = new Date().toISOString()
+  const patch = { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+
+  if (supabase) {
+    await actualizarCuentaSupabase(supabase, cuenta.id, patch)
+    if (reparaId != null) {
+      await marcarReparacionEntregadaSupabase(supabase, reparaId)
+    }
+  }
+
+  return { ...cuenta, ...patch }
+}
+
+/** UPDATE en cuentas; reintenta sin columnas opcionales (fecha_liquidada, updated_at). */
+export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
+  let payload = { ...patch }
+  for (let intento = 0; intento < 6; intento += 1) {
+    const { error } = await supabase.from('cuentas').update(payload).eq('id', cuentaId)
+    if (!error) return
+    const msg = String(error.message ?? '').toLowerCase()
+    if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
+      throw new Error(
+        'No tiene permiso para actualizar esta cuenta. Revise la sesión de Supabase o las políticas RLS.',
+      )
+    }
+    if (payload.fecha_liquidada != null && esErrorColumnaDesconocida(error, 'fecha_liquidada')) {
+      const { fecha_liquidada: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if (payload.updated_at != null && esErrorColumnaDesconocida(error, 'updated_at')) {
+      const { updated_at: _u, ...rest } = payload
+      payload = rest
+      continue
+    }
+    throw error
+  }
+  throw new Error('No se pudo actualizar la cuenta tras varios intentos.')
+}
+
 /** Reparación aún en taller (no entregada). */
 export function isReparacionActiva(rep) {
   return !estatusEsEntregado(rep?.estatus)

@@ -10,7 +10,12 @@ import {
   recientesProductosDesdeCuentamov,
   registrarProductoRecienteVentas,
 } from './productosRecientesVentas.js'
-import { marcarReparacionEntregadaSupabase, patchReparacionEntregada } from './reparacionUtils.js'
+import {
+  actualizarCuentaSupabase,
+  marcarReparacionEntregadaSupabase,
+  patchReparacionEntregada,
+  sincronizarCuentaLiquidadaSiSaldoCero,
+} from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -40,6 +45,63 @@ function writeLs(key, v) {
 
 function sumSubtotales(lineas) {
   return lineas.reduce((s, L) => s + Number(L.subtotal ?? 0), 0)
+}
+
+/** Saldo a cobrar: líneas en pantalla; si no hay movimientos, usa total guardado en la cuenta. */
+function calcularSaldoPendiente(lineas, cuentaTotal) {
+  const fromLineas = sumSubtotales(lineas)
+  if (fromLineas > 0.0001) return fromLineas
+  const ct = Number(cuentaTotal ?? 0)
+  if (ct > 0.0001) return ct
+  return fromLineas
+}
+
+/** Si el costo de reparación en la orden no está en reparamov, lo muestra como cargo virtual. */
+function inyectarCostoReparacionSiFalta(lineas, rep) {
+  if (!rep) return lineas
+  const costo = Number(rep.costo_reparacion ?? 0)
+  if (costo <= 0.0001) return lineas
+  const sumRepMov = lineas
+    .filter((l) => l.tipo === 'reparamov')
+    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+  if (sumRepMov >= costo - 0.01) return lineas
+  const faltante = Math.max(0, costo - sumRepMov)
+  return [
+    ...lineas,
+    {
+      key: `rep_costo_${rep.id}`,
+      tipo: 'reparacion_cargo',
+      dbId: null,
+      virtual: true,
+      producto_id: 0,
+      cantidad: 1,
+      descripcion: `[REPARACIÓN] ${String(rep.descripcion_equipo ?? 'Costo de reparación').trim() || 'Costo de reparación'}`,
+      precioUnitario: faltante,
+      subtotal: faltante,
+    },
+  ]
+}
+
+/** Cuenta con total en BD pero sin movimientos cargados (p. ej. datos solo en Android). */
+function inyectarSaldoCuentaSiSinMovimientos(lineas, cuentaRow) {
+  if (!cuentaRow?.id) return lineas
+  const sum = sumSubtotales(lineas)
+  const ct = Number(cuentaRow.total ?? 0)
+  if (Math.abs(sum) > 0.0001 || ct <= 0.0001) return lineas
+  return [
+    ...lineas,
+    {
+      key: `cuenta_saldo_${cuentaRow.id}`,
+      tipo: 'cuenta_cargo',
+      dbId: null,
+      virtual: true,
+      producto_id: 0,
+      cantidad: 1,
+      descripcion: '[CUENTA] Saldo pendiente',
+      precioUnitario: ct,
+      subtotal: ct,
+    },
+  ]
 }
 
 function lookupProducto(productosPorId, productoId) {
@@ -134,7 +196,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
   const cuentaEstatus = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '')
   const totalVenta = useMemo(() => sumSubtotales(lineas), [lineas])
+  const saldoPendiente = useMemo(
+    () => calcularSaldoPendiente(lineas, cuentaInfo?.total ?? cuentaInicial?.total),
+    [lineas, cuentaInfo?.total, cuentaInicial?.total],
+  )
   const totalStr = totalVenta.toFixed(2)
+  const puedePagarAdeudoTotal =
+    esCuentaExistente && saldoPendiente > 0.0001 && cuentaEstatus.toUpperCase() !== 'LIQUIDADA'
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -192,12 +260,22 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         }
 
         let reps = []
+        let repOrden = null
         if (rid != null) {
           if (supabase) {
-            const r2 = await supabase.from('reparamov').select('*').eq('repara_id', rid)
+            const [r2, rRep] = await Promise.all([
+              supabase.from('reparamov').select('*').eq('repara_id', rid),
+              supabase
+                .from('reparaciones')
+                .select('id, costo_reparacion, descripcion_equipo')
+                .eq('id', rid)
+                .maybeSingle(),
+            ])
             if (!r2.error) reps = r2.data ?? []
+            if (!rRep.error) repOrden = rRep.data
           } else {
             reps = readLs(LS_REPARAMOV, []).filter((x) => sameId(x.repara_id, rid))
+            repOrden = readLs(LS_REP, []).find((x) => sameId(x.id, rid)) ?? null
           }
         }
 
@@ -220,8 +298,38 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         }
         const productosPorId = new Map(productosLista.map((p) => [String(p.id), p]))
 
-        const built = buildLineasDesdeServidor({ movs, reps, pagos, productosPorId })
+        let built = buildLineasDesdeServidor({ movs, reps, pagos, productosPorId })
+        built = inyectarCostoReparacionSiFalta(built, repOrden)
+        built = inyectarSaldoCuentaSiSinMovimientos(built, cuentaRow)
         setLineas(built)
+
+        if (cuentaRow?.id && Math.abs(sumSubtotales(built)) <= 0.0001) {
+          const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
+          if (est !== 'LIQUIDADA') {
+            let actualizada = cuentaRow
+            if (supabase) {
+              actualizada = await sincronizarCuentaLiquidadaSiSaldoCero(supabase, cuentaRow, rid, pagos)
+            } else {
+              const nowLiq = new Date().toISOString()
+              const cidNum = cuentaRow.id
+              const list = readLs(LS_CUENTAS, [])
+              actualizada = { ...cuentaRow, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
+              writeLs(
+                LS_CUENTAS,
+                list.map((c) => (sameId(c.id, cidNum) ? actualizada : c)),
+              )
+              if (rid != null) {
+                const lr = readLs(LS_REP, [])
+                const patchEnt = patchReparacionEntregada()
+                writeLs(
+                  LS_REP,
+                  lr.map((r) => (sameId(r.id, rid) ? { ...r, ...patchEnt } : r)),
+                )
+              }
+            }
+            setCuentaInfo(actualizada)
+          }
+        }
       } catch (e) {
         onError?.(`Error al cargar cuenta: ${e.message}`)
         setLineas([])
@@ -331,7 +439,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('No hay cuenta para liquidar')
       return
     }
-    const monto = Number(totalVenta)
+    const monto = Number(saldoPendiente)
     if (!Number.isFinite(monto) || monto <= 0.0001) {
       onError?.('No hay adeudo pendiente en esta cuenta')
       return
@@ -345,7 +453,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       onError?.('No hay cuenta para liquidar')
       return
     }
-    const monto = Number(totalVenta)
+    const monto = Number(saldoPendiente)
     if (!Number.isFinite(monto) || monto <= 0.0001) {
       onError?.('No hay adeudo pendiente en esta cuenta')
       return
@@ -366,11 +474,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         if (error) throw error
         nuevoId = data?.id
         const nowLiq = new Date().toISOString()
-        const { error: eCu } = await supabase
-          .from('cuentas')
-          .update({ total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq })
-          .eq('id', cuentaId)
-        if (eCu) throw eCu
+        await actualizarCuentaSupabase(supabase, cuentaId, {
+          total: 0,
+          estatus: 'LIQUIDADA',
+          fecha_liquidada: nowLiq,
+          updated_at: nowLiq,
+        })
         if (reparaIdCuenta != null) {
           await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
         }
@@ -450,8 +559,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         writeLs(LS_PAGOS, [{ id: nuevoId, ...row }, ...all])
       }
       const montoN = Number(monto)
-      setLineas((prev) => [
-        ...prev,
+      const nuevasLineas = [
+        ...lineas,
         {
           key: `pago_${nuevoId}`,
           tipo: 'pago',
@@ -462,9 +571,20 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           precioUnitario: montoN,
           subtotal: -montoN,
         },
-      ])
+      ]
+      const nuevoTotal = sumSubtotales(nuevasLineas)
+      setLineas(nuevasLineas)
       setModalPago(false)
-      onNotice?.('Pago agregado')
+      if (Math.abs(nuevoTotal) <= 0.0001) {
+        const liq = await aplicarLiquidacionCuenta({ avisar: false, totalOverride: nuevoTotal })
+        onNotice?.(
+          liq
+            ? 'Pago registrado. Cuenta liquidada (saldo $0).'
+            : 'Pago registrado. Pulse LIQUIDAR CUENTA para cerrar la cuenta.',
+        )
+      } else {
+        onNotice?.('Pago agregado')
+      }
     } catch (e) {
       onError?.(`Error al registrar pago: ${e.message}`)
     }
@@ -622,6 +742,10 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         if (prodId > 0 && Number.isFinite(cantLinea) && cantLinea > 0 && L.contable !== false) {
           await reponerExistencia(supabase, prodId, cantLinea)
         }
+      } else if (L.virtual) {
+        setLineas((prev) => prev.filter((x) => x.key !== L.key))
+        onNotice?.('Cargo de referencia quitado de la lista (no estaba guardado en movimientos)')
+        return
       } else if (L.tipo === 'pago' && L.dbId != null) {
         if (supabase) {
           const { error } = await supabase.from('pagosclientes').delete().eq('id', L.dbId)
@@ -640,44 +764,57 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
   }
 
-  async function liquidarCuenta() {
-    if (Math.abs(totalVenta) > 0.0001) {
-      onError?.(`No se puede liquidar. El total debe ser $0.00. Total actual: $${totalStr}`)
-      return
-    }
-    if (!cuentaId) return
-    try {
-      const nowLiq = new Date().toISOString()
-      if (supabase) {
-        const { error } = await supabase
-          .from('cuentas')
-          .update({ estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq })
-          .eq('id', cuentaId)
-        if (error) throw error
-        if (reparaIdCuenta != null) {
-          await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
-        }
-      } else {
-        const list = readLs(LS_CUENTAS, [])
-        writeLs(
-          LS_CUENTAS,
-          list.map((c) =>
-            sameId(c.id, cuentaId)
-              ? { ...c, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
-              : c,
-          ),
-        )
-        if (reparaIdCuenta != null) {
-          const lr = readLs(LS_REP, [])
-          const patchEnt = patchReparacionEntregada()
-          writeLs(
-            LS_REP,
-            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
-          )
-        }
+  async function aplicarLiquidacionCuenta({ avisar = true, totalOverride = null } = {}) {
+    if (!cuentaId) return false
+    const totalCheck = totalOverride != null ? Number(totalOverride) : totalVenta
+    if (Math.abs(totalCheck) > 0.0001) {
+      if (avisar) {
+        onError?.(`No se puede liquidar. El total debe ser $0.00. Total actual: $${totalStr}`)
       }
-      setCuentaInfo((prev) => (prev ? { ...prev, estatus: 'LIQUIDADA' } : { estatus: 'LIQUIDADA' }))
-      onNotice?.('Cuenta liquidada')
+      return false
+    }
+    const nowLiq = new Date().toISOString()
+    if (supabase) {
+      await actualizarCuentaSupabase(supabase, cuentaId, {
+        total: 0,
+        estatus: 'LIQUIDADA',
+        fecha_liquidada: nowLiq,
+        updated_at: nowLiq,
+      })
+      if (reparaIdCuenta != null) {
+        await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
+      }
+    } else {
+      const list = readLs(LS_CUENTAS, [])
+      writeLs(
+        LS_CUENTAS,
+        list.map((c) =>
+          sameId(c.id, cuentaId)
+            ? { ...c, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+            : c,
+        ),
+      )
+      if (reparaIdCuenta != null) {
+        const lr = readLs(LS_REP, [])
+        const patchEnt = patchReparacionEntregada()
+        writeLs(
+          LS_REP,
+          lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
+        )
+      }
+    }
+    setCuentaInfo((prev) =>
+      prev
+        ? { ...prev, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
+        : { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq },
+    )
+    return true
+  }
+
+  async function liquidarCuenta() {
+    try {
+      const ok = await aplicarLiquidacionCuenta({ avisar: true })
+      if (ok) onNotice?.('Cuenta liquidada')
     } catch (e) {
       onError?.(`Error al liquidar: ${e.message}`)
     }
@@ -897,9 +1034,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 type="button"
                 className="btn-pagar-adeudo-total"
                 onClick={pagarAdeudoTotalCuenta}
-                disabled={!esCuentaExistente || Math.abs(totalVenta) <= 0.0001 || pagandoAdeudoTotal}
+                disabled={
+                  !puedePagarAdeudoTotal || pagandoAdeudoTotal || cuentaEstatus.toUpperCase() === 'LIQUIDADA'
+                }
                 title={
-                  totalVenta > 0.0001
+                  saldoPendiente > 0.0001
                     ? 'Registrar pago por el saldo total y liquidar la cuenta'
                     : 'No hay adeudo pendiente en esta cuenta'
                 }
@@ -907,7 +1046,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 <span aria-hidden="true">💵</span>
                 <span>
                   Pagar adeudo total
-                  {totalVenta > 0.0001 ? <> · <strong>${totalVenta.toFixed(2)}</strong></> : null}
+                  {saldoPendiente > 0.0001 ? (
+                    <>
+                      {' '}
+                      · <strong>${saldoPendiente.toFixed(2)}</strong>
+                    </>
+                  ) : null}
                 </span>
               </button>
               <input className="full" placeholder="Buscar concepto…" value={busqCat} onChange={(e) => setBusqCat(e.target.value)} />
@@ -919,7 +1063,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                       className={`rep-card ${selCat === c ? 'selected' : ''}`}
                       onClick={() => {
                         setSelCat(c)
-                        setValorPago(String(c.cantidad ?? ''))
+                        const catVal = Number(c.cantidad ?? 0)
+                        let sugerido = catVal
+                        if (saldoPendiente > 0.0001) {
+                          sugerido = catVal > 0 ? Math.min(saldoPendiente, catVal) : saldoPendiente
+                        }
+                        setValorPago(sugerido > 0 ? String(sugerido) : '')
+                        setCantPago('1')
                       }}
                     >
                       <strong>{c.concepto}</strong>
@@ -972,7 +1122,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <h3>💵 ¿Cómo se realizará el pago?</h3>
               <p className="muted small" style={{ margin: '4px 0 0' }}>
                 Selecciona la forma de pago para liquidar el adeudo total de{' '}
-                <strong>${Number(totalVenta).toFixed(2)}</strong>.
+                <strong>${Number(saldoPendiente).toFixed(2)}</strong>.
               </p>
             </div>
             <div className="modal-body forma-pago-opciones">
