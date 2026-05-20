@@ -2104,6 +2104,10 @@ td {
   margin-top: 4px;
 }
 
+.monitor-ordenes-fieldset--estatus + .monitor-ordenes-fieldset--estatus {
+  margin-top: 10px;
+}
+
 .monitor-ordenes-legend {
   font-size: 0.85rem;
   font-weight: 700;

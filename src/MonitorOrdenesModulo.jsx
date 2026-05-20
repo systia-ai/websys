@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial reparaciones / catálogos */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ESTATUS_ORDEN } from './catalogos.js'
+import { ESTATUS_ORDEN, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import {
   aYmdLocalDesdeRaw,
@@ -88,6 +88,21 @@ function estatusParaFiltro(rep) {
 
 const TECNICO_TODAS = ''
 const TECNICO_SIN = '__sin_tecnico__'
+const TIPO_SERVICIO_SIN = '__SIN_TIPO__'
+
+function tipoServicioDeRep(rep, equipoPorId) {
+  let t = String(rep?.tipo_reparacion ?? '').trim().toUpperCase()
+  if (!t && rep?.equipo_id != null) {
+    const eq = equipoPorId.get(String(rep.equipo_id))
+    t = String(eq?.tipo_reparacion ?? '').trim().toUpperCase()
+  }
+  return t || TIPO_SERVICIO_SIN
+}
+
+function etiquetaTipoServicio(tipo) {
+  if (tipo === TIPO_SERVICIO_SIN) return '(Sin tipo)'
+  return tipo
+}
 
 /**
  * Monitor de órdenes: lista de reparaciones filtrable por estatus, orden por fecha de registro,
@@ -104,6 +119,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   /** Estatus incluidos en el listado (por defecto solo INGRESADO). */
   const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => new Set(['INGRESADO']))
+  /** Tipos de servicio incluidos (por defecto todos los del catálogo). */
+  const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
+    () => new Set(TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())),
+  )
   /** 'asc' = más antigua primero, 'desc' = más reciente primero */
   const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
@@ -223,6 +242,30 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     return { nombres, haySin }
   }, [reparaciones, tecnicosCatalogo])
 
+  const tiposServicioLista = useMemo(() => {
+    const ordenCat = new Map(TIPOS_REPARACION.map((t, i) => [String(t).trim().toUpperCase(), i]))
+    const extra = new Set()
+    let haySin = false
+    for (const r of reparaciones) {
+      const t = tipoServicioDeRep(r, equipoPorId)
+      if (t === TIPO_SERVICIO_SIN) haySin = true
+      else if (!ordenCat.has(t)) extra.add(t)
+    }
+    const items = [...TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())]
+    for (const t of extra) items.push(t)
+    if (haySin) items.push(TIPO_SERVICIO_SIN)
+    return items.sort((a, b) => {
+      const ia = ordenCat.get(a)
+      const ib = ordenCat.get(b)
+      if (ia != null && ib != null) return ia - ib
+      if (ia != null) return -1
+      if (ib != null) return 1
+      if (a === TIPO_SERVICIO_SIN) return 1
+      if (b === TIPO_SERVICIO_SIN) return -1
+      return a.localeCompare(b, 'es', { sensitivity: 'base' })
+    })
+  }, [reparaciones, equipoPorId])
+
   const filasOrdenadas = useMemo(() => {
     const sel = estatusSeleccionados
     const desde = String(fechaDesde ?? '').trim()
@@ -238,6 +281,10 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         estatusParaFiltroFn: estatusParaFiltro,
       })
     })
+    const tiposSel = tiposServicioSeleccionados
+    if (tiposSel.size > 0) {
+      filtradas = filtradas.filter((r) => tiposSel.has(tipoServicioDeRep(r, equipoPorId)))
+    }
     if (tecnicoFiltro === TECNICO_SIN) {
       filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
     } else if (tecnicoFiltro !== TECNICO_TODAS) {
@@ -265,6 +312,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
           String(r.descripcion_equipo ?? '').toLowerCase(),
           String(r.tecnico ?? '').toLowerCase(),
           String(r.estatus ?? '').toLowerCase(),
+          String(r.tipo_reparacion ?? '').toLowerCase(),
         ].join(' ')
         return blob.includes(q)
       })
@@ -299,6 +347,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   }, [
     reparaciones,
     estatusSeleccionados,
+    tiposServicioSeleccionados,
     ordenFecha,
     tecnicoFiltro,
     fechaDesde,
@@ -327,6 +376,20 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   function seleccionarSolo(est) {
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
+  }
+
+  function toggleTipoServicio(tipo) {
+    const t = String(tipo).trim().toUpperCase()
+    setTiposServicioSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(t)) next.delete(t)
+      else next.add(t)
+      return next
+    })
+  }
+
+  function seleccionarSoloTipoServicio(tipo) {
+    setTiposServicioSeleccionados(new Set([String(tipo).trim().toUpperCase()]))
   }
 
   function nombreCliente(cid) {
@@ -384,6 +447,9 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
   const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
+  const filtroTipoServicioActivo =
+    tiposServicioSeleccionados.size > 0 &&
+    tiposServicioSeleccionados.size < tiposServicioLista.length
 
   return (
     <div className="servicios-root inventarios-root monitor-ordenes-root">
@@ -557,6 +623,44 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                         seleccionarSolo(est)
                       }}
                       title="Solo este"
+                    >
+                      Solo
+                    </button>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset
+            className={`monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroTipoServicioActivo)}`}
+          >
+            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+            <legend className="monitor-ordenes-legend">Tipo de servicio</legend>
+            <div className="monitor-ordenes-estatus-grid">
+              {tiposServicioLista.map((tipo) => {
+                const checked = tiposServicioSeleccionados.has(tipo)
+                return (
+                  <label
+                    key={tipo}
+                    className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
+                  >
+                    <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                    <input
+                      type="checkbox"
+                      className="monitor-ordenes-check-input"
+                      checked={checked}
+                      onChange={() => toggleTipoServicio(tipo)}
+                    />
+                    <span className="monitor-ordenes-check-text">{etiquetaTipoServicio(tipo)}</span>
+                    <button
+                      type="button"
+                      className="monitor-ordenes-solo"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        seleccionarSoloTipoServicio(tipo)
+                      }}
+                      title="Solo este tipo"
                     >
                       Solo
                     </button>
