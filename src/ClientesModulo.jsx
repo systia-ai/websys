@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { isReparacionActiva } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, isReparacionActiva } from './reparacionUtils.js'
+import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -79,6 +80,9 @@ export default function ClientesModulo({
   const [repSubtitle, setRepSubtitle] = useState('')
   /** Resumen del modal de órdenes (totales por cliente). null si error o aún no cargado. */
   const [repResumen, setRepResumen] = useState(null)
+  const [equiposPorIdOrdenes, setEquiposPorIdOrdenes] = useState({})
+  const [cuentasPorReparaOrdenes, setCuentasPorReparaOrdenes] = useState({})
+  const [ymdPagoPorCuentaOrdenes, setYmdPagoPorCuentaOrdenes] = useState({})
 
   const [cargandoEquipoRep, setCargandoEquipoRep] = useState(false)
 
@@ -353,6 +357,53 @@ export default function ClientesModulo({
           return idb - ida
         })
         setRepsActivas(delCliente)
+
+        const eqMap = {}
+        let todasCuentas = []
+        let todosPagos = []
+        if (supabase) {
+          const [eqRes, cuRes, pagRes] = await Promise.all([
+            supabase.from('equipos').select('*'),
+            supabase.from('cuentas').select('*'),
+            supabase.from('pagosclientes').select('*'),
+          ])
+          if (!eqRes.error) {
+            for (const e of eqRes.data ?? []) {
+              if (e?.id != null) eqMap[String(e.id)] = e
+            }
+          }
+          if (!cuRes.error) todasCuentas = cuRes.data ?? []
+          if (!pagRes.error) todosPagos = pagRes.data ?? []
+        } else {
+          for (const e of readLs(LS_EQUIPOS, [])) {
+            if (e?.id != null) eqMap[String(e.id)] = e
+          }
+          todasCuentas = readLs(LS_CUENTAS, [])
+          todosPagos = readLs(LS_PAGOS, [])
+        }
+        const idsRep = new Set(delCliente.map((r) => String(r.id)))
+        const cuentaMap = {}
+        const idsCuenta = new Set()
+        for (const c of todasCuentas) {
+          const rid = c?.repara_id ?? c?.reparacion_id
+          if (rid == null || !idsRep.has(String(rid))) continue
+          cuentaMap[String(rid)] = c
+          if (c.id != null) idsCuenta.add(String(c.id))
+        }
+        const ymdPorCuenta = {}
+        for (const p of todosPagos) {
+          const cid = p?.cuenta_id
+          if (cid == null || !idsCuenta.has(String(cid))) continue
+          const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+          if (!y) continue
+          const key = String(cid)
+          const prev = ymdPorCuenta[key]
+          if (!prev || y > prev) ymdPorCuenta[key] = y
+        }
+        setEquiposPorIdOrdenes(eqMap)
+        setCuentasPorReparaOrdenes(cuentaMap)
+        setYmdPagoPorCuentaOrdenes(ymdPorCuenta)
+
         const n = delCliente.length
         const nAct = delCliente.filter(isReparacionActiva).length
         const nEnt = n - nAct
@@ -368,6 +419,9 @@ export default function ClientesModulo({
         setRepResumen(null)
         setRepSubtitle(`Error: ${e.message}`)
         setRepsActivas([])
+        setEquiposPorIdOrdenes({})
+        setCuentasPorReparaOrdenes({})
+        setYmdPagoPorCuentaOrdenes({})
         setModalRepActivas(true)
       } finally {
         setLoadingReps(false)
@@ -644,78 +698,17 @@ export default function ClientesModulo({
             <div className="modal-header">
               <h3>{repTitle}</h3>
             </div>
-            <div className="modal-body">
-              {loadingReps ? (
-                <p className="center">Cargando…</p>
-              ) : repTitle === 'Error de búsqueda' ? (
-                <p className="warning-inline">{repSubtitle}</p>
-              ) : repResumen ? (
-                repResumen.total > 0 ? (
-                  <div className="rep-ordenes-resumen-caja" role="status" aria-live="polite">
-                    <div className="rep-ordenes-resumen-cliente">
-                      <span className="rep-ordenes-resumen-ico" aria-hidden>
-                        👤
-                      </span>
-                      <span className="rep-ordenes-resumen-nombre">{repResumen.nombre}</span>
-                    </div>
-                    <div className="rep-ordenes-resumen-stats">
-                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--total">
-                        <span aria-hidden>📋</span> {repResumen.total}{' '}
-                        {repResumen.total === 1 ? 'orden' : 'órdenes'}
-                      </span>
-                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--taller">
-                        <span aria-hidden>🔧</span> {repResumen.enTaller} en taller
-                      </span>
-                      <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--ok">
-                        <span aria-hidden>✅</span> {repResumen.entregadas}{' '}
-                        {repResumen.entregadas === 1 ? 'entregada' : 'entregadas'}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="rep-ordenes-resumen-caja rep-ordenes-resumen-caja--vacio"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <div className="rep-ordenes-resumen-cliente">
-                      <span className="rep-ordenes-resumen-ico" aria-hidden>
-                        👤
-                      </span>
-                      <span className="rep-ordenes-resumen-nombre">{repResumen.nombre}</span>
-                    </div>
-                    <p className="rep-ordenes-resumen-vacio-msg">Sin órdenes de servicio registradas.</p>
-                    <p className="rep-ordenes-resumen-vacio-sugerencia">
-                      Pulse «Nueva reparación» para registrar la primera orden.
-                    </p>
-                  </div>
-                )
-              ) : null}
-              {!loadingReps && repsActivas.length > 0 ? (
-                <ul className="rep-activa-list">
-                  {repsActivas.map((rep) => {
-                    const activa = isReparacionActiva(rep)
-                    return (
-                      <li key={rep.id}>
-                        <button
-                          type="button"
-                          className={`rep-activa-card${activa ? '' : ' rep-orden-entregada'}`}
-                          onClick={() => void seleccionarOrdenCliente(rep)}
-                        >
-                          <span className={`rep-orden-badge${activa ? ' rep-orden-badge--activa' : ' rep-orden-badge--entregada'}`}>
-                            {activa ? 'En taller' : 'Entregada'}
-                          </span>
-                          <strong>🔧 Orden #{rep.id}</strong>
-                          {rep.tipo_reparacion ? <span className="small">🔧 Tipo: {rep.tipo_reparacion}</span> : null}
-                          {rep.descripcion_equipo ? <span className="small">📝 {rep.descripcion_equipo}</span> : null}
-                          {rep.problemas_reportados ? <span className="small">⚠️ {rep.problemas_reportados}</span> : null}
-                          <span className="small">📊 Estado: {rep.estatus ?? 'Sin estado'}</span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : null}
+            <div className="modal-body modal-body--ordenes-cliente">
+              <ClientesOrdenesServicioPanel
+                loading={loadingReps}
+                errorSubtitle={repTitle === 'Error de búsqueda' ? repSubtitle : null}
+                repResumen={repResumen}
+                reparaciones={repsActivas}
+                equiposPorId={equiposPorIdOrdenes}
+                cuentasPorReparaId={cuentasPorReparaOrdenes}
+                pagosPorCuentaId={ymdPagoPorCuentaOrdenes}
+                onSelectRep={(rep) => void seleccionarOrdenCliente(rep)}
+              />
             </div>
             <div className="modal-footer modal-footer-wrap">
               <button type="button" className="btn-agregar-equipo modal-btn-compact" onClick={nuevaReparacionIrServicios}>

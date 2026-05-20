@@ -3154,6 +3154,53 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   color: #555;
 }
 
+.rep-activa-dato {
+  display: block;
+  font-size: 0.88rem;
+  color: #37474f;
+}
+
+.rep-activa-etiqueta {
+  font-weight: 700;
+  color: #1565c0;
+  margin-right: 4px;
+}
+
+.modal-body--ordenes-cliente {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+.clientes-ordenes-vista-bar {
+  margin-top: 12px;
+}
+
+.clientes-ordenes-tabla-wrap {
+  max-height: min(50vh, 420px);
+}
+
+.clientes-ordenes-tabla {
+  min-width: 920px;
+}
+
+.clientes-ordenes-col-texto {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clientes-ordenes-fila--entregada {
+  opacity: 0.92;
+}
+
+.rep-orden-badge--tabla {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 .rep-ordenes-resumen-caja {
   user-select: none;
   margin: 0 0 12px;
