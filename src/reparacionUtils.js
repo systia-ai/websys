@@ -134,6 +134,37 @@ function ymdEnRango(ymd, desde, hasta) {
   return true
 }
 
+/** Estatus cuyo rango de fechas en el monitor usa también `updated_at` (p. ej. reparadas hoy). */
+const ESTATUS_RANGO_USA_ACTUALIZACION = new Set([
+  'REPARADO',
+  'EN REVISION',
+  'EN ESPERA POR REFACCION',
+  'SIN REPARACION',
+])
+
+function normalizarEstatusOrden(st) {
+  const u = String(st ?? '').trim().toUpperCase()
+  if (u === 'ENTREGADA') return 'ENTREGADO'
+  return u
+}
+
+/**
+ * Fechas que cuentan para el rango del monitor (ingreso, entrega y/o última actualización).
+ */
+export function fechasRangoMonitor(rep, cuentaVinculada = null, ymdDesdePagos = null) {
+  const ing = fechaIngresoYmd(rep)
+  const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
+  const st = normalizarEstatusOrden(rep?.estatus)
+  const fechas = []
+  if (ing) fechas.push(ing)
+  if (ent) fechas.push(ent)
+  if (ESTATUS_RANGO_USA_ACTUALIZACION.has(st)) {
+    const act = aYmdLocalDesdeRaw(rep?.updated_at)
+    if (act && !fechas.includes(act)) fechas.push(act)
+  }
+  return fechas
+}
+
 /**
  * Rango Desde/Hasta del monitor.
  * @param {'todas'|'ingreso'|'entrega'|'ambas'} modo
@@ -154,7 +185,7 @@ export function repEnRangoFechasMonitor(
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
   if (modo === 'ingreso') return ymdEnRango(ing, d, h)
   if (modo === 'entrega') return ymdEnRango(ent, d, h)
-  const fechas = [ing, ent].filter(Boolean)
+  const fechas = fechasRangoMonitor(rep, cuentaVinculada, ymdDesdePagos)
   if (fechas.length === 0) return false
   return fechas.some((ymd) => ymdEnRango(ymd, d, h))
 }

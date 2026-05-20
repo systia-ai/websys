@@ -536,7 +536,8 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 </p>
               ) : (
                 <p className="monitor-ordenes-rango-hint muted small">
-                  Filtra por fecha de ingreso o de entrega dentro del rango.
+                  Ingreso o entrega en el rango; REPARADO y otros estatus en taller también por fecha de
+                  última actualización (cuando se cambió el estatus).
                 </p>
               )}
             </div>
