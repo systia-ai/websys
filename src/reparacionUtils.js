@@ -1,3 +1,49 @@
+import { TIPOS_REPARACION } from './catalogos.js'
+
+/** Claves del catálogo en mayúsculas (SERVICIO, GARANTIA EPSON, GARANTIA SISTEBIT). */
+export const TIPOS_SERVICIO_CANONICOS = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
+
+function sinAcentos(s) {
+  return String(s)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
+
+/**
+ * Normaliza `tipo_reparacion` al catálogo. Devuelve null si no es uno de los tres tipos.
+ * Acepta variantes con acentos y textos legacy que contengan EPSON o SISTEBIT.
+ */
+export function claveCanonicaTipoServicio(raw) {
+  const t = String(raw ?? '').trim()
+  if (!t) return null
+  const norm = sinAcentos(t)
+  for (const cat of TIPOS_REPARACION) {
+    const c = String(cat).trim().toUpperCase()
+    if (norm === sinAcentos(cat)) return c
+  }
+  if (norm.includes('SISTEBIT')) return 'GARANTIA SISTEBIT'
+  if (norm.includes('EPSON')) return 'GARANTIA EPSON'
+  if (norm === 'SERVICIO' || (norm.startsWith('SERVICIO') && !norm.includes('GARANT'))) {
+    return 'SERVICIO'
+  }
+  return null
+}
+
+/**
+ * Tipo de servicio de la orden. Por defecto solo `reparaciones.tipo_reparacion`
+ * (no hereda del equipo, para que el filtro del monitor coincida con la orden).
+ */
+export function tipoServicioDeRep(rep, equipoPorId = null, { usarEquipoSiFalta = false } = {}) {
+  let raw = String(rep?.tipo_reparacion ?? '').trim()
+  if (!raw && usarEquipoSiFalta && rep?.equipo_id != null && equipoPorId) {
+    const eq = equipoPorId.get(String(rep.equipo_id))
+    raw = String(eq?.tipo_reparacion ?? '').trim()
+  }
+  return claveCanonicaTipoServicio(raw)
+}
+
 /** True si la orden ya salió del taller (entregada al cliente). */
 export function estatusEsEntregado(estatus) {
   return /ENTREGAD[OA]\b/i.test(String(estatus ?? '').trim())

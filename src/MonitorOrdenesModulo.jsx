@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial reparaciones / catálogos */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ESTATUS_ORDEN, TIPOS_REPARACION } from './catalogos.js'
+import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import {
   aYmdLocalDesdeRaw,
@@ -8,6 +8,8 @@ import {
   fechaEntregaYmd,
   fechaIngresoYmd,
   repCoincideFiltroMonitor,
+  tipoServicioDeRep,
+  TIPOS_SERVICIO_CANONICOS,
 } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
@@ -89,35 +91,10 @@ function estatusParaFiltro(rep) {
 const TECNICO_TODAS = ''
 const TECNICO_SIN = '__sin_tecnico__'
 
-const TIPOS_SERVICIO_FILTRO = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
+const TIPOS_SERVICIO_FILTRO = TIPOS_SERVICIO_CANONICOS
 
-function sinAcentos(s) {
-  return String(s)
-    .trim()
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-}
-
-/** Alinea variantes (acentos, mayúsculas) con el catálogo; null si no coincide. */
-function claveCanonicaTipoServicio(raw) {
-  const t = String(raw ?? '').trim()
-  if (!t) return null
-  const norm = sinAcentos(t)
-  for (const cat of TIPOS_REPARACION) {
-    const c = String(cat).trim().toUpperCase()
-    if (norm === sinAcentos(cat)) return c
-  }
-  return null
-}
-
-function tipoServicioDeRep(rep, equipoPorId) {
-  let raw = String(rep?.tipo_reparacion ?? '').trim()
-  if (!raw && rep?.equipo_id != null) {
-    const eq = equipoPorId.get(String(rep.equipo_id))
-    raw = String(eq?.tipo_reparacion ?? '').trim()
-  }
-  return claveCanonicaTipoServicio(raw)
+function todosTiposServicioSeleccionados(sel) {
+  return TIPOS_SERVICIO_FILTRO.length > 0 && TIPOS_SERVICIO_FILTRO.every((t) => sel.has(t))
 }
 
 /**
@@ -276,7 +253,9 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       })
     })
     const tiposSel = tiposServicioSeleccionados
-    if (tiposSel.size > 0) {
+    if (tiposSel.size === 0) {
+      filtradas = []
+    } else if (!todosTiposServicioSeleccionados(tiposSel)) {
       filtradas = filtradas.filter((r) => {
         const t = tipoServicioDeRep(r, equipoPorId)
         return t != null && tiposSel.has(t)
@@ -302,6 +281,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       filtradas = filtradas.filter((r) => {
         const c = clientes.find((x) => sameId(x.id, r.cliente_id))
         const nombre = String(c?.nombre ?? '').toLowerCase()
+        const tipoCanon = tipoServicioDeRep(r, equipoPorId) ?? ''
         const blob = [
           nombre,
           String(r.id ?? ''),
@@ -309,7 +289,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
           String(r.descripcion_equipo ?? '').toLowerCase(),
           String(r.tecnico ?? '').toLowerCase(),
           String(r.estatus ?? '').toLowerCase(),
-          String(r.tipo_reparacion ?? '').toLowerCase(),
+          tipoCanon.toLowerCase(),
         ].join(' ')
         return blob.includes(q)
       })
@@ -682,6 +662,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                     <th>No. orden</th>
                     <th>Cliente</th>
                     <th>Tipo de equipo</th>
+                    <th>Tipo de servicio</th>
                     <th>Descripción</th>
                     <th>Problema reportado</th>
                     <th>Técnico</th>
@@ -691,13 +672,14 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <tbody>
                   {filasOrdenadas.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="monitor-ordenes-vacio">
+                      <td colSpan={11} className="monitor-ordenes-vacio">
                         No hay órdenes con los filtros seleccionados.
                       </td>
                     </tr>
                   ) : (
                     filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
                       const { tipo, desc } = datosEquipo(rep)
+                      const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
                       const tech = String(rep.tecnico ?? '').trim()
                       const ent = estatusEsEntregado(rep?.estatus)
                       return (
@@ -731,6 +713,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                           <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
                           <td>{nombreCliente(rep.cliente_id)}</td>
                           <td>{tipo}</td>
+                          <td className="monitor-ordenes-tipo-servicio">{tipoServicio}</td>
                           <td className="monitor-ordenes-col-texto">{desc}</td>
                           <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
                           <td>{tech || '—'}</td>
