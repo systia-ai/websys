@@ -12,6 +12,8 @@ import {
 } from './productosRecientesVentas.js'
 import {
   actualizarCuentaSupabase,
+  aYmdLocalDesdeRaw,
+  formatFechaLegibleEsMx,
   marcarReparacionEntregadaSupabase,
   patchReparacionEntregada,
   sincronizarCuentaLiquidadaSiSaldoCero,
@@ -109,6 +111,32 @@ function lookupProducto(productosPorId, productoId) {
   return productosPorId.get(String(productoId)) ?? null
 }
 
+function rawFechaPago(p) {
+  if (!p) return null
+  return p.created_at ?? p.fecha ?? p.fecha_pago ?? p.Fecha ?? null
+}
+
+function etiquetaFechaPago(p) {
+  const ymd = aYmdLocalDesdeRaw(rawFechaPago(p))
+  if (!ymd) return '—'
+  return formatFechaLegibleEsMx(ymd, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function crearLineaPago(p) {
+  const monto = Number(p.pago ?? 0)
+  return {
+    key: `pago_${p.id}`,
+    tipo: 'pago',
+    dbId: p.id,
+    producto_id: -1,
+    cantidad: -1,
+    descripcion: `PAGO: ${p.concepto ?? 'Pago'} (${p.forma_pago ?? 'EFECTIVO'})`,
+    precioUnitario: monto,
+    subtotal: -monto,
+    fechaPago: etiquetaFechaPago(p),
+  }
+}
+
 function buildLineasDesdeServidor({ movs, reps, pagos, productosPorId = new Map() }) {
   const lineas = []
   for (const m of movs) {
@@ -141,18 +169,14 @@ function buildLineasDesdeServidor({ movs, reps, pagos, productosPorId = new Map(
       subtotal: cant * costo,
     })
   }
-  for (const p of pagos) {
-    const monto = Number(p.pago ?? 0)
-    lineas.push({
-      key: `pago_${p.id}`,
-      tipo: 'pago',
-      dbId: p.id,
-      producto_id: -1,
-      cantidad: -1,
-      descripcion: `PAGO: ${p.concepto ?? 'Pago'} (${p.forma_pago ?? 'EFECTIVO'})`,
-      precioUnitario: monto,
-      subtotal: -monto,
-    })
+  const pagosOrdenados = [...pagos].sort((a, b) => {
+    const ya = aYmdLocalDesdeRaw(rawFechaPago(a)) ?? ''
+    const yb = aYmdLocalDesdeRaw(rawFechaPago(b)) ?? ''
+    if (ya !== yb) return ya.localeCompare(yb)
+    return Number(a.id ?? 0) - Number(b.id ?? 0)
+  })
+  for (const p of pagosOrdenados) {
+    lineas.push(crearLineaPago(p))
   }
   return lineas
 }
@@ -464,11 +488,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       forma_pago: formaPagoElegida,
     }
     try {
-      let nuevoId
+      let pagoGuardado
       if (supabase) {
         const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
         if (error) throw error
-        nuevoId = data?.id
+        pagoGuardado = data
         const nowLiq = new Date().toISOString()
         await actualizarCuentaSupabase(supabase, cuentaId, {
           total: 0,
@@ -480,9 +504,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
         }
       } else {
-        nuevoId = nextLocalId()
+        const nuevoId = nextLocalId()
+        const now = new Date().toISOString()
+        pagoGuardado = { id: nuevoId, ...row, created_at: now }
         const allP = readLs(LS_PAGOS, [])
-        writeLs(LS_PAGOS, [{ id: nuevoId, ...row }, ...allP])
+        writeLs(LS_PAGOS, [pagoGuardado, ...allP])
         const lc = readLs(LS_CUENTAS, [])
         writeLs(
           LS_CUENTAS,
@@ -497,19 +523,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           )
         }
       }
-      setLineas((prev) => [
-        ...prev,
-        {
-          key: `pago_${nuevoId}`,
-          tipo: 'pago',
-          dbId: nuevoId,
-          producto_id: -1,
-          cantidad: -1,
-          descripcion: `PAGO: ${row.concepto} (${row.forma_pago})`,
-          precioUnitario: monto,
-          subtotal: -monto,
-        },
-      ])
+      setLineas((prev) => [...prev, crearLineaPago(pagoGuardado)])
       setCuentaInfo((prev) =>
         prev ? { ...prev, total: 0, estatus: 'LIQUIDADA' } : { total: 0, estatus: 'LIQUIDADA' },
       )
@@ -544,30 +558,18 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       forma_pago: formaPago,
     }
     try {
-      let nuevoId
+      let pagoGuardado
       if (supabase) {
         const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
         if (error) throw error
-        nuevoId = data?.id
+        pagoGuardado = data
       } else {
-        nuevoId = nextLocalId()
+        const nuevoId = nextLocalId()
+        pagoGuardado = { id: nuevoId, ...row, created_at: new Date().toISOString() }
         const all = readLs(LS_PAGOS, [])
-        writeLs(LS_PAGOS, [{ id: nuevoId, ...row }, ...all])
+        writeLs(LS_PAGOS, [pagoGuardado, ...all])
       }
-      const montoN = Number(monto)
-      const nuevasLineas = [
-        ...lineas,
-        {
-          key: `pago_${nuevoId}`,
-          tipo: 'pago',
-          dbId: nuevoId,
-          producto_id: -1,
-          cantidad: -1,
-          descripcion: `PAGO: ${row.concepto} (${row.forma_pago})`,
-          precioUnitario: montoN,
-          subtotal: -montoN,
-        },
-      ]
+      const nuevasLineas = [...lineas, crearLineaPago(pagoGuardado)]
       const nuevoTotal = sumSubtotales(nuevasLineas)
       setLineas(nuevasLineas)
       setModalPago(false)
@@ -824,10 +826,10 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     const rows = lineas
       .map(
         (L) =>
-          `<tr><td>${L.tipo === 'pago' ? -Number(L.cantidad) : Number(L.cantidad)}</td><td>${escapeHtml(L.descripcion)}</td><td>$${Number(L.precioUnitario).toFixed(2)}</td><td>$${Number(L.subtotal).toFixed(2)}</td></tr>`,
+          `<tr><td>${L.tipo === 'pago' ? -Number(L.cantidad) : Number(L.cantidad)}</td><td>${escapeHtml(L.descripcion)}</td><td>${escapeHtml(L.tipo === 'pago' ? L.fechaPago ?? '—' : '—')}</td><td>$${Number(L.precioUnitario).toFixed(2)}</td><td>$${Number(L.subtotal).toFixed(2)}</td></tr>`,
       )
       .join('')
-    const html = `<h1>Comprobante</h1><p><strong>Cliente:</strong> ${escapeHtml(cliente.nombre)} — ${escapeHtml(cliente.telefono)}</p><p><strong>Total:</strong> $${totalStr} — <strong>Estatus:</strong> ${escapeHtml(cuentaEstatus || '—')}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><thead><tr><th>Cant</th><th>Descripción</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${rows}</tbody></table>`
+    const html = `<h1>Comprobante</h1><p><strong>Cliente:</strong> ${escapeHtml(cliente.nombre)} — ${escapeHtml(cliente.telefono)}</p><p><strong>Total:</strong> $${totalStr} — <strong>Estatus:</strong> ${escapeHtml(cuentaEstatus || '—')}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><thead><tr><th>Cant</th><th>Descripción</th><th>Fecha</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${rows}</tbody></table>`
     const w = window.open('', '_blank')
     if (!w) {
       onError?.('Permita ventanas emergentes para imprimir.')
@@ -884,6 +886,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               <div className="ventas-tabla-head">
                 <span>Cant</span>
                 <span>Descripción</span>
+                <span>Fecha</span>
                 <span>Precio</span>
                 <span>Subtotal</span>
                 <span />
@@ -902,6 +905,9 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                       >
                         <span>{cantDisp}</span>
                         <span>{L.descripcion}</span>
+                        <span className={`ventas-tabla-fecha${esPago ? ' ventas-tabla-fecha--pago' : ''}`}>
+                          {esPago ? L.fechaPago ?? '—' : '—'}
+                        </span>
                         <span>${Number(L.precioUnitario).toFixed(2)}</span>
                         <span>${Number(L.subtotal).toFixed(2)}</span>
                         <button type="button" className="btn-elim-linea" onClick={() => void eliminarLinea(L)} aria-label="Eliminar">

@@ -4487,7 +4487,7 @@ input.full {
 
 .ventas-tabla-head {
   display: grid;
-  grid-template-columns: 56px 1fr 88px 88px 40px;
+  grid-template-columns: 56px 1fr 96px 88px 88px 40px;
   gap: 6px;
   padding: 10px 12px;
   background: #eceff1;
@@ -4512,7 +4512,7 @@ input.full {
 
 .ventas-tabla-fila {
   display: grid;
-  grid-template-columns: 56px 1fr 88px 88px 40px;
+  grid-template-columns: 56px 1fr 96px 88px 88px 40px;
   gap: 6px;
   align-items: center;
   padding: 10px 12px;
@@ -4526,6 +4526,16 @@ input.full {
 
 .ventas-tabla-fila.es-pago {
   background: #e8f5e9;
+}
+
+.ventas-tabla-fecha {
+  font-size: 0.82rem;
+  color: #78909c;
+}
+
+.ventas-tabla-fecha--pago {
+  color: #2e7d32;
+  font-weight: 600;
 }
 
 .btn-elim-linea {
