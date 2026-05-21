@@ -534,12 +534,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 <p className="monitor-ordenes-rango-aviso" role="alert">
                   La fecha inicial no puede ser posterior a la final.
                 </p>
-              ) : (
-                <p className="monitor-ordenes-rango-hint muted small">
-                  Ingreso o entrega en el rango; REPARADO y otros estatus en taller también por fecha de
-                  última actualización (cuando se cambió el estatus).
-                </p>
-              )}
+              ) : null}
             </div>
 
             <label
