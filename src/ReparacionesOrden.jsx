@@ -169,6 +169,10 @@ export default function ReparacionesOrden({
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
   const guardandoRef = useRef(false)
+  /** Evita que una recarga async pise el estatus elegido en el formulario. */
+  const estatusDirtyRef = useRef(false)
+  const estatusRef = useRef(estatus)
+  estatusRef.current = estatus
   /** Evita doble INSERT si el usuario confirma dos veces antes de que React actualice `ordenRegistrada`. */
   const ordenRegistradaRef = useRef(repIdStrEsOrdenExistente(repIdStr))
   const [actualizandoOrden, setActualizandoOrden] = useState(false)
@@ -321,7 +325,9 @@ export default function ReparacionesOrden({
         }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
-        setEstatus(data.estatus ?? 'INGRESADO')
+        if (!estatusDirtyRef.current) {
+          setEstatus(data.estatus ?? 'INGRESADO')
+        }
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
@@ -340,7 +346,8 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
-        if (estatusEsEntregado(data.estatus)) {
+        const estatusCarga = estatusDirtyRef.current ? estatusRef.current : data.estatus
+        if (estatusEsEntregado(estatusCarga)) {
           await cargarCuentaYEntregaAux(data.id)
         } else {
           setCuentaOrden(null)
@@ -368,7 +375,9 @@ export default function ReparacionesOrden({
         }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
-        setEstatus(data.estatus ?? 'INGRESADO')
+        if (!estatusDirtyRef.current) {
+          setEstatus(data.estatus ?? 'INGRESADO')
+        }
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
@@ -387,7 +396,8 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
-        if (estatusEsEntregado(data.estatus)) {
+        const estatusCargaLs = estatusDirtyRef.current ? estatusRef.current : data.estatus
+        if (estatusEsEntregado(estatusCargaLs)) {
           await cargarCuentaYEntregaAux(data.id)
         } else {
           setCuentaOrden(null)
@@ -410,17 +420,23 @@ export default function ReparacionesOrden({
     }
   }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, cargarCuentaYEntregaAux])
 
+  const cargarReparacionRef = useRef(cargarReparacion)
+  cargarReparacionRef.current = cargarReparacion
+
   useEffect(() => {
+    estatusDirtyRef.current = false
     if (repIdStrEsOrdenExistente(repIdStr)) {
-      void cargarReparacion()
+      void cargarReparacionRef.current()
       return
     }
     const reciente = leerOrdenRecienCreadaEnSesion()
     if (reciente) {
       ordenRegistradaRef.current = true
-      void cargarReparacion(reciente)
+      void cargarReparacionRef.current(reciente)
     }
-  }, [cargarReparacion, repIdStr])
+    // Solo al cambiar de orden (repIdStr); no recargar en cada re-render del padre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repIdStr])
 
   async function buscarOrdenRecienteMismaSesion(cid, eid, problemas, tipoRep) {
     const prob = String(problemas ?? '').trim()
@@ -651,10 +667,11 @@ export default function ReparacionesOrden({
     }
     actualizandoRef.current = true
     setActualizandoOrden(true)
+    const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const patch = {
-      estatus,
+      estatus: estatusGuardar,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
       descripcion_equipo: descripcionEquipo || null,
       problemas_reportados: problemasReportados || null,
@@ -663,9 +680,12 @@ export default function ReparacionesOrden({
       niveles_tinta: niveles,
       updated_at: now,
     }
-    if (estatusEsEntregado(estatus)) {
+    if (estatusEsEntregado(estatusGuardar)) {
       patch.fecha_entrega = now.slice(0, 10)
       setFechaEntregaOrden(patch.fecha_entrega)
+    } else {
+      patch.fecha_entrega = null
+      setFechaEntregaOrden(null)
     }
     try {
       if (supabase) {
@@ -698,8 +718,13 @@ export default function ReparacionesOrden({
         }
       }
 
-      if (estatusEsEntregado(estatus)) {
+      estatusDirtyRef.current = false
+      setEstatus(estatusGuardar)
+      if (estatusEsEntregado(estatusGuardar)) {
         await cargarCuentaYEntregaAux(id)
+      } else {
+        setCuentaOrden(null)
+        setYmdEntregaDesdePagos(null)
       }
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
@@ -1323,7 +1348,16 @@ export default function ReparacionesOrden({
               aria-readonly="true"
               tabIndex={-1}
             />
-            <select className="estatus-select" value="" onChange={(e) => e.target.value && setEstatus(e.target.value)}>
+            <select
+              className="estatus-select"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value
+                if (!v) return
+                estatusDirtyRef.current = true
+                setEstatus(v)
+              }}
+            >
               <option value="">Seleccionar</option>
               {ESTATUS_ORDEN.map((st) => (
                 <option key={st} value={st}>

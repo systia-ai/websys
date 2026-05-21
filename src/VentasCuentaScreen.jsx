@@ -303,7 +303,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         built = inyectarSaldoCuentaSiSinMovimientos(built, cuentaRow)
         setLineas(built)
 
-        if (cuentaRow?.id && Math.abs(sumSubtotales(built)) <= 0.0001) {
+        if (
+          cuentaRow?.id &&
+          pagos.length > 0 &&
+          Math.abs(sumSubtotales(built)) <= 0.0001
+        ) {
           const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
           if (est !== 'LIQUIDADA') {
             let actualizada = cuentaRow
@@ -318,14 +322,6 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 LS_CUENTAS,
                 list.map((c) => (sameId(c.id, cidNum) ? actualizada : c)),
               )
-              if (rid != null) {
-                const lr = readLs(LS_REP, [])
-                const patchEnt = patchReparacionEntregada()
-                writeLs(
-                  LS_REP,
-                  lr.map((r) => (sameId(r.id, rid) ? { ...r, ...patchEnt } : r)),
-                )
-              }
             }
             setCuentaInfo(actualizada)
           }

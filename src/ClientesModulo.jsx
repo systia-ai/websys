@@ -293,7 +293,13 @@ export default function ClientesModulo({
         } else {
           cuentasFinales = cuentasCliente.map((cu) => {
             if (String(cu.estatus ?? '').toUpperCase() === 'LIQUIDADA') return cu
-            if (Math.abs(Number(cu.total ?? 0)) > 0.0001) return cu
+            const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
+            if (pagosC.length === 0) return cu
+            const totalCuenta = Number(cu.total ?? 0)
+            const sumPagos = pagosC.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+            const pagosCubren = totalCuenta > 0.0001 && sumPagos >= totalCuenta - 0.01
+            const saldoCeroConPagos = Math.abs(totalCuenta) <= 0.0001 && sumPagos > 0.0001
+            if (!pagosCubren && !saldoCeroConPagos) return cu
             const nowLiq = new Date().toISOString()
             const list = readLs(LS_CUENTAS, [])
             const actualizada = { ...cu, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }

@@ -276,33 +276,34 @@ export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
 }
 
 /**
- * Si el adeudo ya está cubierto (total $0 o pagos ≥ total) pero sigue PENDIENTE, marca LIQUIDADA en BD.
+ * Si hay pagos que cubren el adeudo (o total $0 con pagos registrados), marca la cuenta LIQUIDADA.
+ * No toca el estatus de la orden de taller (INGRESADO/REPARADO ≠ entrega al cliente).
+ * Una cuenta nueva con total $0 y sin pagos se deja PENDIENTE.
  */
 export async function sincronizarCuentaLiquidadaSiSaldoCero(
   supabase,
   cuenta,
-  reparaId = null,
+  _reparaId = null,
   pagosCuenta = [],
 ) {
   if (!cuenta?.id) return cuenta
   const est = String(cuenta.estatus ?? '').trim().toUpperCase()
   if (est === 'LIQUIDADA') return cuenta
 
+  const pagos = pagosCuenta ?? []
+  if (pagos.length === 0) return cuenta
+
   const totalCuenta = Number(cuenta.total ?? 0)
-  const sumPagos = (pagosCuenta ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
-  const saldoCero = Math.abs(totalCuenta) <= 0.0001
+  const sumPagos = pagos.reduce((s, p) => s + Number(p.pago ?? 0), 0)
   const pagosCubren = totalCuenta > 0.0001 && sumPagos >= totalCuenta - 0.01
-  if (!saldoCero && !pagosCubren) return cuenta
-  if (!saldoCero && (pagosCuenta ?? []).length === 0) return cuenta
+  const saldoCeroConPagos = Math.abs(totalCuenta) <= 0.0001 && sumPagos > 0.0001
+  if (!pagosCubren && !saldoCeroConPagos) return cuenta
 
   const nowLiq = new Date().toISOString()
   const patch = { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
 
   if (supabase) {
     await actualizarCuentaSupabase(supabase, cuenta.id, patch)
-    if (reparaId != null) {
-      await marcarReparacionEntregadaSupabase(supabase, reparaId)
-    }
   }
 
   return { ...cuenta, ...patch }
