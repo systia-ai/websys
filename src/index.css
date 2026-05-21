@@ -85,7 +85,28 @@ body {
 }
 
 .home-header-user {
-  max-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, 42vw);
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #b3e5fc;
+  background: linear-gradient(145deg, #f5fbff 0%, #e8f4fc 100%);
+  box-shadow: 0 1px 4px rgba(33, 150, 243, 0.08);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1565c0;
+  line-height: 1.25;
+}
+
+.home-header-user-emoji {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.home-header-user-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

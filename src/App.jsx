@@ -234,8 +234,11 @@ function App() {
             </div>
             {requiresAuth && user ? (
               <div className="home-header-session">
-                <span className="home-header-user muted small" title={user.email}>
-                  {user.email}
+                <span className="home-header-user" title={user.email}>
+                  <span className="home-header-user-emoji" aria-hidden="true">
+                    👤
+                  </span>
+                  <span className="home-header-user-email">{user.email}</span>
                 </span>
                 <button type="button" className="home-header-signout" onClick={() => signOut()}>
                   Cerrar sesión
