@@ -255,10 +255,15 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
         'No tiene permiso para actualizar esta orden en la base de datos. Revise la sesión de Supabase o las políticas RLS del proyecto.',
       )
     }
-    if (payload.fecha_entrega != null && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
+    if (
+      'fecha_entrega' in payload &&
+      (payload.fecha_entrega == null || esErrorColumnaDesconocida(error, 'fecha_entrega'))
+    ) {
       const { fecha_entrega: _f, ...rest } = payload
-      payload = rest
-      continue
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
     }
     if (payload.es_orden_duplicada != null && esErrorColumnaDesconocida(error, 'es_orden_duplicada')) {
       const { es_orden_duplicada: _d, ...rest } = payload
@@ -273,6 +278,42 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
 /** Actualiza reparación a entregada; omite fecha_entrega si la columna no existe en BD. */
 export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
   await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada())
+}
+
+/**
+ * Reparación marcada ENTREGADA/ENTREGADO por error (cuenta aún PENDIENTE y sin pagos).
+ * Corrige en BD a INGRESADO y quita fecha_entrega.
+ */
+export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
+  if (!supabase?.from || !repRow?.id || !estatusEsEntregado(repRow.estatus)) {
+    return repRow
+  }
+
+  const { data: cuentas, error: eC } = await supabase
+    .from('cuentas')
+    .select('id, estatus, total')
+    .eq('repara_id', repRow.id)
+    .limit(3)
+  if (eC) return repRow
+
+  const cuenta = cuentas?.[0]
+  if (!cuenta?.id) return repRow
+
+  const estCuenta = String(cuenta.estatus ?? '').trim().toUpperCase()
+  if (estCuenta === 'LIQUIDADA') return repRow
+
+  const { data: pagos, error: eP } = await supabase
+    .from('pagosclientes')
+    .select('id')
+    .eq('cuenta_id', cuenta.id)
+    .limit(1)
+  if (eP) return repRow
+  if ((pagos ?? []).length > 0) return repRow
+
+  const now = new Date().toISOString()
+  const patch = { estatus: 'INGRESADO', fecha_entrega: null, updated_at: now }
+  await actualizarReparacionSupabase(supabase, repRow.id, patch)
+  return { ...repRow, ...patch }
 }
 
 /**

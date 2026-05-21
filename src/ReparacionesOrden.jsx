@@ -23,6 +23,7 @@ import {
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
+  corregirEntregadaIndebidaSiAplica,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   registrarOrdenCreadaEnSesion,
@@ -317,11 +318,20 @@ export default function ReparacionesOrden({
     if (id == null || !Number.isFinite(id)) return
     try {
       if (supabase) {
-        const { data, error } = await supabase.from('reparaciones').select('*').eq('id', id).maybeSingle()
+        let { data, error } = await supabase.from('reparaciones').select('*').eq('id', id).maybeSingle()
         if (error) throw error
         if (!data) {
           onError(`No se encontró la orden #${id} en la base de datos.`)
           return
+        }
+        const estatusAntes = data.estatus
+        data = await corregirEntregadaIndebidaSiAplica(supabase, data)
+        if (
+          estatusEsEntregado(estatusAntes) &&
+          !estatusEsEntregado(data.estatus) &&
+          !estatusDirtyRef.current
+        ) {
+          onNotice?.('La orden estaba entregada por error; se corrigió a INGRESADO.')
         }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
@@ -690,6 +700,25 @@ export default function ReparacionesOrden({
     try {
       if (supabase) {
         await actualizarReparacionSupabase(supabase, id, patch)
+        if (!estatusEsEntregado(estatusGuardar)) {
+          const { data: ver, error: verErr } = await supabase
+            .from('reparaciones')
+            .select('id, estatus, fecha_entrega')
+            .eq('id', id)
+            .maybeSingle()
+          if (!verErr && ver && estatusEsEntregado(ver.estatus)) {
+            const corregida = await corregirEntregadaIndebidaSiAplica(supabase, ver)
+            if (estatusEsEntregado(corregida.estatus)) {
+              throw new Error(
+                'La base de datos sigue mostrando la orden como entregada. En Supabase ejecute: UPDATE reparaciones SET estatus = \'INGRESADO\', fecha_entrega = NULL WHERE id = ' +
+                  id +
+                  ';',
+              )
+            }
+            setEstatus(corregida.estatus ?? 'INGRESADO')
+            setFechaEntregaOrden(null)
+          }
+        }
       } else {
         const all = readLs(LS_REP, [])
         writeLs(
@@ -1356,6 +1385,11 @@ export default function ReparacionesOrden({
                 if (!v) return
                 estatusDirtyRef.current = true
                 setEstatus(v)
+                if (!estatusEsEntregado(v)) {
+                  setFechaEntregaOrden(null)
+                  setCuentaOrden(null)
+                  setYmdEntregaDesdePagos(null)
+                }
               }}
             >
               <option value="">Seleccionar</option>
