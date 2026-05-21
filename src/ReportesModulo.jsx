@@ -11,6 +11,7 @@ import {
   labelEstatusAplicados,
   filtrarPorEstatus,
 } from './reportesFiltros.js'
+import { extractFechaPagoYmd, normalizarLabelEstatus, totalPagosEnLista } from './reportesEstadisticas.js'
 
 const LS_VISTA_REPORTES = 'sistefix_reportes_vista'
 
@@ -24,6 +25,7 @@ function leerVistaReportes() {
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
+const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function ymdHoy() {
   return new Date().toISOString().slice(0, 10)
@@ -115,6 +117,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [duplicadasExcluidas, setDuplicadasExcluidas] = useState(0)
 
   const [reparaciones, setReparaciones] = useState([])
+  const [pagosPeriodo, setPagosPeriodo] = useState([])
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
@@ -166,6 +169,21 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         const nDup = contarOrdenesDuplicadas(porEstatus)
         const filas = excluirOrdenesDuplicadas(porEstatus)
         setReparaciones(filas)
+
+        let pagosTodos = []
+        if (supabase) {
+          const { data: pagosData, error: ePag } = await supabase.from('pagosclientes').select('*')
+          if (ePag) throw ePag
+          pagosTodos = pagosData ?? []
+        } else {
+          pagosTodos = readLs(LS_PAGOS, [])
+        }
+        const pagosFiltrados = pagosTodos.filter((p) => {
+          const y = extractFechaPagoYmd(p)
+          return y != null && y >= ini && y <= fin
+        })
+        setPagosPeriodo(pagosFiltrados)
+
         setDuplicadasExcluidas(nDup)
         setSinColumnaFecha(sinF)
         setPeriodoAplicado({ ini, fin })
@@ -185,6 +203,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
       } catch (e) {
         onError?.(`Error al cargar datos: ${e.message}`)
         setReparaciones([])
+        setPagosPeriodo([])
         return false
       } finally {
         setLoading(false)
@@ -248,15 +267,15 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     const total = reparaciones.length
     const entregadas = reparaciones.filter(esEntregada).length
     const activas = total - entregadas
-    const totalPagos = reparaciones.reduce((s, r) => s + Number(r.pago ?? 0), 0)
+    const totalPagos = totalPagosEnLista(pagosPeriodo)
     const totalCosto = reparaciones.reduce((s, r) => s + Number(r.costo_reparacion ?? 0), 0)
     const porEstatus = {}
     for (const r of reparaciones) {
-      const k = String(r.estatus ?? '').trim() || '—'
+      const k = normalizarLabelEstatus(r.estatus)
       porEstatus[k] = (porEstatus[k] ?? 0) + 1
     }
     return { total, entregadas, activas, totalPagos, totalCosto, porEstatus }
-  }, [reparaciones])
+  }, [reparaciones, pagosPeriodo])
 
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
@@ -283,6 +302,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     setPantalla('fechas')
     setEstadisticasDesdeReporte(false)
     setReparaciones([])
+    setPagosPeriodo([])
     setPeriodoAplicado(null)
     setEstatusAplicado('')
     setSinColumnaFecha(false)
@@ -294,6 +314,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     return (
       <ReportesEstadisticasView
         reparaciones={reparaciones}
+        pagosPeriodo={pagosPeriodo}
         resumen={resumen}
         periodoAplicado={periodoAplicado}
         estatusAplicado={estatusAplicado}

@@ -27,6 +27,23 @@ export function guardarAgrupacionEstadisticas(id) {
   }
 }
 
+/** Fecha del movimiento de pago (pagosclientes). */
+export function extractFechaPagoYmd(pago) {
+  const raw =
+    pago?.created_at ??
+    pago?.fecha ??
+    pago?.fecha_pago ??
+    pago?.Fecha ??
+    pago?.fecha_registro
+  if (raw == null || raw === '') return null
+  const s = String(raw).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toISOString().slice(0, 10)
+}
+
 export function extractDateYmdReporte(row) {
   const raw =
     row.fecha ??
@@ -173,9 +190,31 @@ export function serieOrdenesAgrupada(reparaciones, periodo, agrupacion = 'dia') 
   return serieDesdeMapa(map, periodo, agrupacion, false)
 }
 
+/** @deprecated Use seriePagosAgrupadaDesdePagos con registros de pagosclientes. */
 export function seriePagosAgrupada(reparaciones, periodo, agrupacion = 'dia') {
   const map = new Map()
   agregarSeries(map, reparaciones, agrupacion, 'pago')
+  return serieDesdeMapa(map, periodo, agrupacion, true)
+}
+
+export function pagosEnRango(pagos, ini, fin) {
+  return (pagos ?? []).filter((p) => {
+    const y = extractFechaPagoYmd(p)
+    return y != null && y >= ini && y <= fin
+  })
+}
+
+/** Ingresos reales agrupados por fecha de pago (tabla pagosclientes). */
+export function seriePagosAgrupadaDesdePagos(pagos, periodo, agrupacion = 'dia') {
+  const map = new Map()
+  for (const p of pagos ?? []) {
+    const y = extractFechaPagoYmd(p)
+    if (!y) continue
+    const key = claveAgrupacion(y, agrupacion)
+    const add = Number(p.pago ?? 0)
+    if (!Number.isFinite(add) || add <= 0) continue
+    map.set(key, (map.get(key) ?? 0) + add)
+  }
   return serieDesdeMapa(map, periodo, agrupacion, true)
 }
 
@@ -262,11 +301,31 @@ export function tituloAgrupacionPagos(agrupacion) {
   return 'Ingresos por día (pagos)'
 }
 
+export function normalizarLabelEstatus(label) {
+  const u = String(label ?? '').trim().toUpperCase()
+  if (u === 'ENTREGADA') return 'ENTREGADO'
+  return String(label ?? '').trim() || '—'
+}
+
 export function serieEstatus(porEstatus) {
-  return Object.entries(porEstatus ?? {})
-    .filter(([, n]) => n > 0)
+  const merged = {}
+  for (const [raw, n] of Object.entries(porEstatus ?? {})) {
+    const num = Number(n)
+    if (!Number.isFinite(num) || num <= 0) continue
+    const label = normalizarLabelEstatus(raw)
+    merged[label] = (merged[label] ?? 0) + num
+  }
+  return Object.entries(merged)
     .sort((a, b) => b[1] - a[1])
     .map(([label, value]) => ({ label, value }))
+}
+
+export function totalPagosEnLista(pagos) {
+  return (pagos ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
+}
+
+export function serieTieneDatos(series) {
+  return (series ?? []).some((d) => Number(d.value) > 0)
 }
 
 export function serieEntregadasActivas(entregadas, activas) {

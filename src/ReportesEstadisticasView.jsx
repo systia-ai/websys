@@ -6,6 +6,7 @@ import {
   labelDiaCorta,
   labelPeriodoEje,
   leerAgrupacionEstadisticas,
+  pagosEnRango,
   reparacionesEnRango,
   segmentosAnioEnPeriodo,
   segmentosMesEnPeriodo,
@@ -13,31 +14,80 @@ import {
   serieEstatus,
   serieOrdenesAgrupada,
   serieOrdenesPorDia,
-  seriePagosAgrupada,
-  seriePagosPorDia,
+  seriePagosAgrupadaDesdePagos,
+  serieTieneDatos,
   tituloAgrupacionOrdenes,
   tituloAgrupacionPagos,
 } from './reportesEstadisticas.js'
 
 const W = 640
-const H = 220
-const PAD = { t: 24, r: 16, b: 44, l: 52 }
+const H = 240
+const PAD = { t: 28, r: 20, b: 48, l: 56 }
+
+const BAR_COLORS = ['#1976d2', '#42a5f5', '#26a69a', '#66bb6a', '#ffa726', '#ab47bc', '#78909c']
 
 function maxValor(series) {
-  const m = Math.max(...series.map((d) => d.value), 0)
+  const m = Math.max(...(series ?? []).map((d) => Number(d.value) || 0), 0)
   return m <= 0 ? 1 : m
 }
 
-function SvgLineChart({ title, series, formatY = (v) => String(v), formatXLabel }) {
+function formatPagoEje(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '$0'
+  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
+  if (n >= 100) return `$${Math.round(n)}`
+  return `$${n.toFixed(0)}`
+}
+
+function formatCantEje(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '0'
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+function SvgChartEmpty({ title, mensaje = 'Sin datos en este periodo' }) {
+  return (
+    <figure className="reportes-chart-card reportes-chart-card--empty">
+      <figcaption className="reportes-chart-title">{title}</figcaption>
+      <div className="reportes-chart-empty" role="status">
+        <span aria-hidden="true">📊</span>
+        <p>{mensaje}</p>
+      </div>
+    </figure>
+  )
+}
+
+function SvgDefs() {
+  return (
+    <defs>
+      <linearGradient id="reportesAreaGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#1976d2" stopOpacity="0.28" />
+        <stop offset="100%" stopColor="#1976d2" stopOpacity="0.02" />
+      </linearGradient>
+      <linearGradient id="reportesBarGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#42a5f5" />
+        <stop offset="100%" stopColor="#1976d2" />
+      </linearGradient>
+    </defs>
+  )
+}
+
+function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) {
+  const fmtX = formatXLabel ?? ((l) => l)
+  const conDatos = serieTieneDatos(series)
+  const n = series?.length ?? 0
+
+  if (!conDatos || n === 0) {
+    return <SvgChartEmpty title={title} />
+  }
+
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
   const maxY = maxValor(series)
-  const n = series.length
-  const fmtX = formatXLabel ?? ((l) => l)
-
   const pts = series.map((d, i) => {
     const x = PAD.l + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-    const y = PAD.t + innerH - (d.value / maxY) * innerH
+    const y = PAD.t + innerH - (Number(d.value) / maxY) * innerH
     return { x, y, ...d }
   })
 
@@ -51,31 +101,39 @@ function SvgLineChart({ title, series, formatY = (v) => String(v), formatXLabel 
   const yTicks = Array.from({ length: gridLines + 1 }, (_, i) => {
     const v = (maxY * (gridLines - i)) / gridLines
     const y = PAD.t + (i / gridLines) * innerH
-    return { v, y }
+    return { v, y, key: `y-${i}` }
   })
 
-  const xStep = Math.max(1, Math.ceil(n / 8))
+  const xStep = Math.max(1, Math.ceil(n / 7))
 
   return (
     <figure className="reportes-chart-card">
       <figcaption className="reportes-chart-title">{title}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
-        {yTicks.map(({ v, y }) => (
-          <g key={v}>
+        <SvgDefs />
+        {yTicks.map(({ v, y, key }) => (
+          <g key={key}>
             <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} className="reportes-chart-grid" />
-            <text x={PAD.l - 8} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
+            <text x={PAD.l - 6} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
               {formatY(v)}
             </text>
           </g>
         ))}
-        {areaPath ? <path d={areaPath} className="reportes-chart-area" /> : null}
+        {areaPath ? <path d={areaPath} fill="url(#reportesAreaGrad)" /> : null}
         {linePath ? <path d={linePath} className="reportes-chart-line" fill="none" /> : null}
-        {pts.map((p) => (
-          <circle key={p.label} cx={p.x} cy={p.y} r={4} className="reportes-chart-dot" />
+        {pts.map((p, i) => (
+          <g key={`pt-${i}-${p.label}`}>
+            <circle cx={p.x} cy={p.y} r={5} className="reportes-chart-dot" />
+            {Number(p.value) > 0 ? (
+              <text x={p.x} y={p.y - 10} textAnchor="middle" className="reportes-chart-point-val">
+                {formatY(p.value)}
+              </text>
+            ) : null}
+          </g>
         ))}
         {pts.map((p, i) =>
           i % xStep === 0 || i === n - 1 ? (
-            <text key={`x-${p.label}`} x={p.x} y={H - 12} textAnchor="middle" className="reportes-chart-axis-x">
+            <text key={`x-${i}-${p.label}`} x={p.x} y={H - 14} textAnchor="middle" className="reportes-chart-axis-x">
               {fmtX(p.label)}
             </text>
           ) : null,
@@ -88,49 +146,72 @@ function SvgLineChart({ title, series, formatY = (v) => String(v), formatXLabel 
 function SvgBarChart({
   title,
   series,
-  formatY = (v) => String(v),
+  formatY = formatCantEje,
   formatXLabel,
   formatBarValue,
+  colorCycle = BAR_COLORS,
 }) {
+  const fmtX = formatXLabel ?? ((l) => l)
+  const fmtVal = formatBarValue ?? formatY
+  const conDatos = serieTieneDatos(series)
+  const n = series?.length ?? 0
+
+  if (!conDatos || n === 0) {
+    return <SvgChartEmpty title={title} />
+  }
+
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
   const maxY = maxValor(series)
-  const n = series.length
-  const gap = 12
-  const barW = n > 0 ? Math.min(48, (innerW - gap * (n + 1)) / n) : 0
-  const fmtX = formatXLabel ?? ((l) => l)
+  const gap = n > 14 ? 4 : 8
+  const barW = n > 0 ? Math.max(6, Math.min(40, (innerW - gap * (n + 1)) / n)) : 0
+  const totalBarsW = n * barW + (n + 1) * gap
+  const offsetX = PAD.l + Math.max(0, (innerW - totalBarsW) / 2)
+  const xStep = Math.max(1, Math.ceil(n / 8))
 
   return (
     <figure className="reportes-chart-card">
       <figcaption className="reportes-chart-title">{title}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
-        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+        <SvgDefs />
+        {[0, 0.25, 0.5, 0.75, 1].map((frac, i) => {
           const y = PAD.t + innerH * (1 - frac)
           const v = maxY * frac
           return (
-            <g key={frac}>
+            <g key={`grid-${i}`}>
               <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} className="reportes-chart-grid" />
-              <text x={PAD.l - 8} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
+              <text x={PAD.l - 6} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
                 {formatY(v)}
               </text>
             </g>
           )
         })}
         {series.map((d, i) => {
-          const h = (d.value / maxY) * innerH
-          const x = PAD.l + gap + i * (barW + gap)
+          const val = Number(d.value) || 0
+          const h = Math.max(val > 0 ? 3 : 0, (val / maxY) * innerH)
+          const x = offsetX + gap + i * (barW + gap)
           const y = PAD.t + innerH - h
           const xLbl = fmtX(d.label)
-          const short = xLbl.length > 12 ? `${xLbl.slice(0, 11)}…` : xLbl
+          const short = xLbl.length > 10 ? `${xLbl.slice(0, 9)}…` : xLbl
+          const fill = colorCycle[i % colorCycle.length]
           return (
-            <g key={d.label}>
-              <rect x={x} y={y} width={barW} height={h} rx={4} className="reportes-chart-bar" />
-              <text x={x + barW / 2} y={H - 10} textAnchor="middle" className="reportes-chart-axis-x reportes-chart-axis-x--bar">
-                {short}
-              </text>
-              <text x={x + barW / 2} y={y - 6} textAnchor="middle" className="reportes-chart-bar-val">
-                {formatBarValue ? formatBarValue(d.value) : d.value}
-              </text>
+            <g key={`bar-${i}-${d.label}`}>
+              <rect x={x} y={y} width={barW} height={h} rx={3} fill={fill} className="reportes-chart-bar" />
+              {val > 0 && h >= 14 ? (
+                <text x={x + barW / 2} y={y - 5} textAnchor="middle" className="reportes-chart-bar-val">
+                  {fmtVal(val)}
+                </text>
+              ) : null}
+              {i % xStep === 0 || i === n - 1 ? (
+                <text
+                  x={x + barW / 2}
+                  y={H - 12}
+                  textAnchor="middle"
+                  className="reportes-chart-axis-x reportes-chart-axis-x--bar"
+                >
+                  {short}
+                </text>
+              ) : null}
             </g>
           )
         })}
@@ -140,52 +221,54 @@ function SvgBarChart({
 }
 
 function SvgDonutChart({ title, series }) {
-  const total = series.reduce((s, d) => s + d.value, 0)
+  const total = series.reduce((s, d) => s + Number(d.value), 0)
   const cx = W / 2
-  const cy = H / 2 - 8
-  const r = 72
-  const ir = 44
-  let acc = 0
+  const cy = H / 2 - 6
+  const r = 78
+  const ir = 48
 
-  const slices =
-    total <= 0
-      ? []
-      : series.map((d) => {
-          const start = (acc / total) * Math.PI * 2 - Math.PI / 2
-          acc += d.value
-          const end = (acc / total) * Math.PI * 2 - Math.PI / 2
-          const x1 = cx + r * Math.cos(start)
-          const y1 = cy + r * Math.sin(start)
-          const x2 = cx + r * Math.cos(end)
-          const y2 = cy + r * Math.sin(end)
-          const xi1 = cx + ir * Math.cos(end)
-          const yi1 = cy + ir * Math.sin(end)
-          const xi2 = cx + ir * Math.cos(start)
-          const yi2 = cy + ir * Math.sin(start)
-          const large = end - start > Math.PI ? 1 : 0
-          const path = `M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${xi1},${yi1} A${ir},${ir} 0 ${large} 0 ${xi2},${yi2} Z`
-          return { ...d, path }
-        })
+  if (total <= 0) {
+    return <SvgChartEmpty title={title} />
+  }
+
+  let acc = 0
+  const slices = series.map((d, i) => {
+    const start = (acc / total) * Math.PI * 2 - Math.PI / 2
+    acc += Number(d.value)
+    const end = (acc / total) * Math.PI * 2 - Math.PI / 2
+    const x1 = cx + r * Math.cos(start)
+    const y1 = cy + r * Math.sin(start)
+    const x2 = cx + r * Math.cos(end)
+    const y2 = cy + r * Math.sin(end)
+    const xi1 = cx + ir * Math.cos(end)
+    const yi1 = cy + ir * Math.sin(end)
+    const xi2 = cx + ir * Math.cos(start)
+    const yi2 = cy + ir * Math.sin(start)
+    const large = end - start > Math.PI ? 1 : 0
+    const path = `M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${xi1},${yi1} A${ir},${ir} 0 ${large} 0 ${xi2},${yi2} Z`
+    return { ...d, path, pct: Math.round((Number(d.value) / total) * 100), color: d.color ?? BAR_COLORS[i % BAR_COLORS.length] }
+  })
 
   return (
     <figure className="reportes-chart-card reportes-chart-card--donut">
       <figcaption className="reportes-chart-title">{title}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
-        {slices.map((s) => (
-          <path key={s.label} d={s.path} fill={s.color ?? '#1976d2'} className="reportes-chart-slice" />
+        {slices.map((s, i) => (
+          <path key={`slice-${i}-${s.label}`} d={s.path} fill={s.color} className="reportes-chart-slice" />
         ))}
         <text x={cx} y={cy - 4} textAnchor="middle" className="reportes-chart-donut-center">
           {total}
         </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" className="reportes-chart-donut-sub">
+        <text x={cx} y={cy + 16} textAnchor="middle" className="reportes-chart-donut-sub">
           órdenes
         </text>
       </svg>
       <ul className="reportes-chart-legend">
-        {series.map((s) => (
-          <li key={s.label}>
-            <span className="reportes-chart-legend-swatch" style={{ background: s.color ?? '#1976d2' }} />
+        {slices.map((s, i) => (
+          <li key={`leg-${i}-${s.label}`}>
+            <span className="reportes-chart-legend-swatch" style={{ background: s.color }} />
             {s.label}: <strong>{s.value}</strong>
+            <span className="reportes-chart-legend-pct"> ({s.pct}%)</span>
           </li>
         ))}
       </ul>
@@ -193,11 +276,7 @@ function SvgDonutChart({ title, series }) {
   )
 }
 
-function formatPagoEje(v) {
-  return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`
-}
-
-function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
+function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoAplicado }) {
   const periodo = periodoAplicado
   const fmtX = useCallback((l) => labelPeriodoEje(l, agrupacion), [agrupacion])
 
@@ -206,8 +285,8 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
     [reparaciones, periodo, agrupacion],
   )
   const pagosSerie = useMemo(
-    () => seriePagosAgrupada(reparaciones, periodo, agrupacion),
-    [reparaciones, periodo, agrupacion],
+    () => seriePagosAgrupadaDesdePagos(pagosPeriodo, periodo, agrupacion),
+    [pagosPeriodo, periodo, agrupacion],
   )
 
   const mesesDetalle = useMemo(
@@ -235,12 +314,18 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
             formatY={formatPagoEje}
             formatBarValue={formatPagoEje}
             formatXLabel={fmtX}
+            colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784', '#a5d6a7']}
           />
         </>
       ) : (
         <>
           <SvgLineChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
-          <SvgLineChart title={tituloPagos} series={pagosSerie} formatY={formatPagoEje} formatXLabel={fmtX} />
+          <SvgLineChart
+            title={tituloPagos}
+            series={pagosSerie}
+            formatY={formatPagoEje}
+            formatXLabel={fmtX}
+          />
         </>
       )}
 
@@ -254,20 +339,16 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
           </p>
           {mesesDetalle.map((seg) => {
             const repMes = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
+            const pagosMes = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesDia = serieOrdenesPorDia(repMes, { ini: seg.ini, fin: seg.fin })
-            const pagosDia = seriePagosPorDia(repMes, { ini: seg.ini, fin: seg.fin })
-            const totalOrdenes = ordenesDia.reduce((s, d) => s + d.value, 0)
-            if (totalOrdenes === 0 && pagosDia.every((d) => d.value === 0)) return null
+            const pagosDia = seriePagosAgrupadaDesdePagos(pagosMes, { ini: seg.ini, fin: seg.fin }, 'dia')
+            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(pagosDia)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
+                <SvgLineChart title={`Órdenes — ${seg.label}`} series={ordenesDia} formatXLabel={labelDiaCorta} />
                 <SvgLineChart
-                  title={`Órdenes — ${seg.label}`}
-                  series={ordenesDia}
-                  formatXLabel={labelDiaCorta}
-                />
-                <SvgLineChart
-                  title={`Ingresos — ${seg.label}`}
+                  title={`Ingresos (pagos) — ${seg.label}`}
                   series={pagosDia}
                   formatY={formatPagoEje}
                   formatXLabel={labelDiaCorta}
@@ -288,20 +369,21 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
           </p>
           {aniosDetalle.map((seg) => {
             const repAnio = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
+            const pagosAnio = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesMes = serieOrdenesAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            const pagosMes = seriePagosAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            const totalOrdenes = ordenesMes.reduce((s, d) => s + d.value, 0)
-            if (totalOrdenes === 0 && pagosMes.every((d) => d.value === 0)) return null
+            const pagosMes = seriePagosAgrupadaDesdePagos(pagosAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
+            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(pagosMes)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
                 <SvgBarChart title={`Órdenes por mes — ${seg.label}`} series={ordenesMes} formatXLabel={fmtMes} />
                 <SvgBarChart
-                  title={`Ingresos por mes — ${seg.label}`}
+                  title={`Ingresos (pagos) por mes — ${seg.label}`}
                   series={pagosMes}
                   formatY={formatPagoEje}
                   formatBarValue={formatPagoEje}
                   formatXLabel={fmtMes}
+                  colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784']}
                 />
               </div>
             )
@@ -314,6 +396,7 @@ function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
 
 export default function ReportesEstadisticasView({
   reparaciones,
+  pagosPeriodo = [],
   resumen,
   periodoAplicado,
   estatusAplicado,
@@ -413,7 +496,7 @@ export default function ReportesEstadisticasView({
             </div>
             <div className="reportes-kpi">
               <span className="label">
-                <span aria-hidden="true">💵</span> Pagos
+                <span aria-hidden="true">💵</span> Pagos registrados
               </span>
               <strong>${resumen.totalPagos.toFixed(2)}</strong>
             </div>
@@ -441,6 +524,7 @@ export default function ReportesEstadisticasView({
           <GraficasTemporales
             agrupacion={agrupacion}
             reparaciones={reparaciones}
+            pagosPeriodo={pagosPeriodo}
             periodoAplicado={periodoAplicado}
           />
         ) : null}

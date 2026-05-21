@@ -1653,7 +1653,45 @@ td {
 
 .reportes-chart-area {
   fill: url(#reportesAreaGrad);
-  fill: rgba(25, 118, 210, 0.12);
+}
+
+.reportes-chart-card--empty {
+  background: linear-gradient(145deg, #fafafa 0%, #f5f5f5 100%);
+  border-color: #e0e0e0;
+}
+
+.reportes-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 140px;
+  padding: 20px;
+  color: #90a4ae;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.reportes-chart-empty span {
+  font-size: 1.75rem;
+  opacity: 0.7;
+}
+
+.reportes-chart-empty p {
+  margin: 0;
+}
+
+.reportes-chart-point-val {
+  font-size: 9px;
+  fill: #1565c0;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+}
+
+.reportes-chart-legend-pct {
+  color: #90a4ae;
+  font-weight: 500;
 }
 
 .reportes-chart-dot {
@@ -1663,7 +1701,15 @@ td {
 }
 
 .reportes-chart-bar {
-  fill: #42a5f5;
+  opacity: 0.92;
+}
+
+.reportes-chart-slice {
+  transition: opacity 0.15s ease;
+}
+
+.reportes-chart-slice:hover {
+  opacity: 0.88;
 }
 
 .reportes-chart-bar-val {
