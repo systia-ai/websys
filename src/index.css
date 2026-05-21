@@ -1552,7 +1552,7 @@ td {
 
 @media (min-width: 520px) {
   .reportes-kpi-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -1642,6 +1642,51 @@ td {
 
 .reportes-chart-axis-x--bar {
   font-size: 9px;
+}
+
+.reportes-chart-card--chip-labels {
+  padding-bottom: 10px;
+}
+
+.reportes-chart-card--chip-labels .reportes-chart-svg {
+  max-height: 240px;
+  margin-bottom: 4px;
+}
+
+.reportes-bar-chips {
+  margin-top: 2px;
+}
+
+.reportes-bar-chips-grid {
+  display: grid;
+  width: 100%;
+  align-items: stretch;
+}
+
+.reportes-bar-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 40px;
+  padding: 8px 6px 6px;
+  border-radius: 8px;
+  border: 1px solid #b3e5fc;
+  border-top-width: 4px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(33, 150, 243, 0.1);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.reportes-bar-chip-line {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #37474f;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .reportes-chart-line {

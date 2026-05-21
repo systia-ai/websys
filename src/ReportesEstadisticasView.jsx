@@ -4,6 +4,7 @@ import {
   guardarAgrupacionEstadisticas,
   hayDatosConFecha,
   labelDiaCorta,
+  labelEstatusGrafica,
   labelPeriodoEje,
   leerAgrupacionEstadisticas,
   pagosEnRango,
@@ -143,6 +144,17 @@ function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) 
   )
 }
 
+/** Parte en dos líneas si el texto no cabe en una. */
+function lineasEtiquetaBarra(texto, maxPorLinea = 11) {
+  const t = String(texto ?? '').trim()
+  if (!t) return ['—']
+  if (t.length <= maxPorLinea) return [t]
+  const corte = t.lastIndexOf(' ', maxPorLinea)
+  if (corte > 3) return [t.slice(0, corte), t.slice(corte + 1)]
+  const mitad = Math.ceil(t.length / 2)
+  return [t.slice(0, mitad), t.slice(mitad)]
+}
+
 function SvgBarChart({
   title,
   series,
@@ -150,6 +162,8 @@ function SvgBarChart({
   formatXLabel,
   formatBarValue,
   colorCycle = BAR_COLORS,
+  /** Recuadros horizontales bajo cada barra (estatus). */
+  chipXLabels = false,
 }) {
   const fmtX = formatXLabel ?? ((l) => l)
   const fmtVal = formatBarValue ?? formatY
@@ -160,27 +174,42 @@ function SvgBarChart({
     return <SvgChartEmpty title={title} />
   }
 
-  const innerW = W - PAD.l - PAD.r
-  const innerH = H - PAD.t - PAD.b
+  const pad = chipXLabels ? { ...PAD, b: 16 } : PAD
+  const chartH = H
+  const innerW = W - pad.l - pad.r
+  const innerH = chartH - pad.t - pad.b
   const maxY = maxValor(series)
-  const gap = n > 14 ? 4 : 8
-  const barW = n > 0 ? Math.max(6, Math.min(40, (innerW - gap * (n + 1)) / n)) : 0
-  const totalBarsW = n * barW + (n + 1) * gap
-  const offsetX = PAD.l + Math.max(0, (innerW - totalBarsW) / 2)
-  const xStep = Math.max(1, Math.ceil(n / 8))
+
+  const slotGap = chipXLabels ? 14 : 0
+  const slotW = chipXLabels && n > 0 ? (innerW - slotGap * (n + 1)) / n : 0
+  const gap =
+    chipXLabels && n <= 8
+      ? slotGap
+      : n > 14
+        ? 4
+        : 8
+  const barW =
+    n > 0
+      ? chipXLabels && n <= 8
+        ? Math.min(44, Math.max(20, slotW * 0.42))
+        : Math.max(6, Math.min(40, (innerW - gap * (n + 1)) / n))
+      : 0
+  const totalBarsW = chipXLabels ? innerW : n * barW + (n + 1) * gap
+  const offsetX = chipXLabels ? pad.l : pad.l + Math.max(0, (innerW - totalBarsW) / 2)
+  const xStep = chipXLabels ? 1 : Math.max(1, Math.ceil(n / 8))
 
   return (
-    <figure className="reportes-chart-card">
+    <figure className={`reportes-chart-card${chipXLabels ? ' reportes-chart-card--chip-labels' : ''}`}>
       <figcaption className="reportes-chart-title">{title}</figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
+      <svg viewBox={`0 0 ${W} ${chartH}`} className="reportes-chart-svg" role="img" aria-label={title}>
         <SvgDefs />
         {[0, 0.25, 0.5, 0.75, 1].map((frac, i) => {
-          const y = PAD.t + innerH * (1 - frac)
+          const y = pad.t + innerH * (1 - frac)
           const v = maxY * frac
           return (
             <g key={`grid-${i}`}>
-              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} className="reportes-chart-grid" />
-              <text x={PAD.l - 6} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
+              <line x1={pad.l} y1={y} x2={W - pad.r} y2={y} className="reportes-chart-grid" />
+              <text x={pad.l - 6} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
                 {formatY(v)}
               </text>
             </g>
@@ -189,26 +218,29 @@ function SvgBarChart({
         {series.map((d, i) => {
           const val = Number(d.value) || 0
           const h = Math.max(val > 0 ? 3 : 0, (val / maxY) * innerH)
-          const x = offsetX + gap + i * (barW + gap)
-          const y = PAD.t + innerH - h
+          const slotX = chipXLabels ? offsetX + slotGap + i * (slotW + slotGap) : offsetX + gap + i * (barW + gap)
+          const cx = chipXLabels ? slotX + slotW / 2 : slotX + barW / 2
+          const x = cx - barW / 2
+          const y = pad.t + innerH - h
           const xLbl = fmtX(d.label)
-          const short = xLbl.length > 10 ? `${xLbl.slice(0, 9)}…` : xLbl
+          const short = xLbl.length > 10 && !chipXLabels ? `${xLbl.slice(0, 9)}…` : xLbl
           const fill = colorCycle[i % colorCycle.length]
           return (
             <g key={`bar-${i}-${d.label}`}>
               <rect x={x} y={y} width={barW} height={h} rx={3} fill={fill} className="reportes-chart-bar" />
               {val > 0 && h >= 14 ? (
-                <text x={x + barW / 2} y={y - 5} textAnchor="middle" className="reportes-chart-bar-val">
+                <text x={cx} y={y - 5} textAnchor="middle" className="reportes-chart-bar-val">
                   {fmtVal(val)}
                 </text>
               ) : null}
-              {i % xStep === 0 || i === n - 1 ? (
+              {!chipXLabels && (i % xStep === 0 || i === n - 1) ? (
                 <text
-                  x={x + barW / 2}
-                  y={H - 12}
+                  x={cx}
+                  y={chartH - 12}
                   textAnchor="middle"
                   className="reportes-chart-axis-x reportes-chart-axis-x--bar"
                 >
+                  <title>{String(d.label ?? xLbl)}</title>
                   {short}
                 </text>
               ) : null}
@@ -216,6 +248,37 @@ function SvgBarChart({
           )
         })}
       </svg>
+      {chipXLabels ? (
+        <div className="reportes-bar-chips" style={{ paddingLeft: pad.l, paddingRight: pad.r }}>
+          <div
+            className="reportes-bar-chips-grid"
+            style={{
+              gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
+              columnGap: slotGap,
+            }}
+          >
+            {series.map((d, i) => {
+              const xLbl = fmtX(d.label)
+              const lineas = lineasEtiquetaBarra(xLbl, 14)
+              const fill = colorCycle[i % colorCycle.length]
+              return (
+                <div
+                  key={`chip-${i}-${d.label}`}
+                  className="reportes-bar-chip"
+                  style={{ borderTopColor: fill }}
+                  title={String(d.label ?? xLbl)}
+                >
+                  {lineas.map((linea) => (
+                    <span key={linea} className="reportes-bar-chip-line">
+                      {linea}
+                    </span>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
     </figure>
   )
 }
@@ -502,12 +565,6 @@ export default function ReportesEstadisticasView({
             </div>
             <div className="reportes-kpi">
               <span className="label">
-                <span aria-hidden="true">🛠️</span> Costo reparación
-              </span>
-              <strong>${resumen.totalCosto.toFixed(2)}</strong>
-            </div>
-            <div className="reportes-kpi">
-              <span className="label">
                 <span aria-hidden="true">✅</span> Entregadas
               </span>
               <strong>{resumen.entregadas}</strong>
@@ -530,7 +587,12 @@ export default function ReportesEstadisticasView({
         ) : null}
 
         {!loading && estatusSerie.length > 0 ? (
-          <SvgBarChart title="Órdenes por estatus" series={estatusSerie} />
+          <SvgBarChart
+            title="Órdenes por estatus"
+            series={estatusSerie}
+            formatXLabel={labelEstatusGrafica}
+            chipXLabels
+          />
         ) : null}
 
         {!loading && entregadasSerie.length > 0 ? (

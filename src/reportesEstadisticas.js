@@ -307,6 +307,23 @@ export function normalizarLabelEstatus(label) {
   return String(label ?? '').trim() || '—'
 }
 
+/** Etiquetas cortas y legibles bajo las barras de «Órdenes por estatus». */
+export function labelEstatusGrafica(label) {
+  const u = String(label ?? '').trim().toUpperCase()
+  const cortos = {
+    INGRESADO: 'Ingresado',
+    'EN REVISION': 'En revisión',
+    'EN ESPERA POR REFACCION': 'En espera',
+    REPARADO: 'Reparado',
+    'SIN REPARACION': 'Sin reparación',
+    ENTREGADO: 'Entregado',
+    ENTREGADA: 'Entregado',
+  }
+  if (cortos[u]) return cortos[u]
+  const t = String(label ?? '').trim()
+  return t.length > 16 ? `${t.slice(0, 15)}…` : t
+}
+
 export function serieEstatus(porEstatus) {
   const merged = {}
   for (const [raw, n] of Object.entries(porEstatus ?? {})) {
