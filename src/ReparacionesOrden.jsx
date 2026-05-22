@@ -27,7 +27,7 @@ import {
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   registrarOrdenCreadaEnSesion,
-  ymdHoyLocal,
+  ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -230,7 +230,11 @@ export default function ReparacionesOrden({
   const aplicarFechasDesdeReparacion = useCallback((data) => {
     setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
     setFechaIngresoOrden(data.fecha_ingreso ?? data.fechaIngreso ?? null)
-    setFechaEntregaOrden(data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null)
+    setFechaEntregaOrden(
+      aYmdLocalDesdeRaw(
+        data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
+      ),
+    )
   }, [])
 
   const cargarCuentaYEntregaAux = useCallback(
@@ -692,7 +696,7 @@ export default function ReparacionesOrden({
       updated_at: now,
     }
     if (estatusEsEntregado(estatusGuardar)) {
-      patch.fecha_entrega = ymdHoyLocal()
+      patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
       setFechaEntregaOrden(patch.fecha_entrega)
     } else {
       patch.fecha_entrega = null
@@ -701,6 +705,22 @@ export default function ReparacionesOrden({
     try {
       if (supabase) {
         await actualizarReparacionSupabase(supabase, id, patch)
+        const { data: guardada, error: eVer } = await supabase
+          .from('reparaciones')
+          .select('fecha_entrega, estatus, updated_at')
+          .eq('id', id)
+          .maybeSingle()
+        if (!eVer && guardada) {
+          aplicarFechasDesdeReparacion(guardada)
+          if (
+            estatusEsEntregado(estatusGuardar) &&
+            !aYmdLocalDesdeRaw(guardada.fecha_entrega)
+          ) {
+            console.warn(
+              `Orden #${id}: estatus ENTREGADO pero fecha_entrega no quedó en la base de datos.`,
+            )
+          }
+        }
         if (!estatusEsEntregado(estatusGuardar)) {
           const { data: ver, error: verErr } = await supabase
             .from('reparaciones')

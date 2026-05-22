@@ -115,7 +115,8 @@ export function fechaIngresoYmd(rep) {
 
 /**
  * Fecha de entrega (órdenes ENTREGADO/A).
- * Usa cuenta liquidada si se pasa (repara_id → cuenta).
+ * Prioridad: columna fecha_entrega → último pago → fecha_liquidada → updated_at de la orden.
+ * No usa created_at de la cuenta (coincide con el ingreso al taller).
  */
 export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = null) {
   if (!estatusEsEntregado(rep?.estatus)) return null
@@ -125,15 +126,24 @@ export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = nul
   if (desdeRep) return desdeRep
   if (ymdDesdePagos) return ymdDesdePagos
   if (cuentaVinculada) {
-    const desdeCuenta = aYmdLocalDesdeRaw(
-      cuentaVinculada.fecha_liquidada ??
-        cuentaVinculada.fechaLiquidada ??
-        cuentaVinculada.updated_at ??
-        cuentaVinculada.created_at,
-    )
-    if (desdeCuenta) return desdeCuenta
+    const estCuenta = String(cuentaVinculada.estatus ?? '').trim().toUpperCase()
+    const liquidada =
+      estCuenta === 'LIQUIDADA' ||
+      cuentaVinculada.fecha_liquidada != null ||
+      cuentaVinculada.fechaLiquidada != null
+    if (liquidada) {
+      const desdeLiq = aYmdLocalDesdeRaw(
+        cuentaVinculada.fecha_liquidada ?? cuentaVinculada.fechaLiquidada,
+      )
+      if (desdeLiq) return desdeLiq
+    }
   }
   return aYmdLocalDesdeRaw(rep?.updated_at)
+}
+
+/** YMD para guardar al marcar entregada: conserva la existente o usa hoy (local). */
+export function ymdFechaEntregaParaGuardar(fechaEntregaExistente) {
+  return aYmdLocalDesdeRaw(fechaEntregaExistente) || ymdHoyLocal()
 }
 
 function ymdEnRango(ymd, desde, hasta) {
@@ -232,12 +242,12 @@ export function repCoincideFiltroMonitor(
 }
 
 /** Campos al marcar orden entregada (Ventas / actualización de estatus). */
-export function patchReparacionEntregada(estatus = 'ENTREGADA') {
+export function patchReparacionEntregada(estatus = 'ENTREGADA', fechaEntregaExistente = null) {
   const now = new Date().toISOString()
   return {
     estatus,
     updated_at: now,
-    fecha_entrega: ymdHoyLocal(),
+    fecha_entrega: ymdFechaEntregaParaGuardar(fechaEntregaExistente),
   }
 }
 
@@ -266,10 +276,7 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
         'No tiene permiso para actualizar esta orden en la base de datos. Revise la sesión de Supabase o las políticas RLS del proyecto.',
       )
     }
-    if (
-      'fecha_entrega' in payload &&
-      (payload.fecha_entrega == null || esErrorColumnaDesconocida(error, 'fecha_entrega'))
-    ) {
+    if ('fecha_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
       const { fecha_entrega: _f, ...rest } = payload
       if (Object.keys(rest).length > 0) {
         payload = rest
@@ -286,9 +293,18 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
   throw new Error('No se pudo actualizar la orden tras varios intentos.')
 }
 
-/** Actualiza reparación a entregada; omite fecha_entrega si la columna no existe en BD. */
+/** Actualiza reparación a entregada; conserva fecha_entrega ya guardada. */
 export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
-  await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada())
+  let fechaPrev = null
+  if (supabase?.from && reparaId != null) {
+    const { data } = await supabase
+      .from('reparaciones')
+      .select('fecha_entrega')
+      .eq('id', reparaId)
+      .maybeSingle()
+    fechaPrev = data?.fecha_entrega ?? null
+  }
+  await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada('ENTREGADA', fechaPrev))
 }
 
 /**
