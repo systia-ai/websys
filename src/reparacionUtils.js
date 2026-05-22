@@ -343,38 +343,90 @@ export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
   return { ...repRow, ...patch }
 }
 
+/** Suma de pagos/anticipos registrados en la cuenta. */
+export function sumPagosCuenta(pagosCuenta = []) {
+  return (pagosCuenta ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
+}
+
+/** Adeudo = total de la venta menos lo pagado (mínimo 0). */
+export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
+  const total = Number(totalVenta ?? 0)
+  const pagado = sumPagosCuenta(pagosCuenta)
+  return Math.max(0, total - pagado)
+}
+
 /**
- * Si hay pagos que cubren el adeudo (o total $0 con pagos registrados), marca la cuenta LIQUIDADA.
- * No toca el estatus de la orden de taller (INGRESADO/REPARADO ≠ entrega al cliente).
- * Una cuenta nueva con total $0 y sin pagos se deja PENDIENTE.
+ * Ajusta PENDIENTE / LIQUIDADA según el adeudo real.
+ * - Anticipo sin productos: queda PENDIENTE (no se auto-marca liquidada).
+ * - Productos después de anticipo: vuelve a PENDIENTE si aún debe.
+ * - Solo LIQUIDADA cuando los pagos cubren el total de cargos (> $0).
  */
+export async function sincronizarEstatusCuentaPorSaldo(
+  supabase,
+  cuenta,
+  pagosCuenta = [],
+  { totalVenta: totalVentaOpt } = {},
+) {
+  if (!cuenta?.id) return cuenta
+
+  const pagos = pagosCuenta ?? []
+  const pagado = sumPagosCuenta(pagos)
+  const totalVenta =
+    totalVentaOpt != null ? Number(totalVentaOpt) : Number(cuenta.total ?? 0)
+  const adeudo = saldoPendienteCuenta(totalVenta, pagos)
+  const est = String(cuenta.estatus ?? '').trim().toUpperCase()
+
+  const patchPendiente = {
+    estatus: 'PENDIENTE',
+    total: totalVenta,
+    fecha_liquidada: null,
+  }
+
+  // Hay adeudo (p. ej. agregaron producto tras anticipo o cuenta mal liquidada).
+  if (adeudo > 0.01) {
+    if (est === 'PENDIENTE' && cuenta.fecha_liquidada == null && Number(cuenta.total) === totalVenta) {
+      return cuenta
+    }
+    if (supabase) {
+      await actualizarCuentaSupabase(supabase, cuenta.id, patchPendiente)
+    }
+    return { ...cuenta, ...patchPendiente }
+  }
+
+  // Anticipo u otros pagos sin cargos en la cuenta: no cerrar como liquidada.
+  if (totalVenta <= 0.0001 && pagado > 0.0001) {
+    if (est === 'LIQUIDADA' || cuenta.fecha_liquidada != null) {
+      const patchAnticipo = { estatus: 'PENDIENTE', total: 0, fecha_liquidada: null }
+      if (supabase) {
+        await actualizarCuentaSupabase(supabase, cuenta.id, patchAnticipo)
+      }
+      return { ...cuenta, ...patchAnticipo }
+    }
+    return cuenta
+  }
+
+  // Pagos cubren el total de cargos → liquidada (saldo $0 en BD).
+  const pagosCubrenTotal = totalVenta > 0.0001 && pagado >= totalVenta - 0.01
+  if (!pagosCubrenTotal) return cuenta
+  if (est === 'LIQUIDADA') return cuenta
+
+  const nowLiq = new Date().toISOString()
+  const patchLiq = { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+  if (supabase) {
+    await actualizarCuentaSupabase(supabase, cuenta.id, patchLiq)
+  }
+  return { ...cuenta, ...patchLiq }
+}
+
+/** @deprecated Alias; usa {@link sincronizarEstatusCuentaPorSaldo}. */
 export async function sincronizarCuentaLiquidadaSiSaldoCero(
   supabase,
   cuenta,
   _reparaId = null,
   pagosCuenta = [],
+  opts = {},
 ) {
-  if (!cuenta?.id) return cuenta
-  const est = String(cuenta.estatus ?? '').trim().toUpperCase()
-  if (est === 'LIQUIDADA') return cuenta
-
-  const pagos = pagosCuenta ?? []
-  if (pagos.length === 0) return cuenta
-
-  const totalCuenta = Number(cuenta.total ?? 0)
-  const sumPagos = pagos.reduce((s, p) => s + Number(p.pago ?? 0), 0)
-  const pagosCubren = totalCuenta > 0.0001 && sumPagos >= totalCuenta - 0.01
-  const saldoCeroConPagos = Math.abs(totalCuenta) <= 0.0001 && sumPagos > 0.0001
-  if (!pagosCubren && !saldoCeroConPagos) return cuenta
-
-  const nowLiq = new Date().toISOString()
-  const patch = { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
-
-  if (supabase) {
-    await actualizarCuentaSupabase(supabase, cuenta.id, patch)
-  }
-
-  return { ...cuenta, ...patch }
+  return sincronizarEstatusCuentaPorSaldo(supabase, cuenta, pagosCuenta, opts)
 }
 
 /** UPDATE en cuentas; reintenta sin columnas opcionales (fecha_liquidada, updated_at). */

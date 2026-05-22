@@ -1,7 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { aYmdLocalDesdeRaw, isReparacionActiva, sincronizarCuentaLiquidadaSiSaldoCero } from './reparacionUtils.js'
+import {
+  aYmdLocalDesdeRaw,
+  isReparacionActiva,
+  sincronizarEstatusCuentaPorSaldo,
+} from './reparacionUtils.js'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
 
@@ -287,28 +291,11 @@ export default function ClientesModulo({
           cuentasFinales = await Promise.all(
             cuentasCliente.map((cu) => {
               const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
-              return sincronizarCuentaLiquidadaSiSaldoCero(supabase, cu, cu.repara_id ?? null, pagosC)
+              return sincronizarEstatusCuentaPorSaldo(supabase, cu, pagosC)
             }),
           )
         } else {
-          cuentasFinales = cuentasCliente.map((cu) => {
-            if (String(cu.estatus ?? '').toUpperCase() === 'LIQUIDADA') return cu
-            const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
-            if (pagosC.length === 0) return cu
-            const totalCuenta = Number(cu.total ?? 0)
-            const sumPagos = pagosC.reduce((s, p) => s + Number(p.pago ?? 0), 0)
-            const pagosCubren = totalCuenta > 0.0001 && sumPagos >= totalCuenta - 0.01
-            const saldoCeroConPagos = Math.abs(totalCuenta) <= 0.0001 && sumPagos > 0.0001
-            if (!pagosCubren && !saldoCeroConPagos) return cu
-            const nowLiq = new Date().toISOString()
-            const list = readLs(LS_CUENTAS, [])
-            const actualizada = { ...cu, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
-            writeLs(
-              LS_CUENTAS,
-              list.map((c) => (sameId(c.id, cu.id) ? actualizada : c)),
-            )
-            return actualizada
-          })
+          cuentasFinales = cuentasCliente
         }
         setCuentasEncontradas(cuentasFinales)
         setRepsPorReparaId(map)

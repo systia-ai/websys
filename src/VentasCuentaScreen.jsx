@@ -16,7 +16,7 @@ import {
   formatFechaLegibleEsMx,
   marcarReparacionEntregadaSupabase,
   patchReparacionEntregada,
-  sincronizarCuentaLiquidadaSiSaldoCero,
+  sincronizarEstatusCuentaPorSaldo,
 } from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -49,13 +49,32 @@ function sumSubtotales(lineas) {
   return lineas.reduce((s, L) => s + Number(L.subtotal ?? 0), 0)
 }
 
-/** Saldo a cobrar: líneas en pantalla; si no hay movimientos, usa total guardado en la cuenta. */
+function totalCargosDesdeLineas(lineas) {
+  return lineas
+    .filter((l) => l.tipo !== 'pago')
+    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+}
+
+function pagosDesdeLineas(lineas) {
+  return lineas
+    .filter((l) => l.tipo === 'pago')
+    .map((l) => ({ pago: Math.abs(Number(l.subtotal ?? l.precioUnitario ?? 0)) }))
+}
+
+/** Saldo neto (cargos − pagos); si no hay líneas, usa total de cuenta. */
 function calcularSaldoPendiente(lineas, cuentaTotal) {
-  const fromLineas = sumSubtotales(lineas)
-  if (fromLineas > 0.0001) return fromLineas
+  const tieneLineas = lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
+  if (tieneLineas) {
+    return Math.max(0, sumSubtotales(lineas))
+  }
   const ct = Number(cuentaTotal ?? 0)
-  if (ct > 0.0001) return ct
-  return fromLineas
+  return ct > 0.0001 ? ct : 0
+}
+
+function totalVentaParaSync(cuentaTotal, lineas) {
+  const cargos = totalCargosDesdeLineas(lineas)
+  const ct = Number(cuentaTotal ?? 0)
+  return Math.max(ct, cargos, Math.max(0, sumSubtotales(lineas)))
 }
 
 /** Si el costo de reparación en la orden no está en reparamov, lo muestra como cargo virtual. */
@@ -225,8 +244,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     [lineas, cuentaInfo?.total, cuentaInicial?.total],
   )
   const totalStr = totalVenta.toFixed(2)
-  const puedePagarAdeudoTotal =
-    esCuentaExistente && saldoPendiente > 0.0001 && cuentaEstatus.toUpperCase() !== 'LIQUIDADA'
+  const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -327,28 +345,31 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         built = inyectarSaldoCuentaSiSinMovimientos(built, cuentaRow)
         setLineas(built)
 
-        if (
-          cuentaRow?.id &&
-          pagos.length > 0 &&
-          Math.abs(sumSubtotales(built)) <= 0.0001
-        ) {
-          const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
-          if (est !== 'LIQUIDADA') {
-            let actualizada = cuentaRow
-            if (supabase) {
-              actualizada = await sincronizarCuentaLiquidadaSiSaldoCero(supabase, cuentaRow, rid, pagos)
-            } else {
+        if (cuentaRow?.id) {
+          const totalSync = totalVentaParaSync(cuentaRow.total, built)
+          let actualizada = cuentaRow
+          if (supabase) {
+            actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, cuentaRow, pagos, {
+              totalVenta: totalSync,
+            })
+          } else {
+            const pagosLs = pagos
+            const pagado = pagosLs.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+            const adeudo = Math.max(0, totalSync - pagado)
+            const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
+            if (adeudo > 0.01 || (totalSync <= 0.0001 && pagado > 0.0001 && est === 'LIQUIDADA')) {
+              actualizada = { ...cuentaRow, estatus: 'PENDIENTE', total: totalSync, fecha_liquidada: null }
+            } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01 && est !== 'LIQUIDADA') {
               const nowLiq = new Date().toISOString()
-              const cidNum = cuentaRow.id
-              const list = readLs(LS_CUENTAS, [])
               actualizada = { ...cuentaRow, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
-              writeLs(
-                LS_CUENTAS,
-                list.map((c) => (sameId(c.id, cidNum) ? actualizada : c)),
-              )
             }
-            setCuentaInfo(actualizada)
+            const list = readLs(LS_CUENTAS, [])
+            writeLs(
+              LS_CUENTAS,
+              list.map((c) => (sameId(c.id, cuentaRow.id) ? actualizada : c)),
+            )
           }
+          setCuentaInfo(actualizada)
         }
       } catch (e) {
         onError?.(`Error al cargar cuenta: ${e.message}`)
@@ -380,21 +401,35 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const persistirTotalCuenta = useCallback(async () => {
     if (cuentaId == null || Number(cuentaId) <= 0) return
     try {
+      const pagosSync = pagosDesdeLineas(lineas)
+      const totalSync = totalVentaParaSync(totalVenta, lineas)
       if (supabase) {
-        const { error } = await supabase.from('cuentas').update({ total: totalVenta }).eq('id', cuentaId)
-        if (error) throw error
+        const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
+        const actualizada = await sincronizarEstatusCuentaPorSaldo(
+          supabase,
+          { ...base, total: totalSync },
+          pagosSync,
+          { totalVenta: totalSync },
+        )
+        setCuentaInfo(actualizada)
       } else {
         const list = readLs(LS_CUENTAS, [])
-        writeLs(
-          LS_CUENTAS,
-          list.map((c) => (sameId(c.id, cuentaId) ? { ...c, total: totalVenta } : c)),
-        )
+        const prev = list.find((c) => sameId(c.id, cuentaId)) ?? { id: cuentaId }
+        const pagado = pagosSync.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+        const adeudo = Math.max(0, totalSync - pagado)
+        let next = { ...prev, total: totalSync }
+        if (adeudo > 0.01) {
+          next = { ...next, estatus: 'PENDIENTE', fecha_liquidada: null }
+        } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
+          next = { ...next, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: new Date().toISOString() }
+        }
+        writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? next : c)))
+        setCuentaInfo(next)
       }
-      setCuentaInfo((prev) => (prev ? { ...prev, total: totalVenta } : prev))
     } catch (e) {
       onError?.(`Error al guardar total: ${e.message}`)
     }
-  }, [supabase, cuentaId, totalVenta, onError])
+  }, [supabase, cuentaId, totalVenta, lineas, cuentaInfo, cuentaInicial, onError])
 
   useEffect(() => {
     if (!esCuentaExistente || loading) return
@@ -1036,9 +1071,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 type="button"
                 className="btn-pagar-adeudo-total"
                 onClick={pagarAdeudoTotalCuenta}
-                disabled={
-                  !puedePagarAdeudoTotal || pagandoAdeudoTotal || cuentaEstatus.toUpperCase() === 'LIQUIDADA'
-                }
+                disabled={!puedePagarAdeudoTotal || pagandoAdeudoTotal}
                 title={
                   saldoPendiente > 0.0001
                     ? 'Registrar pago por el saldo total y liquidar la cuenta'
