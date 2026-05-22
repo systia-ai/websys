@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
-import { formatFechaLegibleEsMx } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
 import {
   crearSetEstatusTodos,
   contarOrdenesDuplicadas,
@@ -28,12 +28,12 @@ const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function ymdHoy() {
-  return new Date().toISOString().slice(0, 10)
+  return ymdHoyLocal()
 }
 
 function ymdInicioMes() {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  return ymdLocalDesdeDate(new Date(d.getFullYear(), d.getMonth(), 1))
 }
 
 function readLs(key, fallback) {
@@ -45,22 +45,16 @@ function readLs(key, fallback) {
 }
 
 function extractDateYmd(row) {
-  const raw =
-    row.fecha ??
-    row.Fecha ??
-    row.fecha_ingreso ??
-    row.fechaIngreso ??
-    row.fecha_entrega ??
-    row.created_at ??
-    row.updated_at ??
-    row.date
-  if (raw == null || raw === '') return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(0, 10)
+  return (
+    aYmdLocalDesdeRaw(row?.fecha) ??
+    aYmdLocalDesdeRaw(row?.Fecha) ??
+    aYmdLocalDesdeRaw(row?.fecha_ingreso) ??
+    aYmdLocalDesdeRaw(row?.fechaIngreso) ??
+    aYmdLocalDesdeRaw(row?.fecha_entrega) ??
+    aYmdLocalDesdeRaw(row?.created_at) ??
+    aYmdLocalDesdeRaw(row?.updated_at) ??
+    aYmdLocalDesdeRaw(row?.date)
+  )
 }
 
 function hayAlgunaFechaEnFilas(rows) {

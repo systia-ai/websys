@@ -1,5 +1,7 @@
 /** Utilidades para gráficas del reporte de reparaciones. */
 
+import { aYmdLocalDesdeRaw, ymdLocalDesdeDate } from './reparacionUtils.js'
+
 export const AGRUPACIONES_ESTADISTICAS = [
   { id: 'dia', label: 'Por día' },
   { id: 'semana', label: 'Por semana' },
@@ -29,38 +31,26 @@ export function guardarAgrupacionEstadisticas(id) {
 
 /** Fecha del movimiento de pago (pagosclientes). */
 export function extractFechaPagoYmd(pago) {
-  const raw =
-    pago?.created_at ??
-    pago?.fecha ??
-    pago?.fecha_pago ??
-    pago?.Fecha ??
-    pago?.fecha_registro
-  if (raw == null || raw === '') return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(0, 10)
+  return (
+    aYmdLocalDesdeRaw(pago?.created_at) ??
+    aYmdLocalDesdeRaw(pago?.fecha) ??
+    aYmdLocalDesdeRaw(pago?.fecha_pago) ??
+    aYmdLocalDesdeRaw(pago?.Fecha) ??
+    aYmdLocalDesdeRaw(pago?.fecha_registro)
+  )
 }
 
 export function extractDateYmdReporte(row) {
-  const raw =
-    row.fecha ??
-    row.Fecha ??
-    row.fecha_ingreso ??
-    row.fechaIngreso ??
-    row.fecha_entrega ??
-    row.created_at ??
-    row.updated_at ??
-    row.date
-  if (raw == null || raw === '') return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(0, 10)
+  return (
+    aYmdLocalDesdeRaw(row?.fecha) ??
+    aYmdLocalDesdeRaw(row?.Fecha) ??
+    aYmdLocalDesdeRaw(row?.fecha_ingreso) ??
+    aYmdLocalDesdeRaw(row?.fechaIngreso) ??
+    aYmdLocalDesdeRaw(row?.fecha_entrega) ??
+    aYmdLocalDesdeRaw(row?.created_at) ??
+    aYmdLocalDesdeRaw(row?.updated_at) ??
+    aYmdLocalDesdeRaw(row?.date)
+  )
 }
 
 function llenarRangoDias(ini, fin) {
@@ -70,7 +60,7 @@ function llenarRangoDias(ini, fin) {
   const start = new Date(y0, m0 - 1, d0)
   const end = new Date(y1, m1 - 1, d1)
   for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
-    out.push(new Date(t).toISOString().slice(0, 10))
+    out.push(ymdLocalDesdeDate(new Date(t)))
   }
   return out
 }

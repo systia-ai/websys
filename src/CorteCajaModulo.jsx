@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { formatFechaLegibleEsMx } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
 
 const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
 
@@ -40,12 +40,12 @@ function isTableMissingError(err) {
 }
 
 function ymdHoy() {
-  return new Date().toISOString().slice(0, 10)
+  return ymdHoyLocal()
 }
 
 function ymdInicioMes() {
   const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  return ymdLocalDesdeDate(new Date(d.getFullYear(), d.getMonth(), 1))
 }
 
 function readLs(key, fallback) {
@@ -58,14 +58,15 @@ function readLs(key, fallback) {
 
 /** Fecha del movimiento para filtrar el corte (mismas variantes que suelen venir de Android/Postgres). */
 function extractDateYmd(p) {
-  const raw = p.fecha ?? p.Fecha ?? p.fecha_pago ?? p.fecha_registro ?? p.fecha_movimiento ?? p.created_at ?? p.date
-  if (raw == null || raw === '') return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString().slice(0, 10)
+  return (
+    aYmdLocalDesdeRaw(p?.fecha) ??
+    aYmdLocalDesdeRaw(p?.Fecha) ??
+    aYmdLocalDesdeRaw(p?.fecha_pago) ??
+    aYmdLocalDesdeRaw(p?.fecha_registro) ??
+    aYmdLocalDesdeRaw(p?.fecha_movimiento) ??
+    aYmdLocalDesdeRaw(p?.created_at) ??
+    aYmdLocalDesdeRaw(p?.date)
+  )
 }
 
 function hayAlgunaFechaEnFilas(rows) {

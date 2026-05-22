@@ -65,6 +65,20 @@ export function fechaALocalDate(raw) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+/** YYYY-MM-DD en calendario local (nunca UTC de toISOString). */
+export function ymdLocalDesdeDate(date = new Date()) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Fecha de hoy en México / zona horaria del navegador. */
+export function ymdHoyLocal() {
+  return ymdLocalDesdeDate(new Date())
+}
+
 /** Convierte timestamp o fecha a YYYY-MM-DD en calendario local. */
 export function aYmdLocalDesdeRaw(raw) {
   if (raw == null || raw === '') return null
@@ -72,10 +86,7 @@ export function aYmdLocalDesdeRaw(raw) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
   const d = fechaALocalDate(raw)
   if (!d) return null
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return ymdLocalDesdeDate(d)
 }
 
 /** Fecha legible en español (calendario local). */
@@ -226,7 +237,7 @@ export function patchReparacionEntregada(estatus = 'ENTREGADA') {
   return {
     estatus,
     updated_at: now,
-    fecha_entrega: now.slice(0, 10),
+    fecha_entrega: ymdHoyLocal(),
   }
 }
 

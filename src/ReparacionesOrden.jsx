@@ -27,6 +27,7 @@ import {
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   registrarOrdenCreadaEnSesion,
+  ymdHoyLocal,
 } from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -691,7 +692,7 @@ export default function ReparacionesOrden({
       updated_at: now,
     }
     if (estatusEsEntregado(estatusGuardar)) {
-      patch.fecha_entrega = now.slice(0, 10)
+      patch.fecha_entrega = ymdHoyLocal()
       setFechaEntregaOrden(patch.fecha_entrega)
     } else {
       patch.fecha_entrega = null
