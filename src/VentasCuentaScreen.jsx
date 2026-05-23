@@ -11,6 +11,7 @@ import {
   recientesProductosDesdeCuentamov,
   registrarProductoRecienteVentas,
 } from './productosRecientesVentas.js'
+import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
   actualizarCuentaSupabase,
   aYmdLocalDesdeRaw,
@@ -18,6 +19,7 @@ import {
   marcarReparacionEntregadaSupabase,
   patchReparacionEntregada,
   sincronizarEstatusCuentaPorSaldo,
+  sumPagosCuenta,
 } from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -402,8 +404,15 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const persistirTotalCuenta = useCallback(async () => {
     if (cuentaId == null || Number(cuentaId) <= 0) return
     try {
-      const pagosSync = pagosDesdeLineas(lineas)
       const totalSync = totalVentaParaSync(totalVenta, lineas)
+      let pagosSync = pagosDesdeLineas(lineas)
+      if (supabase) {
+        const { data: pagosDb, error: ePag } = await supabase
+          .from('pagosclientes')
+          .select('*')
+          .eq('cuenta_id', cuentaId)
+        if (!ePag && (pagosDb ?? []).length > 0) pagosSync = pagosDb
+      }
       if (supabase) {
         const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
         const actualizada = await sincronizarEstatusCuentaPorSaldo(
@@ -526,9 +535,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     try {
       let pagoGuardado
       if (supabase) {
-        const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
-        if (error) throw error
-        pagoGuardado = data
+        pagoGuardado = await insertPagoCliente(supabase, row)
         const nowLiq = new Date().toISOString()
         await actualizarCuentaSupabase(supabase, cuentaId, {
           total: 0,
@@ -540,11 +547,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
         }
       } else {
-        const nuevoId = nextLocalId()
-        const now = new Date().toISOString()
-        pagoGuardado = { id: nuevoId, ...row, created_at: now }
-        const allP = readLs(LS_PAGOS, [])
-        writeLs(LS_PAGOS, [pagoGuardado, ...allP])
+        pagoGuardado = await insertPagoCliente(null, row, { nextLocalId })
         const lc = readLs(LS_CUENTAS, [])
         writeLs(
           LS_CUENTAS,
@@ -594,17 +597,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       forma_pago: formaPago,
     }
     try {
-      let pagoGuardado
-      if (supabase) {
-        const { data, error } = await supabase.from('pagosclientes').insert(row).select('*').single()
-        if (error) throw error
-        pagoGuardado = data
-      } else {
-        const nuevoId = nextLocalId()
-        pagoGuardado = { id: nuevoId, ...row, created_at: new Date().toISOString() }
-        const all = readLs(LS_PAGOS, [])
-        writeLs(LS_PAGOS, [pagoGuardado, ...all])
-      }
+      const pagoGuardado = await insertPagoCliente(supabase, row, { nextLocalId })
       const nuevasLineas = [...lineas, crearLineaPago(pagoGuardado)]
       const nuevoTotal = sumSubtotales(nuevasLineas)
       setLineas(nuevasLineas)
@@ -806,6 +799,33 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         onError?.(`No se puede liquidar. El total debe ser $0.00. Total actual: $${totalStr}`)
       }
       return false
+    }
+    const cargos = totalCargosDesdeLineas(lineas)
+    const pagosUi = sumMontoPagos(pagosDesdeLineas(lineas))
+    if (cargos > 0.01 && pagosUi < cargos - 0.01) {
+      if (avisar) {
+        onError?.(
+          `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUi.toFixed(2)}.`,
+        )
+      }
+      return false
+    }
+    if (supabase && cargos > 0.01) {
+      const { data: pagosDb, error: ePag } = await supabase
+        .from('pagosclientes')
+        .select('pago')
+        .eq('cuenta_id', cuentaId)
+      if (!ePag) {
+        const pagadoDb = sumPagosCuenta(pagosDb ?? [])
+        if (pagadoDb < cargos - 0.01) {
+          if (avisar) {
+            onError?.(
+              `Faltan pagos en la base de datos ($${(cargos - pagadoDb).toFixed(2)}). Use «Agregar pago» o «Pagar adeudo total» antes de liquidar.`,
+            )
+          }
+          return false
+        }
+      }
     }
     const nowLiq = new Date().toISOString()
     if (supabase) {

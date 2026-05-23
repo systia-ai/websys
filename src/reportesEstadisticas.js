@@ -1,6 +1,9 @@
 /** Utilidades para gráficas del reporte de reparaciones. */
 
 import { aYmdLocalDesdeRaw, ymdLocalDesdeDate } from './reparacionUtils.js'
+import { extractFechaPagoYmd } from './pagosClientesUtils.js'
+
+export { extractFechaPagoYmd }
 
 export const AGRUPACIONES_ESTADISTICAS = [
   { id: 'dia', label: 'Por día' },
@@ -27,17 +30,6 @@ export function guardarAgrupacionEstadisticas(id) {
   } catch {
     /* ignore */
   }
-}
-
-/** Fecha del movimiento de pago (pagosclientes). */
-export function extractFechaPagoYmd(pago) {
-  return (
-    aYmdLocalDesdeRaw(pago?.created_at) ??
-    aYmdLocalDesdeRaw(pago?.fecha) ??
-    aYmdLocalDesdeRaw(pago?.fecha_pago) ??
-    aYmdLocalDesdeRaw(pago?.Fecha) ??
-    aYmdLocalDesdeRaw(pago?.fecha_registro)
-  )
 }
 
 export function extractDateYmdReporte(row) {

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
+import { insertPagoCliente } from './pagosClientesUtils.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import {
@@ -963,13 +964,7 @@ export default function ReparacionesOrden({
     registrandoAnticipoRef.current = true
     setRegistrandoAnticipo(true)
     try {
-      if (supabase) {
-        const { error } = await supabase.from('pagosclientes').insert(row)
-        if (error) throw error
-      } else {
-        const all = readLs(LS_PAGOS, [])
-        writeLs(LS_PAGOS, [{ id: nextLocalId(), ...row }, ...all])
-      }
+      await insertPagoCliente(supabase, row, { nextLocalId })
       setPagoModal(false)
       onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago}). Use «Enviar por WhatsApp» para notificar al cliente.`)
     } catch (e) {

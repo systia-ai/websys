@@ -12,6 +12,11 @@ import {
   labelEstatusAplicados,
   filtrarPorEstatus,
 } from './reportesFiltros.js'
+import {
+  aplicarFiltroPagosPorFechas,
+  cargarCuentasMapParaPagos,
+  cargarTodosPagosClientes,
+} from './pagosClientesUtils.js'
 import { extractFechaPagoYmd, normalizarLabelEstatus, totalPagosEnLista } from './reportesEstadisticas.js'
 
 const LS_VISTA_REPORTES = 'sistefix_reportes_vista'
@@ -165,19 +170,22 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         const filas = excluirOrdenesDuplicadas(porEstatus)
         setReparaciones(filas)
 
-        let pagosTodos = []
-        if (supabase) {
-          const { data: pagosData, error: ePag } = await supabase.from('pagosclientes').select('*')
-          if (ePag) throw ePag
-          pagosTodos = pagosData ?? []
-        } else {
-          pagosTodos = readLs(LS_PAGOS, [])
-        }
-        const pagosFiltrados = pagosTodos.filter((p) => {
-          const y = extractFechaPagoYmd(p)
-          return y != null && y >= ini && y <= fin
-        })
+        const cuentasMap = supabase ? await cargarCuentasMapParaPagos(supabase) : new Map()
+        const pagosTodos = await cargarTodosPagosClientes(supabase)
+        const { filas: pagosFiltrados, sinFechaIncluidos } = aplicarFiltroPagosPorFechas(
+          pagosTodos,
+          ini,
+          fin,
+          cuentasMap,
+        )
         setPagosPeriodo(pagosFiltrados)
+        if (sinFechaIncluidos > 0) {
+          onNotice?.(
+            sinFechaIncluidos === 1
+              ? '1 pago sin fecha exacta se incluyó en ingresos del periodo (fecha tomada de la cuenta).'
+              : `${sinFechaIncluidos} pagos sin fecha exacta se incluyeron en ingresos del periodo.`,
+          )
+        }
 
         setDuplicadasExcluidas(nDup)
         setSinColumnaFecha(sinF)

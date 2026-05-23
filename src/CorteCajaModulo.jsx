@@ -1,7 +1,13 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
+import {
+  aplicarFiltroPagosPorFechas,
+  cargarCuentasMapParaPagos,
+  cargarTodosPagosClientes,
+  extractFechaPagoYmd,
+} from './pagosClientesUtils.js'
+import { formatFechaLegibleEsMx, ymdHoyLocal } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
@@ -14,31 +20,7 @@ function leerVistaCorte() {
   }
 }
 
-/** Misma clave que Ventas (`pagosclientes`); la tabla `pagocliente` no existe en muchos proyectos Supabase. */
-const LS_PAGOS_CLIENTES = 'sistefix_local_pagosclientes'
-const LS_PAGOCLIENTE_LEGACY = 'sistefix_local_pagocliente'
 const LS_CLIENTES = 'sistefix_local_clientes'
-
-function readLocalPagosCorteMerged() {
-  const principal = readLs(LS_PAGOS_CLIENTES, [])
-  const legacy = readLs(LS_PAGOCLIENTE_LEGACY, [])
-  if (!legacy.length) return principal
-  const ids = new Set(principal.map((r) => String(r.id)))
-  return [...principal, ...legacy.filter((r) => r.id != null && !ids.has(String(r.id)))]
-}
-
-/** Orden: la app Android/web ya usa `pagosclientes` para pagos a cuenta. */
-const TABLAS_CORTE_SUPABASE = ['pagosclientes', 'pagocliente']
-
-function isTableMissingError(err) {
-  const m = String(err?.message ?? err ?? '').toLowerCase()
-  return (
-    m.includes('could not find the table') ||
-    m.includes('schema cache') ||
-    m.includes('does not exist') ||
-    (m.includes('relation') && m.includes('does not exist'))
-  )
-}
 
 function ymdHoy() {
   return ymdHoyLocal()
@@ -50,38 +32,6 @@ function readLs(key, fallback) {
   } catch {
     return fallback
   }
-}
-
-/** Fecha del movimiento para filtrar el corte (mismas variantes que suelen venir de Android/Postgres). */
-function extractDateYmd(p) {
-  return (
-    aYmdLocalDesdeRaw(p?.fecha) ??
-    aYmdLocalDesdeRaw(p?.Fecha) ??
-    aYmdLocalDesdeRaw(p?.fecha_pago) ??
-    aYmdLocalDesdeRaw(p?.fecha_registro) ??
-    aYmdLocalDesdeRaw(p?.fecha_movimiento) ??
-    aYmdLocalDesdeRaw(p?.created_at) ??
-    aYmdLocalDesdeRaw(p?.date)
-  )
-}
-
-function hayAlgunaFechaEnFilas(rows) {
-  return rows.some((r) => extractDateYmd(r) != null)
-}
-
-/**
- * Filtra por [ini, fin] inclusive. Si ningún registro trae fecha, devuelve todo y marca aviso.
- */
-function aplicarFiltroFechas(rows, ini, fin) {
-  if (!hayAlgunaFechaEnFilas(rows)) {
-    return { filas: [...rows], sinColumnaFecha: true }
-  }
-  const filas = rows.filter((r) => {
-    const y = extractDateYmd(r)
-    if (y == null) return false
-    return y >= ini && y <= fin
-  })
-  return { filas, sinColumnaFecha: false }
 }
 
 function nombreCliente(clientes, clienteId) {
@@ -116,13 +66,14 @@ function escapeHtml(s) {
  * (`pagosclientes` o, si existe, `pagocliente`).
  */
 export default function CorteCajaModulo({ supabase, onHome, onError, onNotice }) {
-  const tablaCorteSupabaseRef = useRef(null)
+  const cuentasPorIdRef = useRef(new Map())
 
   const [pantalla, setPantalla] = useState('fechas')
   const [fechaInicio, setFechaInicio] = useState(ymdHoy)
   const [fechaFin, setFechaFin] = useState(ymdHoy)
   const [periodoAplicado, setPeriodoAplicado] = useState(null)
   const [sinColumnaFecha, setSinColumnaFecha] = useState(false)
+  const [avisoPagosSinFecha, setAvisoPagosSinFecha] = useState(0)
 
   const [pagos, setPagos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -149,42 +100,35 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     void cargarClientes()
   }, [cargarClientes])
 
-  const resolverTablaCorteSupabase = useCallback(async () => {
-    if (!supabase) return null
-    if (tablaCorteSupabaseRef.current) return tablaCorteSupabaseRef.current
-    for (const t of TABLAS_CORTE_SUPABASE) {
-      const { error } = await supabase.from(t).select('id').limit(1)
-      if (!error) {
-        tablaCorteSupabaseRef.current = t
-        return t
-      }
-      if (!isTableMissingError(error)) throw new Error(error.message)
-    }
-    throw new Error('En Supabase no existe la tabla pagosclientes ni pagocliente.')
-  }, [supabase])
-
   const ejecutarConsulta = useCallback(
     async (ini, fin) => {
       setLoadingCorte(true)
       setSinColumnaFecha(false)
+      setAvisoPagosSinFecha(0)
       try {
-        let todos = []
-        if (supabase) {
-          const tabla = await resolverTablaCorteSupabase()
-          const { data, error } = await supabase.from(tabla).select('*').order('id', { ascending: false })
-          if (error) throw error
-          todos = data ?? []
-        } else {
-          todos = readLocalPagosCorteMerged()
-        }
-        const { filas, sinColumnaFecha: sinF } = aplicarFiltroFechas(todos, ini, fin)
+        const cuentasMap = supabase ? await cargarCuentasMapParaPagos(supabase) : new Map()
+        cuentasPorIdRef.current = cuentasMap
+        const todos = await cargarTodosPagosClientes(supabase)
+        const { filas, sinColumnaFecha: sinF, sinFechaIncluidos } = aplicarFiltroPagosPorFechas(
+          todos,
+          ini,
+          fin,
+          cuentasMap,
+        )
         setPagos(filas)
         setSinColumnaFecha(sinF)
+        setAvisoPagosSinFecha(sinFechaIncluidos)
         setPeriodoAplicado({ ini, fin })
         setPantalla('resultados')
         setBusqueda('')
         if (sinF && todos.length > 0) {
           onNotice?.('Los registros no tienen fecha; se muestran todos los movimientos.')
+        } else if (sinFechaIncluidos > 0) {
+          onNotice?.(
+            sinFechaIncluidos === 1
+              ? '1 pago sin fecha de pago se incluyó en el corte (revise el registro en la cuenta).'
+              : `${sinFechaIncluidos} pagos sin fecha de pago se incluyeron en el corte (revise esos registros).`,
+          )
         }
       } catch (e) {
         onError?.(`Error al consultar corte: ${e.message}`)
@@ -193,7 +137,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
         setLoadingCorte(false)
       }
     },
-    [supabase, onError, onNotice, resolverTablaCorteSupabase],
+    [supabase, onError, onNotice],
   )
 
   async function onConsultarCorte() {
@@ -257,7 +201,12 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     setPagos([])
     setPeriodoAplicado(null)
     setSinColumnaFecha(false)
+    setAvisoPagosSinFecha(0)
     setBusqueda('')
+  }
+
+  function fechaPagoEtiqueta(p) {
+    return extractFechaPagoYmd(p, cuentasPorIdRef.current) ?? '—'
   }
 
   function imprimirCorte() {
@@ -273,7 +222,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     const filas = pagos
       .map(
         (p) =>
-          `<tr><td>${escapeHtml(String(p.concepto ?? '—'))}</td><td>${escapeHtml(nombreCliente(clientes, p.cliente_id))}</td><td>${p.cuenta_id != null && p.cuenta_id !== '' ? escapeHtml(String(p.cuenta_id)) : '—'}</td><td>${escapeHtml(String(p.forma_pago ?? '—'))}</td><td>${escapeHtml(extractDateYmd(p) ?? '—')}</td><td style="text-align:right">$${Number(p.pago ?? 0).toFixed(2)}</td></tr>`,
+          `<tr><td>${escapeHtml(String(p.concepto ?? '—'))}</td><td>${escapeHtml(nombreCliente(clientes, p.cliente_id))}</td><td>${p.cuenta_id != null && p.cuenta_id !== '' ? escapeHtml(String(p.cuenta_id)) : '—'}</td><td>${escapeHtml(String(p.forma_pago ?? '—'))}</td><td>${escapeHtml(fechaPagoEtiqueta(p))}</td><td style="text-align:right">$${Number(p.pago ?? 0).toFixed(2)}</td></tr>`,
       )
       .join('')
     const otros =
@@ -408,6 +357,15 @@ td{font-size:0.9rem}
           </p>
         ) : null}
 
+        {avisoPagosSinFecha > 0 ? (
+          <p className="corte-caja-warning-inset card-pad">
+            <span aria-hidden="true">⚠️</span>{' '}
+            {avisoPagosSinFecha === 1
+              ? 'Hay 1 pago sin fecha de pago en la tabla; se incluyó en el total usando la fecha de la cuenta.'
+              : `Hay ${avisoPagosSinFecha} pagos sin fecha de pago; se incluyeron en el total usando la fecha de la cuenta.`}
+          </p>
+        ) : null}
+
         <section className="corte-caja-resumen card-pad">
           <header className="corte-caja-resumen-header">
             <span className="corte-caja-resumen-ico" aria-hidden="true">
@@ -532,7 +490,7 @@ td{font-size:0.9rem}
                 </div>
                 {filtrados.map((p) => {
                   const fp = String(p.forma_pago ?? 'EFECTIVO').trim().toUpperCase()
-                  const ymd = extractDateYmd(p)
+                  const ymd = extractFechaPagoYmd(p, cuentasPorIdRef.current)
                   return (
                     <div key={p.id} className="inventario-tabla-fila-grupo" role="row">
                       <div className="inventario-tabla-grupo-celdas">
@@ -562,7 +520,7 @@ td{font-size:0.9rem}
           <ul className="equipo-list inventario-list corte-caja-lista">
             {filtrados.map((p) => {
               const fp = String(p.forma_pago ?? 'EFECTIVO').trim().toUpperCase()
-              const ymd = extractDateYmd(p)
+              const ymd = extractFechaPagoYmd(p, cuentasPorIdRef.current)
               return (
                 <li key={p.id} className="equipo-card inventario-card corte-caja-card corte-caja-card--solo-lectura">
                   <div className="equipo-card-main inventario-card-main corte-caja-fila-lectura">
