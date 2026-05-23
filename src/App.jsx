@@ -118,8 +118,8 @@ function App() {
     let session = raw
     if (raw && typeof raw === 'object' && raw.returnToClientesOrdenes != null) {
       const { returnToClientesOrdenes, ...rest } = raw
-      setClientesRetornoOrdenes({
-        openOrdenesModal: true,
+      setClientesRetornoVentas({
+        openAccionesModal: true,
         cliente: normalizeClienteRow(returnToClientesOrdenes),
       })
       session = rest
@@ -292,6 +292,9 @@ function App() {
         onHome={goBack}
         onOpenServiciosConCliente={(row) => {
           const c = normalizeClienteRow(row)
+          if (c?.id != null) {
+            setClientesRetornoVentas({ openAccionesModal: true, cliente: c })
+          }
           setClienteVinculoServicios(c)
           navigateTo('servicios')
           setNotice(`Cliente "${c.nombre || c.id || '—'}" vinculado a Equipos`)

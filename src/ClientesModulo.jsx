@@ -531,6 +531,9 @@ export default function ClientesModulo({
     }
     if (modalRepActivas) {
       setModalRepActivas(false)
+      if (clienteAccion?.id != null) {
+        setModalAcciones(true)
+      }
       return
     }
     if (modalAcciones) {
