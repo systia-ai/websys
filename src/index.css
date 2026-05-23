@@ -2437,35 +2437,74 @@ td {
   max-width: 1400px;
 }
 
+.monitor-ordenes-resultados {
+  margin-top: 4px;
+}
+
+.monitor-ordenes-listado-wrap {
+  border: 1px solid #b3e5fc;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fafcff 0%, #fff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 2px 12px rgba(33, 150, 243, 0.1);
+  padding: 10px 12px 14px;
+}
+
+.monitor-ordenes-vacio-card {
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
 .monitor-ordenes-tabla-wrap {
-  overflow-x: auto;
-  margin-top: 8px;
+  overflow: auto;
+  margin: 0;
+  max-height: min(62vh, 640px);
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
 }
 
 .monitor-ordenes-tabla {
-  width: 100%;
-  min-width: 1200px;
-  border-collapse: collapse;
-  font-size: 0.88rem;
+  min-width: 1100px;
+  font-size: 0.82rem;
 }
 
 .monitor-ordenes-tabla th,
 .monitor-ordenes-tabla td {
-  border: 1px solid #e5e7eb;
-  padding: 10px 8px;
-  text-align: left;
-  vertical-align: top;
+  padding: 7px 8px;
+  vertical-align: middle;
 }
 
-.monitor-ordenes-tabla th {
-  background: #eceff1;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: #546e7a;
+.monitor-ordenes-tabla-fila--clic {
+  cursor: pointer;
 }
 
-.monitor-ordenes-tabla tr:nth-child(even) {
-  background: #fafafa;
+.monitor-ordenes-tabla-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.monitor-ordenes-tabla-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.monitor-ordenes-col-cliente {
+  font-weight: 600;
+  color: #37474f;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monitor-ordenes-btn-edit {
+  width: 30px;
+  height: 28px;
+  font-size: 0.95rem;
 }
 
 .monitor-ordenes-num {

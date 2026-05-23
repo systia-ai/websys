@@ -610,10 +610,35 @@ export default function ServiciosEquipos({
     }
   }
 
+  function handleAtras() {
+    if (dialogoNuevoCliente) {
+      setDialogoNuevoCliente(false)
+      return
+    }
+    if (dialogoCliente) {
+      setDialogoCliente(false)
+      setEquipoPendiente(null)
+      return
+    }
+    if (modalRep) {
+      setModalRep(null)
+      return
+    }
+    if (eliminarEquipo) {
+      setEliminarEquipo(null)
+      return
+    }
+    if (dialogoEquipo) {
+      setDialogoEquipo(false)
+      return
+    }
+    onHome?.()
+  }
+
   return (
     <div className="servicios-root">
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+        <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">

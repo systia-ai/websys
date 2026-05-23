@@ -31,10 +31,18 @@ export default function OrdenServicioModulo({
 }) {
   const mostrarFormulario = tieneSesionOrdenCargada(session)
 
+  function handleAtras() {
+    if (mostrarFormulario && session?._fromSearch) {
+      onClearOrdenSession?.()
+      return
+    }
+    onHome?.()
+  }
+
   return (
     <div className="servicios-root orden-servicio-modulo">
       <header className="servicios-appbar servicios-appbar--dense">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+        <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">

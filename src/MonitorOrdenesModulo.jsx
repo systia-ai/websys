@@ -425,10 +425,31 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
   const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
+
+  function badgeEstatus(rep) {
+    const ent = estatusEsEntregado(rep?.estatus)
+    const st = String(rep?.estatus ?? '—').trim()
+    return (
+      <span
+        className={`rep-orden-badge rep-orden-badge--tabla${ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
+      >
+        {st}
+      </span>
+    )
+  }
+
+  function handleAtras() {
+    if (gestionTecnicosAbierto) {
+      setGestionTecnicosAbierto(false)
+      return
+    }
+    onHome?.()
+  }
+
   return (
     <div className="servicios-root inventarios-root monitor-ordenes-root">
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+        <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">
@@ -641,7 +662,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         {loading ? (
           <p className="muted center">Cargando…</p>
         ) : (
-          <>
+          <section className="monitor-ordenes-resultados">
             <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
               <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
               <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
@@ -649,90 +670,103 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                 {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales
               </span>
             </p>
-            <div className="monitor-ordenes-tabla-wrap table-wrap">
-              <table className="monitor-ordenes-tabla">
-                <thead>
-                  <tr>
-                    <th>Fecha de ingreso</th>
-                    <th>Fecha de entrega</th>
-                    <th>Días en taller</th>
-                    <th>No. orden</th>
-                    <th>Cliente</th>
-                    <th>Tipo de equipo</th>
-                    <th>Tipo de servicio</th>
-                    <th>Descripción</th>
-                    <th>Problema reportado</th>
-                    <th>Técnico</th>
-                    <th aria-label="Acciones">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filasOrdenadas.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="monitor-ordenes-vacio">
-                        No hay órdenes con los filtros seleccionados.
-                      </td>
-                    </tr>
-                  ) : (
-                    filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
-                      const { tipo, desc } = datosEquipo(rep)
-                      const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
-                      const tech = String(rep.tecnico ?? '').trim()
-                      const ent = estatusEsEntregado(rep?.estatus)
-                      return (
-                        <tr key={rep.id}>
-                          <td className="monitor-ordenes-fecha-ingreso">{formatearFechaMostrar(ymd)}</td>
-                          <td
-                            className={`monitor-ordenes-fecha-entrega-celda${ent ? ' monitor-ordenes-fecha-entrega-celda--ok' : ''}`}
+
+            <div className="monitor-ordenes-listado-wrap">
+              {filasOrdenadas.length === 0 ? (
+                <div className="monitor-ordenes-vacio-card empty-card">
+                  <p>No hay órdenes con los filtros seleccionados.</p>
+                </div>
+              ) : (
+                <div className="cuentas-cliente-tabla-wrap monitor-ordenes-tabla-wrap table-wrap">
+                  <table className="cuentas-cliente-tabla monitor-ordenes-tabla">
+                    <thead>
+                      <tr>
+                        <th>Fecha ingreso</th>
+                        <th>Fecha entrega</th>
+                        <th>Días</th>
+                        <th>No. orden</th>
+                        <th>Cliente</th>
+                        <th>Equipo</th>
+                        <th>Servicio</th>
+                        <th>Descripción</th>
+                        <th>Problema</th>
+                        <th>Técnico</th>
+                        <th>Estatus</th>
+                        <th aria-label="Editar">✏️</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
+                        const { tipo, desc } = datosEquipo(rep)
+                        const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
+                        const tech = String(rep.tecnico ?? '').trim()
+                        const ent = estatusEsEntregado(rep?.estatus)
+                        return (
+                          <tr
+                            key={rep.id}
+                            className="monitor-ordenes-tabla-fila monitor-ordenes-tabla-fila--clic"
+                            title={`Abrir orden #${rep.id}`}
+                            onClick={() => handleEditarOrden(rep)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                handleEditarOrden(rep)
+                              }
+                            }}
+                            tabIndex={0}
+                            role="button"
                           >
-                            {ent && ymdEntrega ? formatearFechaMostrar(ymdEntrega) : '—'}
-                          </td>
-                          <td
-                            className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}
-                            title={
-                              ent
-                                ? 'Entregado — ya no está en el taller'
-                                : dias == null
-                                  ? 'Sin fecha de ingreso'
-                                  : `Días en taller: ${dias}`
-                            }
-                          >
-                            {ent ? (
-                              <span role="img" aria-label="Entregado, fuera del taller">
-                                ✅
-                              </span>
-                            ) : dias == null ? (
-                              '—'
-                            ) : (
-                              String(dias)
-                            )}
-                          </td>
-                          <td className="monitor-ordenes-num">{rep.id ?? '—'}</td>
-                          <td>{nombreCliente(rep.cliente_id)}</td>
-                          <td>{tipo}</td>
-                          <td className="monitor-ordenes-tipo-servicio">{tipoServicio}</td>
-                          <td className="monitor-ordenes-col-texto">{desc}</td>
-                          <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
-                          <td>{tech || '—'}</td>
-                          <td className="monitor-ordenes-acciones">
-                            <button
-                              type="button"
-                              className="btn-accion-editar"
-                              onClick={() => handleEditarOrden(rep)}
-                              title="Editar orden"
-                              aria-label={`Editar orden ${rep.id}`}
+                            <td className="monitor-ordenes-fecha-ingreso cuentas-cliente-tabla-fecha">
+                              {formatearFechaMostrar(ymd)}
+                            </td>
+                            <td
+                              className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${ent && ymdEntrega ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}
                             >
-                              ✏️
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
+                              {ent && ymdEntrega ? formatearFechaMostrar(ymdEntrega) : '—'}
+                            </td>
+                            <td
+                              className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}
+                              title={
+                                ent
+                                  ? 'Entregado'
+                                  : dias == null
+                                    ? 'Sin fecha de ingreso'
+                                    : `${dias} días en taller`
+                              }
+                            >
+                              {ent ? '✅' : dias == null ? '—' : String(dias)}
+                            </td>
+                            <td className="monitor-ordenes-num cuentas-cliente-tabla-orden">{rep.id ?? '—'}</td>
+                            <td className="monitor-ordenes-col-cliente">{nombreCliente(rep.cliente_id)}</td>
+                            <td>{tipo}</td>
+                            <td className="monitor-ordenes-tipo-servicio">{tipoServicio}</td>
+                            <td className="monitor-ordenes-col-texto">{desc}</td>
+                            <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
+                            <td>{tech || '—'}</td>
+                            <td>{badgeEstatus(rep)}</td>
+                            <td className="monitor-ordenes-acciones">
+                              <button
+                                type="button"
+                                className="btn-icon edit monitor-ordenes-btn-edit"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditarOrden(rep)
+                                }}
+                                title="Editar orden"
+                                aria-label={`Editar orden ${rep.id}`}
+                              >
+                                ✏️
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          </>
+          </section>
         )}
       </div>
 

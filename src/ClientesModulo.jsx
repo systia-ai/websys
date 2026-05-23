@@ -524,10 +524,31 @@ export default function ClientesModulo({
     setClienteCuentasPanel(null)
   }
 
+  function handleAtras() {
+    if (panelCuentasAbierto) {
+      cerrarPanelCuentas()
+      return
+    }
+    if (modalRepActivas) {
+      setModalRepActivas(false)
+      return
+    }
+    if (modalAcciones) {
+      setModalAcciones(false)
+      setClienteAccion(null)
+      return
+    }
+    if (dialogoCliente) {
+      setDialogoCliente(false)
+      return
+    }
+    onHome?.()
+  }
+
   return (
     <div className={`servicios-root clientes-modulo${vistaLista === 'tabla' ? ' clientes-modulo--tabla' : ''}`}>
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+        <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">

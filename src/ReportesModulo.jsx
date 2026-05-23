@@ -444,7 +444,7 @@ p{margin:0 0 16px;line-height:1.5}
   return (
     <div className="servicios-root inventarios-root reportes-modulo-root">
       <header className="servicios-appbar">
-        <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+        <button type="button" className="icon-back" onClick={volverAElegirFechas} aria-label="Atrás">
           ←
         </button>
         <h1 className="servicios-appbar-title">

@@ -80,7 +80,14 @@ function App() {
       setActiveModule(nextKey)
       return
     }
-    navStackRef.current = [...navStackRef.current, nextKey]
+    const stack = navStackRef.current
+    const existingIdx = stack.lastIndexOf(nextKey)
+    if (existingIdx >= 0) {
+      navStackRef.current = stack.slice(0, existingIdx + 1)
+      setActiveModule(nextKey)
+      return
+    }
+    navStackRef.current = [...stack, nextKey]
     setActiveModule(nextKey)
   }
 
@@ -117,7 +124,7 @@ function App() {
       })
       session = rest
     }
-    setRepSession(session)
+    setRepSession({ ...session, _fromSearch: false })
     setError('')
     navigateTo('reparaciones')
   }
@@ -461,7 +468,7 @@ function App() {
         onHome={goBack}
         onIrEquipos={() => navigateTo('servicios')}
         onIrClientes={() => navigateTo('clientes')}
-        onSeleccionarOrdenDesdeBusqueda={(payload) => setRepSession(payload)}
+        onSeleccionarOrdenDesdeBusqueda={(payload) => setRepSession({ ...payload, _fromSearch: true })}
         onClearOrdenSession={() => setRepSession(null)}
         onSalir={goBack}
         onError={(msg) => {
@@ -503,8 +510,8 @@ function App() {
     return (
       <main className="module">
         <div className="toolbar">
-          <button type="button" onClick={() => navigateTo('home')}>
-            Inicio
+          <button type="button" onClick={goBack}>
+            Atrás
           </button>
           <h2>Ventas / Cuentas</h2>
         </div>
@@ -519,8 +526,8 @@ function App() {
   return (
     <main className="module">
       <div className="toolbar">
-        <button type="button" onClick={() => navigateTo('home')}>
-          Inicio
+        <button type="button" onClick={goBack}>
+          Atrás
         </button>
         <h2>{current.title}</h2>
       </div>
