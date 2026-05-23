@@ -1,5 +1,5 @@
 ﻿/* eslint-disable react-hooks/set-state-in-effect -- carga inicial de productos (Supabase/local) */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sameId } from './clienteUtils.js'
 import {
   EMOJIS_ELEGIR,
@@ -78,6 +78,25 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [emojiManual, setEmojiManual] = useState(false)
   const [menuIconoAbierto, setMenuIconoAbierto] = useState(false)
 
+  const inventarioTablaScrollRef = useRef(null)
+  const inventarioTablaScrollTopRef = useRef(null)
+
+  const syncInventarioScrollDesdeTabla = useCallback(() => {
+    const main = inventarioTablaScrollRef.current
+    const top = inventarioTablaScrollTopRef.current
+    if (main && top && top.scrollLeft !== main.scrollLeft) {
+      top.scrollLeft = main.scrollLeft
+    }
+  }, [])
+
+  const syncInventarioScrollDesdeBarraSuperior = useCallback(() => {
+    const main = inventarioTablaScrollRef.current
+    const top = inventarioTablaScrollTopRef.current
+    if (main && top && main.scrollLeft !== top.scrollLeft) {
+      main.scrollLeft = top.scrollLeft
+    }
+  }, [])
+
   const cargarProductos = useCallback(async () => {
     setLoading(true)
     try {
@@ -110,6 +129,19 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       return s.includes(t) || d.includes(t)
     })
   }, [productos, busqueda])
+
+  useEffect(() => {
+    if (vista !== 'tabla') return
+    const main = inventarioTablaScrollRef.current
+    const inner = inventarioTablaScrollTopRef.current?.querySelector('.inventario-tabla-scroll-top-inner')
+    if (!main || !inner) return
+    const ajustar = () => {
+      inner.style.minWidth = `${main.scrollWidth}px`
+    }
+    ajustar()
+    const t = window.setTimeout(ajustar, 0)
+    return () => window.clearTimeout(t)
+  }, [vista, filtrados, loading])
 
   function abrirNuevo() {
     setEditando(null)
@@ -334,12 +366,26 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           </div>
         ) : vista === 'tabla' ? (
           <div className="inventario-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
-            <div className="inventario-tabla-scroll" role="region" aria-label="Inventario en tabla" tabIndex={0}>
+            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente arriba o en la tabla →</p>
+            <div
+              ref={inventarioTablaScrollTopRef}
+              className="inventario-tabla-scroll-top"
+              aria-hidden="true"
+              onScroll={syncInventarioScrollDesdeBarraSuperior}
+            >
+              <div className="inventario-tabla-scroll-top-inner" />
+            </div>
+            <div
+              ref={inventarioTablaScrollRef}
+              className="inventario-tabla-scroll"
+              role="region"
+              aria-label="Inventario en tabla"
+              tabIndex={0}
+              onScroll={syncInventarioScrollDesdeTabla}
+            >
               <div className="inventario-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--icono" aria-hidden="true" />
                     <span className="inventario-tabla-th inventario-celda inventario-celda--serie">Serie</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Descripción</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--stock">Stock</span>
@@ -349,14 +395,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
                 </div>
                 {filtrados.map((p) => {
-                  const icono = emojiParaProducto(p, iconosMap)
                   const esContable = esProductoContable(p)
                   return (
                     <div key={p.id} className="inventario-tabla-fila-grupo" role="row">
                       <div className="inventario-tabla-grupo-celdas">
-                        <span className="inventario-celda inventario-celda--icono" aria-hidden="true">
-                          {icono}
-                        </span>
                         <button
                           type="button"
                           className="inventario-tabla-link inventario-celda inventario-celda--serie"
@@ -407,14 +449,9 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           </div>
         ) : (
           <ul className="equipo-list inventario-list">
-            {filtrados.map((p) => {
-              const icono = emojiParaProducto(p, iconosMap)
-              return (
+            {filtrados.map((p) => (
               <li key={p.id} className="equipo-card inventario-card">
                 <button type="button" className="equipo-card-main inventario-card-main" onClick={() => abrirEditar(p)}>
-                  <span className="inventario-producto-emoji" aria-hidden="true">
-                    {icono}
-                  </span>
                   <span className="inventario-card-texto">
                   <strong>{p.serie || 'Sin serie'}</strong>
                   <span className="muted">{p.descripcion || '—'}</span>
@@ -441,7 +478,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   </button>
                 </div>
               </li>
-            )})}
+            ))}
           </ul>
         )}
       </div>

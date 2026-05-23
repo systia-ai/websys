@@ -826,22 +826,41 @@ td {
 }
 
 .inventario-tabla-scroll-hint {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   text-align: right;
+}
+
+.inventario-tabla-scroll-top {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  margin-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px 8px 0 0;
+  background: #f5fafd;
+  border: 1px solid #b3e5fc;
+  border-bottom: none;
+}
+
+.inventario-tabla-scroll-top-inner {
+  height: 1px;
+  min-width: 928px;
 }
 
 .inventario-tabla-scroll {
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
-  border-radius: 12px;
+  border-radius: 0 0 12px 12px;
   background: #fff;
   box-shadow: 0 2px 12px rgba(3, 105, 161, 0.08);
   padding: 10px 12px 14px;
+  border: 1px solid #b3e5fc;
+  border-top: none;
 }
 
 .inventario-tabla-grid {
-  min-width: 980px;
+  min-width: 928px;
   display: flex;
   flex-direction: column;
   gap: 6px;
