@@ -634,12 +634,13 @@ export default function ClientesModulo({
                 <table className="cuentas-cliente-tabla clientes-lista-tabla">
                   <thead>
                     <tr>
-                      <th>ID</th>
+                      <th className="clientes-lista-col-editar" aria-label="Editar">
+                        ✏️
+                      </th>
                       <th>Nombre</th>
                       <th>Teléfono</th>
                       <th>Domicilio</th>
                       <th>Correo</th>
-                      <th aria-label="Editar">Editar</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -660,14 +661,7 @@ export default function ClientesModulo({
                             }
                           }}
                         >
-                          <td className="cuentas-cliente-tabla-orden">{row.id ?? '—'}</td>
-                          <td className="clientes-lista-col-nombre">
-                            <strong>{row.nombre || 'Sin nombre'}</strong>
-                          </td>
-                          <td className="clientes-lista-col-tel">{row.telefono || '—'}</td>
-                          <td className="clientes-ordenes-col-texto">{row.domicilio || '—'}</td>
-                          <td className="clientes-ordenes-col-texto">{row.correo || '—'}</td>
-                          <td className="cuentas-cliente-tabla-acciones clientes-lista-tabla-acciones">
+                          <td className="cuentas-cliente-tabla-acciones clientes-lista-tabla-acciones clientes-lista-col-editar">
                             <button
                               type="button"
                               className="btn-icon edit clientes-lista-btn-icon"
@@ -681,6 +675,12 @@ export default function ClientesModulo({
                               ✏️
                             </button>
                           </td>
+                          <td className="clientes-lista-col-nombre">
+                            <strong>{row.nombre || 'Sin nombre'}</strong>
+                          </td>
+                          <td className="clientes-lista-col-tel">{row.telefono || '—'}</td>
+                          <td className="clientes-ordenes-col-texto">{row.domicilio || '—'}</td>
+                          <td className="clientes-ordenes-col-texto">{row.correo || '—'}</td>
                         </tr>
                       )
                     })}
