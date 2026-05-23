@@ -637,7 +637,7 @@ export default function ServiciosEquipos({
   }
 
   return (
-    <div className="servicios-root">
+    <div className={`servicios-root equipos-modulo${vista === 'tabla' ? ' equipos-modulo--tabla' : ''}`}>
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
@@ -697,26 +697,23 @@ export default function ServiciosEquipos({
           />
         </div>
 
-        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
-          <span className="inventario-vista-label">Ver como:</span>
-          <div className="inventario-vista-toggle">
-            <button
-              type="button"
-              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
-              onClick={() => cambiarVista('lista')}
-              aria-pressed={vista === 'lista'}
-            >
-              📋 Lista
-            </button>
-            <button
-              type="button"
-              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
-              onClick={() => cambiarVista('tabla')}
-              aria-pressed={vista === 'tabla'}
-            >
-              ▦ Tabla
-            </button>
-          </div>
+        <div className="cuentas-cliente-vista-bar equipos-lista-vista-bar" role="group" aria-label="Forma de ver los equipos">
+          <button
+            type="button"
+            className={`cuentas-cliente-vista-btn${vista === 'lista' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+            onClick={() => cambiarVista('lista')}
+            aria-pressed={vista === 'lista'}
+          >
+            🗂️ Tarjetas
+          </button>
+          <button
+            type="button"
+            className={`cuentas-cliente-vista-btn${vista === 'tabla' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+            onClick={() => cambiarVista('tabla')}
+            aria-pressed={vista === 'tabla'}
+          >
+            📊 Tabla
+          </button>
         </div>
 
         {loading ? (
@@ -728,61 +725,75 @@ export default function ServiciosEquipos({
         ) : vista === 'tabla' ? (
           <TablaScrollSuperior
             ariaLabel="Equipos en tabla"
-            classNameWrap="equipos-tabla-wrap"
+            classNameWrap="cuentas-cliente-tabla-wrap equipos-lista-tabla-wrap"
             syncDeps={[vista, filtrados, loading]}
           >
-              <div className="inventario-tabla-grid equipos-tabla-grid">
-                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
-                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--serie">Serie</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--cliente">Cliente</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--tipo-equipo">Tipo</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Descripción</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--tipo-rep">Reparación</span>
-                  </div>
-                  <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
-                </div>
+            <table className="cuentas-cliente-tabla equipos-lista-tabla">
+              <thead>
+                <tr>
+                  <th className="equipos-lista-col-acciones" aria-label="Acciones">
+                    Acc.
+                  </th>
+                  <th>Serie</th>
+                  <th>Cliente</th>
+                  <th>Tipo</th>
+                  <th>Descripción</th>
+                  <th>Reparación</th>
+                </tr>
+              </thead>
+              <tbody>
                 {filtrados.map((eq) => (
-                  <div key={eq.id} className="inventario-tabla-fila-grupo" role="row">
-                    <div className="inventario-tabla-grupo-celdas">
+                  <tr
+                    key={eq.id}
+                    className="equipos-lista-tabla-fila equipos-lista-tabla-fila--clic"
+                    role="button"
+                    tabIndex={0}
+                    title={`Ver reparaciones · ${eq.serie || 'equipo'}`}
+                    onClick={() => clickFilaEquipo(eq)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        clickFilaEquipo(eq)
+                      }
+                    }}
+                  >
+                    <td className="cuentas-cliente-tabla-acciones equipos-lista-tabla-acciones equipos-lista-col-acciones">
                       <button
                         type="button"
-                        className="inventario-tabla-link inventario-celda inventario-celda--serie"
-                        onClick={() => clickFilaEquipo(eq)}
-                        title="Ver reparaciones del equipo"
-                      >
-                        {eq.serie || 'Sin serie'}
-                      </button>
-                      <span className="inventario-celda inventario-celda--cliente equipos-celda-cliente">
-                        {nombreClienteEquipo(eq)}
-                      </span>
-                      <span className="inventario-celda inventario-celda--tipo-equipo">{eq.tipo_equipo || '—'}</span>
-                      <span className="inventario-celda inventario-celda--desc">{eq.descripcion || '—'}</span>
-                      <span className="inventario-celda inventario-celda--tipo-rep">{eq.tipo_reparacion || '—'}</span>
-                    </div>
-                    <div className="inventario-tabla-acciones">
-                      <button
-                        type="button"
-                        className="btn-icon edit"
-                        onClick={() => abrirEditar(eq)}
-                        title="Editar"
-                        aria-label="Editar"
+                        className="btn-icon edit equipos-lista-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          abrirEditar(eq)
+                        }}
+                        title="Editar equipo"
+                        aria-label="Editar equipo"
                       >
                         ✏️
                       </button>
                       <button
                         type="button"
-                        className="btn-icon danger"
-                        onClick={() => setEliminarEquipo(eq)}
-                        title="Eliminar"
-                        aria-label="Eliminar"
+                        className="btn-icon danger equipos-lista-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEliminarEquipo(eq)
+                        }}
+                        title="Eliminar equipo"
+                        aria-label="Eliminar equipo"
                       >
                         🗑️
                       </button>
-                    </div>
-                  </div>
+                    </td>
+                    <td className="equipos-lista-col-serie">
+                      <strong>{eq.serie || 'Sin serie'}</strong>
+                    </td>
+                    <td className="equipos-lista-col-cliente">{nombreClienteEquipo(eq)}</td>
+                    <td className="equipos-lista-col-tipo">{eq.tipo_equipo || '—'}</td>
+                    <td className="equipos-ordenes-col-texto">{eq.descripcion || '—'}</td>
+                    <td className="equipos-ordenes-col-texto">{eq.tipo_reparacion || '—'}</td>
+                  </tr>
                 ))}
-              </div>
+              </tbody>
+            </table>
           </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list">
