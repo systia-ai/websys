@@ -2611,9 +2611,21 @@ td {
 }
 
 .corte-caja-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+}
+
+.corte-caja-stats-fila {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(72px, 1fr) repeat(3, minmax(0, 1.35fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.corte-caja-stats-fila:has(.corte-caja-stat--otro) {
+  grid-template-columns: minmax(68px, 0.85fr) repeat(4, minmax(0, 1.2fr));
 }
 
 .corte-caja-stat {
@@ -2641,6 +2653,52 @@ td {
   font-variant-numeric: tabular-nums;
 }
 
+.corte-caja-stat--total-dia {
+  width: 100%;
+  padding: 12px 14px;
+  background: linear-gradient(145deg, #fff8e1 0%, #ffecb3 45%, #ffe082 100%);
+  border: 1px solid #ffb300;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.75) inset,
+    0 2px 12px rgba(255, 193, 7, 0.35),
+    0 0 20px rgba(255, 213, 79, 0.22);
+}
+
+.corte-caja-stat--total-dia .label {
+  color: #e65100;
+  font-weight: 700;
+  font-size: 0.72rem;
+  margin-bottom: 6px;
+}
+
+.corte-caja-stat--total-dia strong {
+  font-size: 1.55rem;
+  color: #e65100;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.corte-caja-stats-fila .corte-caja-stat {
+  min-width: 0;
+}
+
+.corte-caja-stat--cantidad {
+  padding: 8px 10px;
+  background: linear-gradient(180deg, #e8f5e9 0%, #c8e6c9 100%);
+  border-color: #81c784;
+}
+
+.corte-caja-stat--cantidad .label {
+  font-size: 0.62rem;
+  margin-bottom: 4px;
+}
+
+.corte-caja-stat--cantidad strong {
+  font-size: 1.1rem;
+  color: #2e7d32;
+}
+
+/* Compatibilidad con reportes que usan .corte-caja-stat--total */
 .corte-caja-stat--total {
   grid-column: 1 / -1;
   background: linear-gradient(180deg, #e8f5e9 0%, #c8e6c9 100%);

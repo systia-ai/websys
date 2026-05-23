@@ -212,15 +212,22 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
   const resumen = useMemo(() => {
     const cantidadPagos = pagos.length
     const porForma = { EFECTIVO: 0, TRANSFERENCIA: 0, TARJETA: 0, OTRO: 0 }
+    let totalIngresos = 0
     for (const p of pagos) {
       const n = Number(p.pago ?? 0)
       if (!Number.isFinite(n)) continue
+      totalIngresos += n
       const f = String(p.forma_pago ?? 'EFECTIVO').toUpperCase()
       if (f in porForma) porForma[f] += n
       else porForma.OTRO += n
     }
-    return { cantidadPagos, porForma }
+    return { cantidadPagos, porForma, totalIngresos }
   }, [pagos])
+
+  const etiquetaTotalResumen = useMemo(() => {
+    if (!periodoAplicado) return 'Total del día'
+    return periodoAplicado.ini === periodoAplicado.fin ? 'Total del día' : 'Total del periodo'
+  }, [periodoAplicado])
 
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
@@ -275,7 +282,8 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     const html = `<h1>Corte de caja</h1><p><strong>Periodo:</strong> ${escapeHtml(periodoTxt)}</p>
 <table class="res" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:480px"><tbody>
 <tr><th colspan="2" style="text-align:left;background:#eceff1">Resumen</th></tr>
-<tr><td><strong>Cantidad de pagos</strong></td><td style="text-align:right"><strong>${resumen.cantidadPagos}</strong></td></tr>
+<tr><td><strong>${escapeHtml(etiquetaTotalResumen)}</strong></td><td style="text-align:right"><strong>$${resumen.totalIngresos.toFixed(2)}</strong></td></tr>
+<tr><td>Cantidad de pagos</td><td style="text-align:right">${resumen.cantidadPagos}</td></tr>
 <tr><td>Efectivo</td><td style="text-align:right">$${resumen.porForma.EFECTIVO.toFixed(2)}</td></tr>
 <tr><td>Transferencia</td><td style="text-align:right">$${resumen.porForma.TRANSFERENCIA.toFixed(2)}</td></tr>
 <tr><td>Tarjeta</td><td style="text-align:right">$${resumen.porForma.TARJETA.toFixed(2)}</td></tr>
@@ -407,38 +415,46 @@ td{font-size:0.9rem}
             <h2 className="corte-caja-resumen-titulo">Resumen del periodo</h2>
           </header>
           <div className="corte-caja-stats">
-            <div className="corte-caja-stat corte-caja-stat--total">
+            <div className="corte-caja-stat corte-caja-stat--total-dia">
               <span className="label">
-                <span aria-hidden="true">🧾</span> Cantidad de pagos
+                <span aria-hidden="true">💰</span> {etiquetaTotalResumen}
               </span>
-              <strong>{resumen.cantidadPagos}</strong>
+              <strong>${resumen.totalIngresos.toFixed(2)}</strong>
             </div>
-            <div className="corte-caja-stat corte-caja-stat--efectivo">
-              <span className="label">
-                <span aria-hidden="true">💵</span> Efectivo
-              </span>
-              <strong>${resumen.porForma.EFECTIVO.toFixed(2)}</strong>
-            </div>
-            <div className="corte-caja-stat corte-caja-stat--transferencia">
-              <span className="label">
-                <span aria-hidden="true">🏦</span> Transferencia
-              </span>
-              <strong>${resumen.porForma.TRANSFERENCIA.toFixed(2)}</strong>
-            </div>
-            <div className="corte-caja-stat corte-caja-stat--tarjeta">
-              <span className="label">
-                <span aria-hidden="true">💳</span> Tarjeta
-              </span>
-              <strong>${resumen.porForma.TARJETA.toFixed(2)}</strong>
-            </div>
-            {resumen.porForma.OTRO > 0 ? (
-              <div className="corte-caja-stat corte-caja-stat--otro">
+            <div className="corte-caja-stats-fila">
+              <div className="corte-caja-stat corte-caja-stat--cantidad">
                 <span className="label">
-                  <span aria-hidden="true">📎</span> Otras
+                  <span aria-hidden="true">🧾</span> Pagos
                 </span>
-                <strong>${resumen.porForma.OTRO.toFixed(2)}</strong>
+                <strong>{resumen.cantidadPagos}</strong>
               </div>
-            ) : null}
+              <div className="corte-caja-stat corte-caja-stat--efectivo">
+                <span className="label">
+                  <span aria-hidden="true">💵</span> Efectivo
+                </span>
+                <strong>${resumen.porForma.EFECTIVO.toFixed(2)}</strong>
+              </div>
+              <div className="corte-caja-stat corte-caja-stat--transferencia">
+                <span className="label">
+                  <span aria-hidden="true">🏦</span> Transferencia
+                </span>
+                <strong>${resumen.porForma.TRANSFERENCIA.toFixed(2)}</strong>
+              </div>
+              <div className="corte-caja-stat corte-caja-stat--tarjeta">
+                <span className="label">
+                  <span aria-hidden="true">💳</span> Tarjeta
+                </span>
+                <strong>${resumen.porForma.TARJETA.toFixed(2)}</strong>
+              </div>
+              {resumen.porForma.OTRO > 0 ? (
+                <div className="corte-caja-stat corte-caja-stat--otro">
+                  <span className="label">
+                    <span aria-hidden="true">📎</span> Otras
+                  </span>
+                  <strong>${resumen.porForma.OTRO.toFixed(2)}</strong>
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
 
