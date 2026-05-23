@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial catálogo (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sameId } from './clienteUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_CATALOGO = 'sistefix_local_catalogopagos'
 const LS_VISTA_CATALOGO_PAGOS = 'sistefix_catalogo_pagos_vista'
@@ -251,9 +252,11 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
             <p>{busqueda.trim() ? 'No se encontraron resultados' : 'No hay conceptos en el catálogo'}</p>
           </div>
         ) : vista === 'tabla' ? (
-          <div className="inventario-tabla-wrap catalogo-pagos-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
-            <div className="inventario-tabla-scroll" role="region" aria-label="Catálogo de pagos en tabla" tabIndex={0}>
+          <TablaScrollSuperior
+            ariaLabel="Catálogo de pagos en tabla"
+            classNameWrap="catalogo-pagos-tabla-wrap"
+            syncDeps={[vista, filtrados, loading]}
+          >
               <div className="inventario-tabla-grid catalogo-pagos-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
@@ -299,8 +302,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+          </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list inventario-list">
             {filtrados.map((c) => (

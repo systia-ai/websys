@@ -11,6 +11,7 @@ import CorteCajaModulo from './CorteCajaModulo.jsx'
 import ReportesModulo from './ReportesModulo.jsx'
 import MonitorOrdenesModulo from './MonitorOrdenesModulo.jsx'
 import HomeModuleIcon from './HomeModuleIcon.jsx'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
@@ -567,7 +568,11 @@ function App() {
               {loading ? 'Cargando...' : 'Recargar'}
             </button>
           </div>
-          <div className="table-wrap">
+          <TablaScrollSuperior
+            ariaLabel={`Tabla ${current.title}`}
+            classNameWrap="table-wrap"
+            syncDeps={[filteredRows, activeModule]}
+          >
             <table>
               <thead>
                 <tr>
@@ -602,7 +607,7 @@ function App() {
                 )}
               </tbody>
             </table>
-          </div>
+          </TablaScrollSuperior>
     </main>
   )
 }

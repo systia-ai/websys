@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -725,9 +726,11 @@ export default function ServiciosEquipos({
             <p>{search.trim() ? 'No se encontraron resultados' : 'No hay equipos registrados'}</p>
           </div>
         ) : vista === 'tabla' ? (
-          <div className="inventario-tabla-wrap equipos-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
-            <div className="inventario-tabla-scroll" role="region" aria-label="Equipos en tabla" tabIndex={0}>
+          <TablaScrollSuperior
+            ariaLabel="Equipos en tabla"
+            classNameWrap="equipos-tabla-wrap"
+            syncDeps={[vista, filtrados, loading]}
+          >
               <div className="inventario-tabla-grid equipos-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
@@ -780,8 +783,7 @@ export default function ServiciosEquipos({
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+          </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list">
             {filtrados.map((eq) => (

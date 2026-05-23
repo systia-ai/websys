@@ -1,5 +1,6 @@
 ﻿/* eslint-disable react-hooks/set-state-in-effect -- carga inicial de productos (Supabase/local) */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { sameId } from './clienteUtils.js'
 import {
   EMOJIS_ELEGIR,
@@ -78,25 +79,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [emojiManual, setEmojiManual] = useState(false)
   const [menuIconoAbierto, setMenuIconoAbierto] = useState(false)
 
-  const inventarioTablaScrollRef = useRef(null)
-  const inventarioTablaScrollTopRef = useRef(null)
-
-  const syncInventarioScrollDesdeTabla = useCallback(() => {
-    const main = inventarioTablaScrollRef.current
-    const top = inventarioTablaScrollTopRef.current
-    if (main && top && top.scrollLeft !== main.scrollLeft) {
-      top.scrollLeft = main.scrollLeft
-    }
-  }, [])
-
-  const syncInventarioScrollDesdeBarraSuperior = useCallback(() => {
-    const main = inventarioTablaScrollRef.current
-    const top = inventarioTablaScrollTopRef.current
-    if (main && top && main.scrollLeft !== top.scrollLeft) {
-      main.scrollLeft = top.scrollLeft
-    }
-  }, [])
-
   const cargarProductos = useCallback(async () => {
     setLoading(true)
     try {
@@ -129,19 +111,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       return s.includes(t) || d.includes(t)
     })
   }, [productos, busqueda])
-
-  useEffect(() => {
-    if (vista !== 'tabla') return
-    const main = inventarioTablaScrollRef.current
-    const inner = inventarioTablaScrollTopRef.current?.querySelector('.inventario-tabla-scroll-top-inner')
-    if (!main || !inner) return
-    const ajustar = () => {
-      inner.style.minWidth = `${main.scrollWidth}px`
-    }
-    ajustar()
-    const t = window.setTimeout(ajustar, 0)
-    return () => window.clearTimeout(t)
-  }, [vista, filtrados, loading])
 
   function abrirNuevo() {
     setEditando(null)
@@ -365,24 +334,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
             <p>{busqueda.trim() ? 'No se encontraron resultados' : 'No hay productos en inventario'}</p>
           </div>
         ) : vista === 'tabla' ? (
-          <div className="inventario-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente arriba o en la tabla →</p>
-            <div
-              ref={inventarioTablaScrollTopRef}
-              className="inventario-tabla-scroll-top"
-              aria-hidden="true"
-              onScroll={syncInventarioScrollDesdeBarraSuperior}
-            >
-              <div className="inventario-tabla-scroll-top-inner" />
-            </div>
-            <div
-              ref={inventarioTablaScrollRef}
-              className="inventario-tabla-scroll"
-              role="region"
-              aria-label="Inventario en tabla"
-              tabIndex={0}
-              onScroll={syncInventarioScrollDesdeTabla}
-            >
+          <TablaScrollSuperior
+            ariaLabel="Inventario en tabla"
+            syncDeps={[vista, filtrados, loading]}
+          >
               <div className="inventario-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
@@ -445,8 +400,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   )
                 })}
               </div>
-            </div>
-          </div>
+          </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list inventario-list">
             {filtrados.map((p) => (

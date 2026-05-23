@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
 import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
@@ -917,6 +918,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           {loading ? (
             <p className="center">Cargando…</p>
           ) : (
+            <TablaScrollSuperior
+              ariaLabel="Lista de productos de la cuenta"
+              classNameWrap="ventas-tabla-scroll-outer"
+              syncDeps={[lineas, loading]}
+            >
             <div className="ventas-tabla-wrap">
               <div className="ventas-tabla-head">
                 <span>Cant</span>
@@ -954,6 +960,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                 </ul>
               )}
             </div>
+            </TablaScrollSuperior>
           )}
         </section>
 

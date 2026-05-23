@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { fechaEntregaYmd, fechaIngresoYmd, aYmdLocalDesdeRaw } from './reparacionUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 function formatearYmd(ymdOrNull) {
   if (!ymdOrNull || String(ymdOrNull).length < 10) return '—'
@@ -144,7 +145,11 @@ export default function CuentasClientePanel({
               <p>{title === 'Error' ? subtitle || 'Error al buscar cuentas' : 'No se encontraron cuentas para este cliente'}</p>
             </div>
           ) : vista === 'tabla' ? (
-            <div className="cuentas-cliente-tabla-wrap table-wrap">
+            <TablaScrollSuperior
+              ariaLabel="Cuentas del cliente en tabla"
+              classNameWrap="cuentas-cliente-tabla-wrap"
+              syncDeps={[vista, filas, loading]}
+            >
               <table className="cuentas-cliente-tabla">
                 <thead>
                   <tr>
@@ -188,7 +193,7 @@ export default function CuentasClientePanel({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TablaScrollSuperior>
           ) : (
             <ul className="cuentas-cliente-list">
               {filas.map((f) => (

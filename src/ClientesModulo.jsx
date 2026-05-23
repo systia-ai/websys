@@ -8,6 +8,7 @@ import {
 } from './reparacionUtils.js'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_VISTA_CLIENTES = 'sistefix_clientes_lista_vista'
@@ -625,7 +626,11 @@ export default function ClientesModulo({
             </div>
 
             {vistaLista === 'tabla' ? (
-              <div className="cuentas-cliente-tabla-wrap clientes-lista-tabla-wrap table-wrap">
+              <TablaScrollSuperior
+                ariaLabel="Lista de clientes en tabla"
+                classNameWrap="cuentas-cliente-tabla-wrap clientes-lista-tabla-wrap"
+                syncDeps={[vistaLista, clientesFiltrados, loading]}
+              >
                 <table className="cuentas-cliente-tabla clientes-lista-tabla">
                   <thead>
                     <tr>
@@ -681,7 +686,7 @@ export default function ClientesModulo({
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TablaScrollSuperior>
             ) : (
               <ul className="equipo-list">
                 {clientesFiltrados.map((c) => {

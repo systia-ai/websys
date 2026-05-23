@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { isReparacionActiva } from './reparacionUtils.js'
 import { aYmdLocalDesdeRaw, fechaEntregaYmd, fechaIngresoYmd } from './reparacionUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_ORDENES_CLIENTE = 'sistefix_clientes_ordenes_vista'
 
@@ -154,7 +155,11 @@ export default function ClientesOrdenesServicioPanel({
           </div>
 
           {vista === 'tabla' ? (
-            <div className="cuentas-cliente-tabla-wrap clientes-ordenes-tabla-wrap">
+            <TablaScrollSuperior
+              ariaLabel="Órdenes del cliente en tabla"
+              classNameWrap="cuentas-cliente-tabla-wrap clientes-ordenes-tabla-wrap"
+              syncDeps={[vista, filas, loading]}
+            >
               <table className="cuentas-cliente-tabla clientes-ordenes-tabla">
                 <thead>
                   <tr>
@@ -201,7 +206,7 @@ export default function ClientesOrdenesServicioPanel({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TablaScrollSuperior>
           ) : (
             <ul className="rep-activa-list">
               {filas.map((f) => (

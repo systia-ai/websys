@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -379,7 +380,11 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
             </div>
             <div className="modal-body">
               <p className="muted orden-resultados-sub">{subtituloResultados}</p>
-              <div className="orden-resultados-tabla-wrap cuentas-cliente-tabla-wrap table-wrap">
+              <TablaScrollSuperior
+                ariaLabel="Órdenes encontradas"
+                classNameWrap="orden-resultados-tabla-wrap cuentas-cliente-tabla-wrap"
+                syncDeps={[resultados, modalResultados]}
+              >
                 <table className="cuentas-cliente-tabla orden-resultados-tabla">
                   <thead>
                     <tr>
@@ -432,7 +437,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
                     })}
                   </tbody>
                 </table>
-              </div>
+              </TablaScrollSuperior>
               <p className="muted tiny orden-resultados-hint">Toque una fila para cargar la orden</p>
             </div>
             <div className="modal-footer">

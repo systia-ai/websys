@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
 
@@ -513,9 +514,11 @@ td{font-size:0.9rem}
             </p>
           </div>
         ) : vista === 'tabla' ? (
-          <div className="inventario-tabla-wrap corte-caja-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
-            <div className="inventario-tabla-scroll" role="region" aria-label="Movimientos del corte en tabla" tabIndex={0}>
+          <TablaScrollSuperior
+            ariaLabel="Movimientos del corte en tabla"
+            classNameWrap="corte-caja-tabla-wrap"
+            syncDeps={[vista, filtrados, loadingCorte]}
+          >
               <div className="inventario-tabla-grid corte-caja-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
@@ -554,8 +557,7 @@ td{font-size:0.9rem}
                   )
                 })}
               </div>
-            </div>
-          </div>
+          </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list inventario-list corte-caja-lista">
             {filtrados.map((p) => {

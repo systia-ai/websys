@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
 import {
   crearSetEstatusTodos,
@@ -604,9 +605,11 @@ p{margin:0 0 16px;line-height:1.5}
             </p>
           </div>
         ) : vista === 'tabla' ? (
-          <div className="inventario-tabla-wrap reportes-tabla-wrap">
-            <p className="inventario-tabla-scroll-hint muted small">Desliza horizontalmente si no cabe todo →</p>
-            <div className="inventario-tabla-scroll" role="region" aria-label="Órdenes del reporte en tabla" tabIndex={0}>
+          <TablaScrollSuperior
+            ariaLabel="Órdenes del reporte en tabla"
+            classNameWrap="reportes-tabla-wrap"
+            syncDeps={[vista, filtrados, loading]}
+          >
               <div className="inventario-tabla-grid reportes-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
@@ -648,8 +651,7 @@ p{margin:0 0 16px;line-height:1.5}
                   )
                 })}
               </div>
-            </div>
-          </div>
+          </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list inventario-list reportes-lista">
             {filtrados.map((r) => {

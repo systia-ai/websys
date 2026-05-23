@@ -849,8 +849,61 @@ td {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
-.inventario-tabla-wrap {
+.inventario-tabla-wrap,
+.tabla-scroll-wrap {
   margin-top: 8px;
+}
+
+/* Barra superior + panel: el scroll horizontal va en .inventario-tabla-scroll */
+.tabla-scroll-wrap.cuentas-cliente-tabla-wrap,
+.tabla-scroll-wrap.orden-resultados-tabla-wrap,
+.tabla-scroll-wrap.table-wrap,
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap {
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabla-scroll-wrap.cuentas-cliente-tabla-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.table-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.tabla-scroll-wrap.cuentas-cliente-tabla-wrap > .inventario-tabla-scroll {
+  min-height: 120px;
+  margin-bottom: 16px;
+}
+
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll {
+  max-height: min(62vh, 640px);
+  margin-bottom: 0;
+}
+
+.tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll {
+  max-height: min(58vh, 520px);
+  margin-bottom: 0;
+}
+
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap {
+  max-height: none;
+}
+
+.tabla-scroll-wrap.clientes-ordenes-tabla-wrap > .inventario-tabla-scroll {
+  max-height: min(50vh, 420px);
+}
+
+.tabla-scroll-wrap.ventas-tabla-scroll-outer > .inventario-tabla-scroll {
+  border-radius: 0 0 8px 8px;
+}
+
+.tabla-scroll-wrap.ventas-tabla-scroll-outer .ventas-tabla-wrap {
+  min-width: 520px;
+  overflow: visible;
 }
 
 .inventario-tabla-scroll-hint {

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import {
   aYmdLocalDesdeRaw,
   estatusEsEntregado,
@@ -677,7 +678,11 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   <p>No hay órdenes con los filtros seleccionados.</p>
                 </div>
               ) : (
-                <div className="cuentas-cliente-tabla-wrap monitor-ordenes-tabla-wrap table-wrap">
+                <TablaScrollSuperior
+                  ariaLabel="Órdenes del monitor en tabla"
+                  classNameWrap="cuentas-cliente-tabla-wrap monitor-ordenes-tabla-wrap"
+                  syncDeps={[filasOrdenadas, loading]}
+                >
                   <table className="cuentas-cliente-tabla monitor-ordenes-tabla">
                     <thead>
                       <tr>
@@ -763,7 +768,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       })}
                     </tbody>
                   </table>
-                </div>
+                </TablaScrollSuperior>
               )}
             </div>
           </section>
