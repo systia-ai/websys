@@ -858,6 +858,7 @@ td {
 .tabla-scroll-wrap.cuentas-cliente-tabla-wrap,
 .tabla-scroll-wrap.clientes-lista-tabla-wrap,
 .tabla-scroll-wrap.equipos-lista-tabla-wrap,
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap,
 .tabla-scroll-wrap.orden-resultados-tabla-wrap,
 .tabla-scroll-wrap.table-wrap,
 .tabla-scroll-wrap.monitor-ordenes-tabla-wrap {
@@ -869,6 +870,7 @@ td {
 .tabla-scroll-wrap.cuentas-cliente-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.clientes-lista-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.equipos-lista-tabla-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.table-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll {
@@ -3558,7 +3560,8 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 }
 
 .clientes-modulo--tabla .servicios-body,
-.equipos-modulo--tabla .servicios-body {
+.equipos-modulo--tabla .servicios-body,
+.inventarios-modulo--tabla .servicios-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3632,10 +3635,13 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   padding-bottom: 6px;
 }
 
-.equipos-lista-col-acciones {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
+.equipos-lista-col-editar,
+.equipos-lista-col-eliminar,
+.inventarios-lista-col-editar,
+.inventarios-lista-col-eliminar {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
   text-align: center;
   vertical-align: middle;
   padding-left: 4px !important;
@@ -3701,6 +3707,147 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 }
 
 .equipos-lista-tabla-fila--clic:hover td {
+  border-color: #90caf9;
+}
+
+.inventarios-lista-vista-bar {
+  margin-top: 4px;
+  margin-bottom: 10px;
+}
+
+.inventarios-modulo--tabla {
+  min-height: 100vh;
+}
+
+.inventarios-modulo .inventario-list {
+  gap: 6px;
+}
+
+/* Inventario en tabla — pantalla completa (como Clientes / Equipos) */
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap {
+  flex: 1;
+  min-height: 160px;
+  max-height: min(58vh, 520px);
+  margin-top: 4px;
+  padding: 0;
+  border: 1px solid #b3e5fc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fafcff 0%, #fff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 2px 10px rgba(33, 150, 243, 0.08);
+}
+
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap > .inventario-tabla-scroll-hint {
+  padding: 0 10px;
+  margin-top: 6px;
+}
+
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap > .inventario-tabla-scroll-top {
+  margin: 0 8px;
+  border-radius: 8px 8px 0 0;
+}
+
+.tabla-scroll-wrap.inventarios-lista-tabla-wrap > .inventario-tabla-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-bottom: 0;
+  padding: 6px 8px 10px;
+  border: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: none;
+  background: transparent;
+}
+
+.inventarios-lista-tabla {
+  min-width: 820px;
+  font-size: 0.8rem;
+}
+
+.inventarios-lista-tabla th,
+.inventarios-lista-tabla td {
+  padding: 5px 8px;
+  line-height: 1.3;
+}
+
+.inventarios-lista-tabla th {
+  font-size: 0.68rem;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.inventarios-lista-tabla-acciones {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: default;
+}
+
+.inventarios-lista-btn-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 28px;
+  font-size: 0.95rem;
+}
+
+.inventarios-lista-col-serie strong {
+  color: #1565c0;
+  font-weight: 700;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.inventarios-lista-col-desc {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.inventarios-lista-col-stock {
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventarios-badge-servicio-tabla {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: linear-gradient(180deg, #f3e5f5 0%, #e1bee7 100%);
+  border: 1px solid #ce93d8;
+  color: #6a1b9a;
+}
+
+.inventarios-lista-col-precio {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #1565c0;
+  font-size: 0.8rem;
+}
+
+.inventarios-lista-tabla-fila--clic {
+  cursor: pointer;
+}
+
+.inventarios-lista-tabla-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.inventarios-lista-tabla-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.inventarios-lista-tabla-fila--clic:hover td {
   border-color: #90caf9;
 }
 

@@ -277,7 +277,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   }
 
   return (
-    <div className="servicios-root inventarios-root">
+    <div className={`servicios-root inventarios-root inventarios-modulo${vista === 'tabla' ? ' inventarios-modulo--tabla' : ''}`}>
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={handleAtras} aria-label="Atrás">
           ←
@@ -305,26 +305,23 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           />
         </div>
 
-        <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">
-          <span className="inventario-vista-label">Ver como:</span>
-          <div className="inventario-vista-toggle">
-            <button
-              type="button"
-              className={`inventario-vista-btn${vista === 'lista' ? ' activo' : ''}`}
-              onClick={() => cambiarVista('lista')}
-              aria-pressed={vista === 'lista'}
-            >
-              📋 Lista
-            </button>
-            <button
-              type="button"
-              className={`inventario-vista-btn${vista === 'tabla' ? ' activo' : ''}`}
-              onClick={() => cambiarVista('tabla')}
-              aria-pressed={vista === 'tabla'}
-            >
-              ▦ Tabla
-            </button>
-          </div>
+        <div className="cuentas-cliente-vista-bar inventarios-lista-vista-bar" role="group" aria-label="Forma de ver el inventario">
+          <button
+            type="button"
+            className={`cuentas-cliente-vista-btn${vista === 'lista' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+            onClick={() => cambiarVista('lista')}
+            aria-pressed={vista === 'lista'}
+          >
+            🗂️ Tarjetas
+          </button>
+          <button
+            type="button"
+            className={`cuentas-cliente-vista-btn${vista === 'tabla' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+            onClick={() => cambiarVista('tabla')}
+            aria-pressed={vista === 'tabla'}
+          >
+            📊 Tabla
+          </button>
         </div>
 
         {loading ? (
@@ -336,70 +333,91 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
         ) : vista === 'tabla' ? (
           <TablaScrollSuperior
             ariaLabel="Inventario en tabla"
+            classNameWrap="cuentas-cliente-tabla-wrap inventarios-lista-tabla-wrap"
             syncDeps={[vista, filtrados, loading]}
           >
-              <div className="inventario-tabla-grid">
-                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
-                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--serie">Serie</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Descripción</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--stock">Stock</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--precio">P. compra</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--precio">P. venta</span>
-                  </div>
-                  <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
-                </div>
+            <table className="cuentas-cliente-tabla inventarios-lista-tabla">
+              <thead>
+                <tr>
+                  <th className="inventarios-lista-col-editar" aria-label="Editar">
+                    ✏️
+                  </th>
+                  <th>Serie</th>
+                  <th>Descripción</th>
+                  <th>Stock</th>
+                  <th>P. compra</th>
+                  <th>P. venta</th>
+                  <th className="inventarios-lista-col-eliminar" aria-label="Eliminar">
+                    🗑️
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
                 {filtrados.map((p) => {
                   const esContable = esProductoContable(p)
                   return (
-                    <div key={p.id} className="inventario-tabla-fila-grupo" role="row">
-                      <div className="inventario-tabla-grupo-celdas">
+                    <tr
+                      key={p.id}
+                      className="inventarios-lista-tabla-fila inventarios-lista-tabla-fila--clic"
+                      role="button"
+                      tabIndex={0}
+                      title={`Editar · ${p.serie || 'producto'}`}
+                      onClick={() => abrirEditar(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          abrirEditar(p)
+                        }
+                      }}
+                    >
+                      <td className="cuentas-cliente-tabla-acciones inventarios-lista-tabla-acciones inventarios-lista-col-editar">
                         <button
                           type="button"
-                          className="inventario-tabla-link inventario-celda inventario-celda--serie"
-                          onClick={() => abrirEditar(p)}
-                        >
-                          {p.serie || 'Sin serie'}
-                        </button>
-                        <span className="inventario-celda inventario-celda--desc">{p.descripcion || '—'}</span>
-                        {esContable ? (
-                          <span className="inventario-celda inventario-celda--stock">
-                            Ex. {p.existencia ?? '—'} · Cant. {p.cantidad ?? '—'}
-                          </span>
-                        ) : (
-                          <span className="inventario-celda inventario-celda--servicio">Servicio</span>
-                        )}
-                        <span className="inventario-celda inventario-celda--precio">
-                          ${Number(p.precio_compra ?? 0).toFixed(2)}
-                        </span>
-                        <span className="inventario-celda inventario-celda--precio">
-                          ${Number(p.precio_venta ?? 0).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="inventario-tabla-acciones">
-                        <button
-                          type="button"
-                          className="btn-icon edit"
-                          onClick={() => abrirEditar(p)}
-                          title="Editar"
-                          aria-label="Editar"
+                          className="btn-icon edit inventarios-lista-btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            abrirEditar(p)
+                          }}
+                          title="Editar producto"
+                          aria-label="Editar producto"
                         >
                           ✏️
                         </button>
+                      </td>
+                      <td className="inventarios-lista-col-serie">
+                        <strong>{p.serie || 'Sin serie'}</strong>
+                      </td>
+                      <td className="inventarios-lista-col-desc">{p.descripcion || '—'}</td>
+                      <td className="inventarios-lista-col-stock">
+                        {esContable ? (
+                          <span>
+                            Ex. {p.existencia ?? '—'} · Cant. {p.cantidad ?? '—'}
+                          </span>
+                        ) : (
+                          <span className="inventarios-badge-servicio-tabla">Servicio</span>
+                        )}
+                      </td>
+                      <td className="inventarios-lista-col-precio">${Number(p.precio_compra ?? 0).toFixed(2)}</td>
+                      <td className="inventarios-lista-col-precio">${Number(p.precio_venta ?? 0).toFixed(2)}</td>
+                      <td className="cuentas-cliente-tabla-acciones inventarios-lista-tabla-acciones inventarios-lista-col-eliminar">
                         <button
                           type="button"
-                          className="btn-icon danger"
-                          onClick={() => setEliminar(p)}
-                          title="Eliminar"
-                          aria-label="Eliminar"
+                          className="btn-icon danger inventarios-lista-btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEliminar(p)
+                          }}
+                          title="Eliminar producto"
+                          aria-label="Eliminar producto"
                         >
                           🗑️
                         </button>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   )
                 })}
-              </div>
+              </tbody>
+            </table>
           </TablaScrollSuperior>
         ) : (
           <ul className="equipo-list inventario-list">

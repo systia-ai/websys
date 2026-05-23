@@ -731,14 +731,17 @@ export default function ServiciosEquipos({
             <table className="cuentas-cliente-tabla equipos-lista-tabla">
               <thead>
                 <tr>
-                  <th className="equipos-lista-col-acciones" aria-label="Acciones">
-                    Acc.
+                  <th className="equipos-lista-col-editar" aria-label="Editar">
+                    ✏️
                   </th>
                   <th>Serie</th>
                   <th>Cliente</th>
                   <th>Tipo</th>
                   <th>Descripción</th>
                   <th>Reparación</th>
+                  <th className="equipos-lista-col-eliminar" aria-label="Eliminar">
+                    🗑️
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -757,7 +760,7 @@ export default function ServiciosEquipos({
                       }
                     }}
                   >
-                    <td className="cuentas-cliente-tabla-acciones equipos-lista-tabla-acciones equipos-lista-col-acciones">
+                    <td className="cuentas-cliente-tabla-acciones equipos-lista-tabla-acciones equipos-lista-col-editar">
                       <button
                         type="button"
                         className="btn-icon edit equipos-lista-btn-icon"
@@ -770,6 +773,15 @@ export default function ServiciosEquipos({
                       >
                         ✏️
                       </button>
+                    </td>
+                    <td className="equipos-lista-col-serie">
+                      <strong>{eq.serie || 'Sin serie'}</strong>
+                    </td>
+                    <td className="equipos-lista-col-cliente">{nombreClienteEquipo(eq)}</td>
+                    <td className="equipos-lista-col-tipo">{eq.tipo_equipo || '—'}</td>
+                    <td className="equipos-ordenes-col-texto">{eq.descripcion || '—'}</td>
+                    <td className="equipos-ordenes-col-texto">{eq.tipo_reparacion || '—'}</td>
+                    <td className="cuentas-cliente-tabla-acciones equipos-lista-tabla-acciones equipos-lista-col-eliminar">
                       <button
                         type="button"
                         className="btn-icon danger equipos-lista-btn-icon"
@@ -783,13 +795,6 @@ export default function ServiciosEquipos({
                         🗑️
                       </button>
                     </td>
-                    <td className="equipos-lista-col-serie">
-                      <strong>{eq.serie || 'Sin serie'}</strong>
-                    </td>
-                    <td className="equipos-lista-col-cliente">{nombreClienteEquipo(eq)}</td>
-                    <td className="equipos-lista-col-tipo">{eq.tipo_equipo || '—'}</td>
-                    <td className="equipos-ordenes-col-texto">{eq.descripcion || '—'}</td>
-                    <td className="equipos-ordenes-col-texto">{eq.tipo_reparacion || '—'}</td>
                   </tr>
                 ))}
               </tbody>
