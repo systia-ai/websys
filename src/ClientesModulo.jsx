@@ -10,6 +10,7 @@ import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import CuentasClientePanel from './CuentasClientePanel.jsx'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
+const LS_VISTA_CLIENTES = 'sistefix_clientes_lista_vista'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_EQUIPOS = 'sistefix_local_equipos'
@@ -33,6 +34,14 @@ function readLs(key, fallback) {
 
 function writeLs(key, val) {
   localStorage.setItem(key, JSON.stringify(val))
+}
+
+function leerVistaClientes() {
+  try {
+    return localStorage.getItem(LS_VISTA_CLIENTES) === 'tabla' ? 'tabla' : 'tarjetas'
+  } catch {
+    return 'tarjetas'
+  }
 }
 
 /**
@@ -89,6 +98,16 @@ export default function ClientesModulo({
   const [ymdPagoPorCuentaOrdenes, setYmdPagoPorCuentaOrdenes] = useState({})
 
   const [cargandoEquipoRep, setCargandoEquipoRep] = useState(false)
+  const [vistaLista, setVistaLista] = useState(leerVistaClientes)
+
+  function cambiarVistaLista(modo) {
+    setVistaLista(modo)
+    try {
+      localStorage.setItem(LS_VISTA_CLIENTES, modo)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const clientesFiltrados = useMemo(() => {
     const t = textoBusqueda.trim().toLowerCase()
@@ -188,31 +207,6 @@ export default function ClientesModulo({
       await cargarClientes()
     } catch (e) {
       onError?.(`Error al guardar cliente: ${e.message}`)
-    }
-  }
-
-  async function eliminarCliente(c) {
-    const row = normalizeClienteRow(c)
-    if (row.id == null) {
-      onError?.('No se puede eliminar: ID inválido')
-      return
-    }
-    if (!confirm(`¿Eliminar al cliente "${row.nombre || row.id}"?`)) return
-    try {
-      if (supabase) {
-        const { error } = await supabase.from('clientes').delete().eq('id', row.id)
-        if (error) throw error
-      } else {
-        const list = readLs(LS_CLIENTES, [])
-        writeLs(
-          LS_CLIENTES,
-          list.filter((item) => !sameId(item.id, row.id)),
-        )
-      }
-      onNotice?.('Cliente eliminado')
-      await cargarClientes()
-    } catch (e) {
-      onError?.(`Error al eliminar: ${e.message}`)
     }
   }
 
@@ -531,7 +525,7 @@ export default function ClientesModulo({
   }
 
   return (
-    <div className="servicios-root clientes-modulo">
+    <div className={`servicios-root clientes-modulo${vistaLista === 'tabla' ? ' clientes-modulo--tabla' : ''}`}>
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
           ←
@@ -586,29 +580,113 @@ export default function ClientesModulo({
             <p>{textoBusqueda.trim() ? 'No se encontraron resultados' : 'No hay clientes registrados'}</p>
           </div>
         ) : (
-          <ul className="equipo-list">
-            {clientesFiltrados.map((c) => {
-              const row = normalizeClienteRow(c)
-              return (
-                <li key={row.id ?? row.nombre} className="equipo-card cliente-card-row">
-                  <button type="button" className="equipo-card-main" onClick={() => abrirAcciones(row)}>
-                    <strong>{row.nombre || 'Sin nombre'}</strong>
-                    <span className="muted">📞 {row.telefono || 'Sin teléfono'}</span>
-                    {row.domicilio ? <span className="muted small">🏠 {row.domicilio}</span> : null}
-                    {row.correo ? <span className="muted small">✉️ {row.correo}</span> : null}
-                  </button>
-                  <div className="equipo-card-actions">
-                    <button type="button" className="btn-icon edit" onClick={() => abrirEditar(row)} title="Editar" aria-label="Editar">
-                      ✏️
-                    </button>
-                    <button type="button" className="btn-icon danger" onClick={() => eliminarCliente(row)} title="Eliminar" aria-label="Eliminar">
-                      🗑️
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          <>
+            <div className="cuentas-cliente-vista-bar clientes-lista-vista-bar" role="group" aria-label="Forma de ver los clientes">
+              <button
+                type="button"
+                className={`cuentas-cliente-vista-btn${vistaLista === 'tarjetas' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                onClick={() => cambiarVistaLista('tarjetas')}
+                aria-pressed={vistaLista === 'tarjetas'}
+              >
+                🗂️ Tarjetas
+              </button>
+              <button
+                type="button"
+                className={`cuentas-cliente-vista-btn${vistaLista === 'tabla' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                onClick={() => cambiarVistaLista('tabla')}
+                aria-pressed={vistaLista === 'tabla'}
+              >
+                📊 Tabla
+              </button>
+            </div>
+
+            {vistaLista === 'tabla' ? (
+              <div className="cuentas-cliente-tabla-wrap clientes-lista-tabla-wrap table-wrap">
+                <table className="cuentas-cliente-tabla clientes-lista-tabla">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Nombre</th>
+                      <th>Teléfono</th>
+                      <th>Domicilio</th>
+                      <th>Correo</th>
+                      <th aria-label="Editar">Editar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientesFiltrados.map((c) => {
+                      const row = normalizeClienteRow(c)
+                      return (
+                        <tr
+                          key={row.id ?? row.nombre}
+                          className="clientes-lista-tabla-fila clientes-lista-tabla-fila--clic"
+                          role="button"
+                          tabIndex={0}
+                          title={`Abrir ${row.nombre || 'cliente'}`}
+                          onClick={() => abrirAcciones(row)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              abrirAcciones(row)
+                            }
+                          }}
+                        >
+                          <td className="cuentas-cliente-tabla-orden">{row.id ?? '—'}</td>
+                          <td className="clientes-lista-col-nombre">
+                            <strong>{row.nombre || 'Sin nombre'}</strong>
+                          </td>
+                          <td className="clientes-lista-col-tel">{row.telefono || '—'}</td>
+                          <td className="clientes-ordenes-col-texto">{row.domicilio || '—'}</td>
+                          <td className="clientes-ordenes-col-texto">{row.correo || '—'}</td>
+                          <td className="cuentas-cliente-tabla-acciones clientes-lista-tabla-acciones">
+                            <button
+                              type="button"
+                              className="btn-icon edit clientes-lista-btn-icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirEditar(row)
+                              }}
+                              title="Editar cliente"
+                              aria-label="Editar cliente"
+                            >
+                              ✏️
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <ul className="equipo-list">
+                {clientesFiltrados.map((c) => {
+                  const row = normalizeClienteRow(c)
+                  return (
+                    <li key={row.id ?? row.nombre} className="equipo-card cliente-card-row">
+                      <button type="button" className="equipo-card-main" onClick={() => abrirAcciones(row)}>
+                        <strong>{row.nombre || 'Sin nombre'}</strong>
+                        <span className="muted">📞 {row.telefono || 'Sin teléfono'}</span>
+                        {row.domicilio ? <span className="muted small">🏠 {row.domicilio}</span> : null}
+                        {row.correo ? <span className="muted small">✉️ {row.correo}</span> : null}
+                      </button>
+                      <div className="equipo-card-actions clientes-lista-card-actions">
+                        <button
+                          type="button"
+                          className="btn-icon edit clientes-lista-btn-icon"
+                          onClick={() => abrirEditar(row)}
+                          title="Editar"
+                          aria-label="Editar"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </>
         )}
       </div>
 

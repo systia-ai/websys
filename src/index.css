@@ -3335,6 +3335,124 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   overflow-y: auto;
 }
 
+.clientes-lista-vista-bar {
+  margin-top: 4px;
+  margin-bottom: 10px;
+}
+
+.clientes-modulo--tabla .servicios-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.clientes-modulo .equipo-list {
+  gap: 6px;
+}
+
+.clientes-modulo .equipo-card {
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(33, 150, 243, 0.08);
+}
+
+.clientes-modulo .equipo-card-main {
+  padding: 10px 12px;
+  gap: 2px;
+}
+
+.clientes-modulo .equipo-card-main strong {
+  font-size: 0.92rem;
+}
+
+.clientes-modulo .equipo-card-main .muted,
+.clientes-modulo .equipo-card-main .small {
+  font-size: 0.78rem;
+}
+
+.clientes-lista-card-actions {
+  padding: 4px 6px;
+}
+
+.clientes-modulo .clientes-lista-btn-icon {
+  width: 30px;
+  height: 28px;
+  font-size: 0.95rem;
+}
+
+.clientes-lista-tabla-wrap {
+  flex: 1;
+  min-height: 160px;
+  max-height: min(58vh, 480px);
+  padding: 6px 8px 10px;
+}
+
+.clientes-lista-tabla {
+  min-width: 720px;
+  font-size: 0.8rem;
+}
+
+.clientes-lista-tabla th,
+.clientes-lista-tabla td {
+  padding: 5px 8px;
+  line-height: 1.3;
+}
+
+.clientes-lista-tabla th {
+  font-size: 0.68rem;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.clientes-lista-col-nombre strong {
+  color: #1565c0;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.clientes-lista-col-tel {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.clientes-lista-tabla .clientes-ordenes-col-texto {
+  max-width: 140px;
+  font-size: 0.78rem;
+}
+
+.clientes-lista-tabla-acciones {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.clientes-lista-btn-icon {
+  flex-shrink: 0;
+}
+
+.clientes-lista-tabla-fila--clic {
+  cursor: pointer;
+}
+
+.clientes-lista-tabla-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.clientes-lista-tabla-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.clientes-lista-tabla-fila--clic:hover td {
+  border-color: #90caf9;
+}
+
+.clientes-lista-tabla-acciones {
+  cursor: default;
+}
+
 .clientes-ordenes-vista-bar {
   margin-top: 12px;
 }
