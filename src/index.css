@@ -503,8 +503,36 @@ td {
   justify-content: flex-end;
 }
 
-.modal-footer button.secondary {
-  background: #6b7280;
+.modal-footer button.secondary,
+.modal-footer-wrap button.secondary,
+.btn-cancelar {
+  background: linear-gradient(180deg, #78909c 0%, #6b7280 55%, #607d8b 100%);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 18px;
+  min-height: 40px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow:
+    0 2px 8px rgba(55, 71, 79, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.modal-footer button.secondary:hover,
+.modal-footer-wrap button.secondary:hover,
+.btn-cancelar:hover {
+  filter: brightness(1.06);
+}
+
+.modal-footer button.secondary:active,
+.modal-footer-wrap button.secondary:active,
+.btn-cancelar:active {
+  transform: translateY(1px);
 }
 
 .modal-footer button.danger {
@@ -2905,24 +2933,40 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   justify-content: flex-end;
 }
 
-.btn-servicio {
-  background: #2196f3;
-  color: #fff;
+.btn-servicio,
+.btn-cuentas {
   border: 0;
-  border-radius: 8px;
-  padding: 10px 16px;
+  border-radius: 999px;
+  padding: 10px 18px;
+  min-height: 40px;
   font-weight: 600;
+  font-size: 0.92rem;
+  font-family: inherit;
+  line-height: 1.2;
   cursor: pointer;
+  color: #fff;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.btn-servicio {
+  background: linear-gradient(180deg, #42a5f5 0%, #2196f3 55%, #1e88e5 100%);
 }
 
 .btn-cuentas {
-  background: #4caf50;
-  color: #fff;
-  border: 0;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
+  background: linear-gradient(180deg, #66bb6a 0%, #4caf50 55%, #43a047 100%);
+}
+
+.btn-servicio:hover,
+.btn-cuentas:hover {
+  filter: brightness(1.06);
+}
+
+.btn-servicio:active,
+.btn-cuentas:active {
+  transform: translateY(1px);
 }
 
 .cuenta-list-modal {

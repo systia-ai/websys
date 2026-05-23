@@ -780,7 +780,7 @@ export default function ClientesModulo({
               </button>
               <button
                 type="button"
-                className="secondary"
+                className="btn-cancelar"
                 onClick={() => {
                   setModalAcciones(false)
                   setClienteAccion(null)
