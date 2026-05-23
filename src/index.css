@@ -4018,8 +4018,8 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 }
 
 .modal-ordenes-lista {
-  max-width: 560px;
-  width: 92vw;
+  max-width: min(96vw, 980px);
+  width: 96vw;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -4030,6 +4030,85 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.orden-resultados-sub {
+  margin: 0 0 8px;
+}
+
+.orden-resultados-tabla-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: min(58vh, 520px);
+  margin: 0;
+  border: 1px solid #b3e5fc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fafcff 0%, #fff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 2px 10px rgba(33, 150, 243, 0.08);
+}
+
+.orden-resultados-tabla {
+  min-width: 820px;
+  font-size: 0.84rem;
+}
+
+.orden-resultados-tabla th,
+.orden-resultados-tabla td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.orden-resultados-fila--clic {
+  cursor: pointer;
+}
+
+.orden-resultados-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.orden-resultados-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.orden-resultados-num {
+  font-weight: 700;
+  color: #1976d2;
+  white-space: nowrap;
+}
+
+.orden-resultados-cliente {
+  font-weight: 600;
+  color: #37474f;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orden-resultados-serie {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.orden-resultados-tecnico {
+  white-space: nowrap;
+}
+
+.orden-resultados-modelo {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orden-resultados-hint {
+  margin: 10px 0 0;
+  text-align: center;
 }
 
 .orden-resultados-list {

@@ -73,6 +73,23 @@ function repCoincideBusquedaTexto(rep, term, clientes, equipos) {
   return campos.some((v) => String(v ?? '').toUpperCase().includes(t))
 }
 
+function formatearFechaRep(rep) {
+  const f = rep?.fecha_creacion ?? rep?.fechaCreacion ?? ''
+  if (!f) return '—'
+  const s = String(f)
+  const head = s.substring(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(head)) {
+    const [y, m, d] = head.split('-')
+    return `${d}/${m}/${y}`
+  }
+  if (s.length >= 16) return s.substring(0, 16).replace('T', ' ')
+  return s.substring(0, 10)
+}
+
+function esEntregada(est) {
+  return /ENTREGAD/i.test(String(est ?? ''))
+}
+
 function buildSessionFromDetalleFixed(row) {
   const { rep, nombreCliente, serieEquipo, tipoEquipo, clienteRow } = row
   const c = normalizeClienteRow(clienteRow ?? { nombre: nombreCliente })
@@ -361,50 +378,62 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
               <h3>{tituloResultados}</h3>
             </div>
             <div className="modal-body">
-              <p className="muted">{subtituloResultados}</p>
-              <ul className="orden-resultados-list">
-                {resultados.map((row) => {
-                  const { rep, nombreCliente, serieEquipo, tipoEquipo } = row
-                  return (
-                    <li key={rep.id}>
-                      <button type="button" className="orden-resultado-card" onClick={() => elegir(row)}>
-                        <div className="orden-res-head">
-                          <strong>Orden #{rep.id}</strong>
-                          <span className="muted small">{rep.fecha_creacion ? String(rep.fecha_creacion).substring(0, 16) : ''}</span>
-                        </div>
-                        <div className="orden-res-grid">
-                          <div>
-                            <span className="lbl">Estatus</span>
-                            <span>{rep.estatus ?? '—'}</span>
-                          </div>
-                          <div>
-                            <span className="lbl">Técnico</span>
-                            <span>{rep.tecnico ?? '—'}</span>
-                          </div>
-                        </div>
-                        <div className="orden-res-block">
-                          <span className="lbl">Cliente</span>
-                          <span>{nombreCliente}</span>
-                        </div>
-                        <div className="orden-res-grid">
-                          <div>
-                            <span className="lbl">Equipo</span>
-                            <span>{serieEquipo}</span>
-                          </div>
-                          <div>
-                            <span className="lbl">Tipo</span>
-                            <span>{tipoEquipo}</span>
-                          </div>
-                        </div>
-                        {rep.descripcion_equipo ? (
-                          <p className="muted small ellipsis-3">{rep.descripcion_equipo}</p>
-                        ) : null}
-                        <span className="muted tiny">Toque para seleccionar esta orden</span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+              <p className="muted orden-resultados-sub">{subtituloResultados}</p>
+              <div className="orden-resultados-tabla-wrap cuentas-cliente-tabla-wrap table-wrap">
+                <table className="cuentas-cliente-tabla orden-resultados-tabla">
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>Fecha</th>
+                      <th>Estatus</th>
+                      <th>Técnico</th>
+                      <th>Cliente</th>
+                      <th>Serie</th>
+                      <th>Tipo</th>
+                      <th>Modelo / descripción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultados.map((row) => {
+                      const { rep, nombreCliente, serieEquipo, tipoEquipo } = row
+                      const ent = esEntregada(rep.estatus)
+                      const st = String(rep.estatus ?? '—').trim()
+                      return (
+                        <tr
+                          key={rep.id}
+                          className="orden-resultados-fila orden-resultados-fila--clic"
+                          title={`Seleccionar orden #${rep.id}`}
+                          onClick={() => elegir(row)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              elegir(row)
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                        >
+                          <td className="cuentas-cliente-tabla-orden orden-resultados-num">{rep.id ?? '—'}</td>
+                          <td className="cuentas-cliente-tabla-fecha">{formatearFechaRep(rep)}</td>
+                          <td>
+                            <span
+                              className={`rep-orden-badge rep-orden-badge--tabla${ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
+                            >
+                              {st}
+                            </span>
+                          </td>
+                          <td className="orden-resultados-tecnico">{rep.tecnico ?? '—'}</td>
+                          <td className="orden-resultados-cliente">{nombreCliente}</td>
+                          <td className="orden-resultados-serie">{serieEquipo}</td>
+                          <td>{tipoEquipo}</td>
+                          <td className="orden-resultados-modelo">{rep.descripcion_equipo ?? '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted tiny orden-resultados-hint">Toque una fila para cargar la orden</p>
             </div>
             <div className="modal-footer">
               <button type="button" className="secondary" onClick={() => setModalResultados(false)}>
