@@ -43,11 +43,6 @@ function ymdHoy() {
   return ymdHoyLocal()
 }
 
-function ymdInicioMes() {
-  const d = new Date()
-  return ymdLocalDesdeDate(new Date(d.getFullYear(), d.getMonth(), 1))
-}
-
 function readLs(key, fallback) {
   try {
     return JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback))
@@ -123,7 +118,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
   const tablaCorteSupabaseRef = useRef(null)
 
   const [pantalla, setPantalla] = useState('fechas')
-  const [fechaInicio, setFechaInicio] = useState(ymdInicioMes)
+  const [fechaInicio, setFechaInicio] = useState(ymdHoy)
   const [fechaFin, setFechaFin] = useState(ymdHoy)
   const [periodoAplicado, setPeriodoAplicado] = useState(null)
   const [sinColumnaFecha, setSinColumnaFecha] = useState(false)
