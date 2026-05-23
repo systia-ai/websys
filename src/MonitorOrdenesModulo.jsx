@@ -10,6 +10,7 @@ import {
   repCoincideFiltroMonitor,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
+  ymdHoyLocal,
 } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
 
@@ -117,12 +118,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     () => new Set(TIPOS_SERVICIO_FILTRO),
   )
   /** 'asc' = más antigua primero, 'desc' = más reciente primero */
-  const [ordenFecha, setOrdenFecha] = useState('asc')
+  const [ordenFecha, setOrdenFecha] = useState('desc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
   /** '' = sin límite; yyyy-mm-dd = ingreso o entrega en el rango */
-  const [fechaDesde, setFechaDesde] = useState('')
-  const [fechaHasta, setFechaHasta] = useState('')
+  const [fechaDesde, setFechaDesde] = useState(ymdHoyLocal)
+  const [fechaHasta, setFechaHasta] = useState(ymdHoyLocal)
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
