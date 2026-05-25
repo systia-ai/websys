@@ -155,13 +155,25 @@ function ymdEnRango(ymd, desde, hasta) {
   return true
 }
 
-/** Estatus cuyo rango de fechas en el monitor usa también `updated_at` (p. ej. reparadas hoy). */
+/** Estatus cuyo rango de fechas en el monitor puede usar también `updated_at` (p. ej. reparadas hoy). */
 const ESTATUS_RANGO_USA_ACTUALIZACION = new Set([
   'REPARADO',
   'EN REVISION',
   'EN ESPERA POR REFACCION',
   'SIN REPARACION',
 ])
+
+/** Máx. días entre ingreso y actualización para contar `updated_at` en el filtro por mes. */
+const DIAS_MAX_INGRESO_VS_ACTUALIZACION_MONITOR = 90
+
+function diasEntreYmd(a, b) {
+  if (!a || !b || a.length < 10 || b.length < 10) return null
+  const [ya, ma, da] = a.slice(0, 10).split('-').map(Number)
+  const [yb, mb, db] = b.slice(0, 10).split('-').map(Number)
+  const ta = Date.UTC(ya, ma - 1, da)
+  const tb = Date.UTC(yb, mb - 1, db)
+  return Math.round(Math.abs(tb - ta) / 86400000)
+}
 
 function normalizarEstatusOrden(st) {
   const u = String(st ?? '').trim().toUpperCase()
@@ -181,7 +193,15 @@ export function fechasRangoMonitor(rep, cuentaVinculada = null, ymdDesdePagos = 
   if (ent) fechas.push(ent)
   if (ESTATUS_RANGO_USA_ACTUALIZACION.has(st)) {
     const act = aYmdLocalDesdeRaw(rep?.updated_at)
-    if (act && !fechas.includes(act)) fechas.push(act)
+    if (act && !fechas.includes(act)) {
+      const dias = ing ? diasEntreYmd(ing, act) : null
+      if (
+        !ing ||
+        (dias != null && dias <= DIAS_MAX_INGRESO_VS_ACTUALIZACION_MONITOR)
+      ) {
+        fechas.push(act)
+      }
+    }
   }
   return fechas
 }
