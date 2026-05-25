@@ -90,6 +90,14 @@ function estatusParaFiltro(rep) {
   return st
 }
 
+/** Etiqueta visible en chips de estatus (evita confusión con filtros de fecha). */
+function etiquetaEstatusMonitor(est) {
+  const st = String(est).trim().toUpperCase()
+  if (st === 'INGRESADO') return 'Ingresado (estatus)'
+  if (st === 'ENTREGADO') return 'Entregado (estatus)'
+  return est
+}
+
 const TECNICO_TODAS = ''
 const TECNICO_SIN = '__sin_tecnico__'
 
@@ -122,9 +130,13 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const [ordenFecha, setOrdenFecha] = useState('desc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
-  /** '' = sin límite; yyyy-mm-dd = ingreso o entrega en el rango */
-  const [fechaDesde, setFechaDesde] = useState(ymdHoyLocal)
-  const [fechaHasta, setFechaHasta] = useState(ymdHoyLocal)
+  /** Rango de fechas (arriba); lo usan los modos «Fecha ingresado» / «Fecha entrega». */
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  /** Activo: filtra por ingreso en el rango superior (ignora estatus). */
+  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
+  /** Activo: filtra por entrega en el rango superior (ignora estatus). */
+  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
@@ -239,7 +251,24 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
 
   const tiposServicioLista = TIPOS_SERVICIO_FILTRO
 
+  function rangoFechasInvalidoPar(desde, hasta) {
+    const d = String(desde ?? '').trim()
+    const h = String(hasta ?? '').trim()
+    return Boolean(d && h && d > h)
+  }
+
+  const rangoFechasInvalido = rangoFechasInvalidoPar(fechaDesde, fechaHasta)
+  const hayRangoFechaInvalido = rangoFechasInvalido
+  const modoFechaActivo = filtroModoFechaIngreso
+    ? 'ingreso'
+    : filtroModoFechaEntrega
+      ? 'entrega'
+      : null
+  const filtroRangoSuperiorActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
+  const modoFechaSinRango = Boolean(modoFechaActivo && !filtroRangoSuperiorActivo)
+
   const filasOrdenadas = useMemo(() => {
+    if (hayRangoFechaInvalido || modoFechaSinRango) return []
     const sel = estatusSeleccionados
     const desde = String(fechaDesde ?? '').trim()
     const hasta = String(fechaHasta ?? '').trim()
@@ -249,6 +278,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         estatusSeleccionados: sel,
         desde,
         hasta,
+        modoFecha: modoFechaActivo,
         cuentaVinculada: cuentaPorReparaId.get(rid),
         ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
         estatusParaFiltroFn: estatusParaFiltro,
@@ -331,17 +361,16 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     tecnicoFiltro,
     fechaDesde,
     fechaHasta,
+    filtroModoFechaIngreso,
+    filtroModoFechaEntrega,
+    modoFechaActivo,
     busqueda,
     clientes,
     cuentaPorReparaId,
     entregaDesdePagosPorRepara,
+    hayRangoFechaInvalido,
+    modoFechaSinRango,
   ])
-
-  const rangoFechasInvalido = useMemo(() => {
-    const d = String(fechaDesde ?? '').trim()
-    const h = String(fechaHasta ?? '').trim()
-    return d && h && d > h
-  }, [fechaDesde, fechaHasta])
 
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
@@ -354,7 +383,35 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   }
 
   function seleccionarSolo(est) {
+    setFiltroModoFechaIngreso(false)
+    setFiltroModoFechaEntrega(false)
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
+  }
+
+  function toggleModoFechaIngreso() {
+    setFiltroModoFechaIngreso((prev) => {
+      const next = !prev
+      if (next) setFiltroModoFechaEntrega(false)
+      return next
+    })
+  }
+
+  function toggleModoFechaEntrega() {
+    setFiltroModoFechaEntrega((prev) => {
+      const next = !prev
+      if (next) setFiltroModoFechaIngreso(false)
+      return next
+    })
+  }
+
+  function soloModoFechaIngreso() {
+    setFiltroModoFechaEntrega(false)
+    setFiltroModoFechaIngreso(true)
+  }
+
+  function soloModoFechaEntrega() {
+    setFiltroModoFechaIngreso(false)
+    setFiltroModoFechaEntrega(true)
   }
 
   function toggleTipoServicio(tipo) {
@@ -425,6 +482,8 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
   const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
   const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
   const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
+  const filtroIngresoActivo = filtroModoFechaIngreso
+  const filtroEntregaActivo = filtroModoFechaEntrega
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
 
   function badgeEstatus(rep) {
@@ -606,7 +665,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                       checked={checked}
                       onChange={() => toggleEstatus(est)}
                     />
-                    <span className="monitor-ordenes-check-text">{est}</span>
+                    <span className="monitor-ordenes-check-text">{etiquetaEstatusMonitor(est)}</span>
                     <button
                       type="button"
                       className="monitor-ordenes-solo"
@@ -621,7 +680,59 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                   </label>
                 )
               })}
+              <label
+                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroIngresoActivo)}`}
+              >
+                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                <input
+                  type="checkbox"
+                  className="monitor-ordenes-check-input"
+                  checked={filtroModoFechaIngreso}
+                  onChange={() => toggleModoFechaIngreso()}
+                />
+                <span className="monitor-ordenes-check-text">Fecha ingresado</span>
+                <button
+                  type="button"
+                  className="monitor-ordenes-solo"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    soloModoFechaIngreso()
+                  }}
+                  title="Solo órdenes ingresadas en el rango de fechas de arriba"
+                >
+                  Solo
+                </button>
+              </label>
+              <label
+                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroEntregaActivo)}`}
+              >
+                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                <input
+                  type="checkbox"
+                  className="monitor-ordenes-check-input"
+                  checked={filtroModoFechaEntrega}
+                  onChange={() => toggleModoFechaEntrega()}
+                />
+                <span className="monitor-ordenes-check-text">Fecha entrega</span>
+                <button
+                  type="button"
+                  className="monitor-ordenes-solo"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    soloModoFechaEntrega()
+                  }}
+                  title="Solo órdenes entregadas en el rango de fechas de arriba"
+                >
+                  Solo
+                </button>
+              </label>
             </div>
+            {modoFechaSinRango ? (
+              <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="alert">
+                Indique «Desde» y/o «Hasta» en el rango de fechas de arriba para usar «Fecha ingresado» o «Fecha
+                entrega».
+              </p>
+            ) : null}
           </fieldset>
 
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">

@@ -2515,6 +2515,65 @@ td {
   cursor: pointer;
 }
 
+.monitor-ordenes-tile--fecha {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 5px;
+  padding: 7px 9px 7px 9px;
+  min-height: 36px;
+  cursor: default;
+}
+
+.monitor-ordenes-tile--fecha .monitor-ordenes-tile-badge {
+  display: none;
+}
+
+.monitor-ordenes-tile--fecha .monitor-ordenes-check-text {
+  flex: 0 1 auto;
+  font-size: 0.74rem;
+  padding-right: 0;
+  white-space: nowrap;
+}
+
+.monitor-ordenes-fecha-chip-inputs {
+  display: contents;
+}
+
+.monitor-ordenes-fecha-chip-inputs input[type='date'] {
+  flex: 0 1 108px;
+  width: 108px;
+  max-width: 42%;
+  padding: 3px 4px;
+  border: 1px solid #cfd8dc;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  background: #fff;
+  color: #263238;
+  font-family: inherit;
+}
+
+.monitor-ordenes-fecha-chip-inputs input[type='date']:focus {
+  outline: 2px solid #1e88e5;
+  outline-offset: 0;
+  border-color: #1e88e5;
+}
+
+.monitor-ordenes-tile--fecha .monitor-ordenes-solo {
+  margin-left: auto;
+}
+
+.monitor-ordenes-rango-aviso--fieldset {
+  margin: 6px 0 0;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .monitor-ordenes-estatus-grid .monitor-ordenes-tile--fecha {
+    grid-column: span 2;
+  }
+}
+
 .monitor-ordenes-solo {
   flex-shrink: 0;
   border: 0;

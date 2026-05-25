@@ -212,7 +212,9 @@ export function repEnRangoFechasMonitor(
 }
 
 /**
- * ¿La orden cumple el filtro del monitor? (estatus operativo y/o fechas de ingreso o entrega).
+ * ¿La orden cumple el filtro del monitor?
+ * - `modoFecha` 'ingreso' | 'entrega': usa el rango superior y omite estatus.
+ * - Sin `modoFecha`: filtra por estatus y, si hay rango, por ingreso o entrega (ambas).
  */
 export function repCoincideFiltroMonitor(
   rep,
@@ -220,25 +222,26 @@ export function repCoincideFiltroMonitor(
     estatusSeleccionados,
     desde,
     hasta,
+    modoFecha = null,
     cuentaVinculada = null,
     ymdDesdePagos = null,
     estatusParaFiltroFn = (r) => String(r?.estatus ?? '').trim().toUpperCase(),
   },
 ) {
-  const sel = estatusSeleccionados
-  const st = estatusParaFiltroFn(rep)
-  const matchOp = sel.size > 0 && sel.has(st)
-
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
 
-  if (!hayRango) return matchOp
+  if (modoFecha === 'ingreso' || modoFecha === 'entrega') {
+    if (!hayRango) return false
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)
+  }
 
-  return (
-    matchOp &&
-    repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
-  )
+  const sel = estatusSeleccionados
+  const st = estatusParaFiltroFn(rep)
+  if (sel.size === 0 || !sel.has(st)) return false
+  if (!hayRango) return true
+  return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
 }
 
 /** Campos al marcar orden entregada (Ventas / actualización de estatus). */
