@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
+import { confirmarDatosAntesDeGuardar, TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { insertPagoCliente } from './pagosClientesUtils.js'
+import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import {
@@ -86,6 +88,13 @@ function parseClienteIdFromSession(sess) {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+function parseEquipoIdFromSession(sess) {
+  const raw = sess?.equipoId ?? sess?.equipo_id
+  if (raw == null || raw === '') return null
+  const n = Number(String(raw).trim())
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 /** True si la sesión trae un ID de reparación real (>0) a cargar desde BD. */
 function repIdStrEsOrdenExistente(repIdStr) {
   const t = repIdStr != null ? String(repIdStr).trim() : ''
@@ -163,6 +172,7 @@ export default function ReparacionesOrden({
     return Number.isFinite(n) && n > 0 ? n : null
   })
   const [clienteIdNum, setClienteIdNum] = useState(() => parseClienteIdFromSession(s))
+  const [equipoIdSesion, setEquipoIdSesion] = useState(() => parseEquipoIdFromSession(s))
 
   const [dialogExito, setDialogExito] = useState(false)
   const [msgExito, setMsgExito] = useState('')
@@ -529,16 +539,19 @@ export default function ReparacionesOrden({
   }
 
   async function resolverEquipoId() {
-    const ser = String(serieEquipo).trim().toUpperCase()
-    if (!ser) return null
-    if (supabase) {
-      const { data, error } = await supabase.from('equipos').select('*')
-      if (error) throw error
-      const e = (data ?? []).find((x) => String(x.serie ?? '').trim().toUpperCase() === ser)
-      return e?.id ?? null
-    }
-    const e = readLs(LS_EQUIPOS, []).find((x) => String(x.serie ?? '').trim().toUpperCase() === ser)
-    return e?.id ?? null
+    const { id, error } = await sincronizarEquipoParaOrden(supabase, {
+      equipoId: equipoIdSesion,
+      serie: serieEquipo,
+      tipo_equipo: tipoEquipo,
+      descripcion: descripcionEquipo,
+      tipo_reparacion: tipoReparacion,
+      readLs,
+      writeLs,
+      LS_EQUIPOS,
+    })
+    if (error) throw new Error(error)
+    if (id != null) setEquipoIdSesion(id)
+    return id
   }
 
   /**
@@ -583,7 +596,9 @@ export default function ReparacionesOrden({
         return false
       }
       if (eid == null) {
-        setMsgExito(`No se encontró el equipo con serie "${serieEquipo}".`)
+        setMsgExito(
+          `No se encontró el equipo. Corrija la serie en el formulario o regístrelo en Equipos antes de crear la orden.`,
+        )
         setDialogExito(true)
         return false
       }
@@ -1662,10 +1677,10 @@ export default function ReparacionesOrden({
         >
           <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>📝 ¿Seguro que quieres guardar estos datos?</h3>
+              <h3>📝 {TEXTO_VERIFICAR_DATOS}</h3>
               <p className="muted small" style={{ margin: '4px 0 0' }}>
-                Revise los datos antes de confirmar. El <strong>número de orden</strong> lo asigna la base de datos al
-                guardar (consecutivo); no lo elige usted. Una vez guardada podrá editar la orden.
+                Revise cliente, equipo y orden. El <strong>número de orden</strong> lo asigna la base de datos al guardar
+                (consecutivo). Si corrigió la serie aquí, se actualizará en el equipo antes de crear la orden.
               </p>
             </div>
             <div className="modal-body">

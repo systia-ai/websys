@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { confirmarDatosAntesDeGuardar } from './confirmarDatosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
@@ -262,21 +263,39 @@ export default function ServiciosEquipos({
       if (editandoId) {
         const { error } = await supabase.from('equipos').update(payload).eq('id', editandoId)
         if (error) throw error
-      } else {
-        const { error } = await supabase.from('equipos').insert(payload)
-        if (error) throw error
-        await incrementarSerieContador(supabase).catch(() => {})
+        return editandoId
       }
-    } else {
-      const list = readLs(LS_EQUIPOS, [])
-      if (editandoId) {
-        const next = list.map((e) => (e.id === editandoId ? { ...e, ...payload } : e))
-        writeLs(LS_EQUIPOS, next)
-      } else {
-        const id = nextLocalId()
-        writeLs(LS_EQUIPOS, [{ id, ...payload }, ...list])
-        incrementarSerieContador(null).catch(() => {})
-      }
+      const { data, error } = await supabase.from('equipos').insert(payload).select('id').single()
+      if (error) throw error
+      await incrementarSerieContador(supabase).catch(() => {})
+      return data?.id ?? null
+    }
+    const list = readLs(LS_EQUIPOS, [])
+    if (editandoId) {
+      const next = list.map((e) => (e.id === editandoId ? { ...e, ...payload } : e))
+      writeLs(LS_EQUIPOS, next)
+      return editandoId
+    }
+    const id = nextLocalId()
+    writeLs(LS_EQUIPOS, [{ id, ...payload }, ...list])
+    incrementarSerieContador(null).catch(() => {})
+    return id
+  }
+
+  function payloadReparacionesSesion(cli, eqRow, eqId) {
+    return {
+      clienteId: cli.id,
+      clienteNombre: cli.nombre,
+      clienteTelefono: cli.telefono,
+      clienteDomicilio: cli.domicilio,
+      clienteCorreo: cli.correo,
+      equipoId: eqId,
+      equipoSerie: eqRow.serie ?? '',
+      equipoTipo: eqRow.tipo_equipo ?? '',
+      equipoDescripcion: eqRow.descripcion ?? '',
+      equipoTipoReparacion: eqRow.tipo_reparacion ?? '',
+      reparacionId: '',
+      sesionStamp: Date.now(),
     }
   }
 
@@ -299,19 +318,9 @@ export default function ServiciosEquipos({
       }
       await cargarEquipos()
       onNotice('Cliente asociado al equipo')
-      onOpenReparaciones({
-        clienteId: c.id,
-        clienteNombre: c.nombre,
-        clienteTelefono: c.telefono,
-        clienteDomicilio: c.domicilio,
-        clienteCorreo: c.correo,
-        equipoSerie: eq.serie ?? '',
-        equipoTipo: eq.tipo_equipo ?? '',
-        equipoDescripcion: eq.descripcion ?? '',
-        equipoTipoReparacion: eq.tipo_reparacion ?? '',
-        reparacionId: '',
-        sesionStamp: Date.now(),
-      })
+      onOpenReparaciones(
+        payloadReparacionesSesion(c, { serie: eq.serie, tipo_equipo: eq.tipo_equipo, descripcion: eq.descripcion, tipo_reparacion: eq.tipo_reparacion }, eq.id),
+      )
       return true
     } catch (e) {
       onError(`Error al asociar cliente: ${e.message}`)
@@ -329,25 +338,13 @@ export default function ServiciosEquipos({
       cliente_id: cli.id,
     }
     try {
-      await persistEquipo(base)
+      const eqId = await persistEquipo(base)
       setDialogoEquipo(false)
       setDialogoCliente(false)
       await cargarEquipos()
       onNotice(editandoId ? 'Equipo actualizado' : 'Equipo agregado')
-      if (!editandoId) {
-        onOpenReparaciones({
-          clienteId: cli.id,
-          clienteNombre: cli.nombre,
-          clienteTelefono: cli.telefono,
-          clienteDomicilio: cli.domicilio,
-          clienteCorreo: cli.correo,
-          equipoSerie: base.serie,
-          equipoTipo: base.tipo_equipo,
-          equipoDescripcion: base.descripcion ?? '',
-          equipoTipoReparacion: base.tipo_reparacion ?? '',
-          reparacionId: '',
-          sesionStamp: Date.now(),
-        })
+      if (!editandoId && eqId != null) {
+        onOpenReparaciones(payloadReparacionesSesion(cli, base, eqId))
         onConsumeClienteVinculo?.()
       }
     } catch (e) {
@@ -362,6 +359,9 @@ export default function ServiciosEquipos({
     }
     if (!String(tipoEquipo).trim()) {
       onError('El tipo de equipo es requerido')
+      return
+    }
+    if (!confirmarDatosAntesDeGuardar(`Serie: ${String(serie).trim().toUpperCase()}\nTipo: ${tipoEquipo}`)) {
       return
     }
     if (editandoId) {
@@ -390,23 +390,13 @@ export default function ServiciosEquipos({
       }
       void (async () => {
         try {
-          await persistEquipo(base)
+          const eqId = await persistEquipo(base)
           setDialogoEquipo(false)
           await cargarEquipos()
           onNotice('Equipo agregado')
-          onOpenReparaciones({
-            clienteId: cli.id,
-            clienteNombre: cli.nombre,
-            clienteTelefono: cli.telefono,
-            clienteDomicilio: cli.domicilio,
-            clienteCorreo: cli.correo,
-            equipoSerie: base.serie,
-            equipoTipo: base.tipo_equipo,
-            equipoDescripcion: base.descripcion ?? '',
-            equipoTipoReparacion: base.tipo_reparacion ?? '',
-            reparacionId: '',
-            sesionStamp: Date.now(),
-          })
+          if (eqId != null) {
+            onOpenReparaciones(payloadReparacionesSesion(cli, base, eqId))
+          }
           onConsumeClienteVinculo?.()
         } catch (e) {
           onError(`Error al guardar equipo: ${e.message}`)
@@ -488,15 +478,12 @@ export default function ServiciosEquipos({
     const c = normalizeClienteRow(cli ?? {})
     setModalRep(null)
     onOpenReparaciones({
-      clienteId: c.id ?? rep.cliente_id,
-      clienteNombre: c.nombre,
-      clienteTelefono: c.telefono,
-      clienteDomicilio: c.domicilio,
-      clienteCorreo: c.correo,
-      equipoSerie: eq.serie ?? '',
-      equipoTipo: eq.tipo_equipo ?? '',
-      equipoDescripcion: eq.descripcion ?? '',
-      equipoTipoReparacion: rep.tipo_reparacion ?? eq.tipo_reparacion ?? '',
+      ...payloadReparacionesSesion(c, {
+        serie: eq.serie,
+        tipo_equipo: eq.tipo_equipo,
+        descripcion: eq.descripcion,
+        tipo_reparacion: rep.tipo_reparacion ?? eq.tipo_reparacion,
+      }, eq.id),
       reparacionId: rep.id != null ? String(rep.id) : '',
     })
   }
@@ -514,19 +501,12 @@ export default function ServiciosEquipos({
       if (!cli && eq.cliente_id) cli = await fetchCliente(eq.cliente_id)
       const c = normalizeClienteRow(cli ?? {})
       setModalRep(null)
-      onOpenReparaciones({
-        clienteId: c.id ?? eq.cliente_id,
-        clienteNombre: c.nombre,
-        clienteTelefono: c.telefono,
-        clienteDomicilio: c.domicilio,
-        clienteCorreo: c.correo,
-        equipoSerie: eq.serie ?? '',
-        equipoTipo: eq.tipo_equipo ?? '',
-        equipoDescripcion: eq.descripcion ?? '',
-        equipoTipoReparacion: eq.tipo_reparacion ?? '',
-        reparacionId: '',
-        sesionStamp: Date.now(),
-      })
+      onOpenReparaciones(payloadReparacionesSesion(c, {
+        serie: eq.serie,
+        tipo_equipo: eq.tipo_equipo,
+        descripcion: eq.descripcion,
+        tipo_reparacion: eq.tipo_reparacion,
+      }, eq.id))
       return
     }
     setModalRep(null)
@@ -580,6 +560,9 @@ export default function ServiciosEquipos({
     }
     if (!ncTel.trim()) {
       onError('El teléfono del cliente es requerido')
+      return
+    }
+    if (!confirmarDatosAntesDeGuardar(`Nombre: ${ncNombre.trim()}\nTeléfono: ${ncTel.trim()}`)) {
       return
     }
     const row = {

@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { confirmarDatosAntesDeGuardar } from './confirmarDatosUtils.js'
 import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
@@ -170,6 +171,13 @@ export default function ClientesModulo({
     }
     if (!telefono.trim()) {
       onError?.('El teléfono es requerido')
+      return
+    }
+    if (
+      !confirmarDatosAntesDeGuardar(
+        `Nombre: ${nombre.trim()}\nTeléfono: ${telefono.trim()}`,
+      )
+    ) {
       return
     }
     const row = {
@@ -480,6 +488,7 @@ export default function ClientesModulo({
         clienteTelefono: cliente.telefono,
         clienteDomicilio: cliente.domicilio,
         clienteCorreo: cliente.correo,
+        equipoId: rep.equipo_id ?? null,
         equipoSerie: serieEquipo,
         equipoTipo: tipoEquipo,
         equipoDescripcion: '',

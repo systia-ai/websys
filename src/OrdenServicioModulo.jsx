@@ -77,6 +77,7 @@ export default function OrdenServicioModulo({
           <ReparacionesOrden
             key={[
               session?.equipoSerie ?? '',
+              session?.equipoId ?? session?.equipo_id ?? '',
               session?.reparacionId ?? '',
               session?.clienteTelefono ?? '',
               session?.clienteNombre ?? '',

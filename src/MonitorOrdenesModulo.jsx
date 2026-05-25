@@ -453,10 +453,12 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     const c = clientes.find((x) => sameId(x.id, rep.cliente_id)) ?? {}
     const eq = rep.equipo_id != null ? equipoPorId.get(String(rep.equipo_id)) ?? {} : {}
     onEditarOrden({
+      clienteId: rep.cliente_id ?? c.id ?? null,
       clienteNombre: c.nombre ?? '',
       clienteTelefono: c.telefono ?? '',
       clienteDomicilio: c.domicilio ?? '',
       clienteCorreo: c.correo ?? '',
+      equipoId: rep.equipo_id ?? eq.id ?? null,
       equipoSerie: eq.serie ?? '',
       equipoTipo: eq.tipo_equipo ?? '',
       equipoDescripcion: rep.descripcion_equipo ?? eq.descripcion ?? '',
