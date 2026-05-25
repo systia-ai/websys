@@ -111,7 +111,10 @@ function inyectarSaldoCuentaSiSinMovimientos(lineas, cuentaRow) {
   if (!cuentaRow?.id) return lineas
   const sum = sumSubtotales(lineas)
   const ct = Number(cuentaRow.total ?? 0)
-  if (Math.abs(sum) > 0.0001 || ct <= 0.0001) return lineas
+  const tieneCargosGuardados = lineas.some(
+    (l) => l.tipo !== 'pago' && !l.virtual && (l.tipo === 'cuentamov' || l.tipo === 'reparamov'),
+  )
+  if (tieneCargosGuardados || Math.abs(sum) > 0.0001 || ct <= 0.0001) return lineas
   return [
     ...lineas,
     {
