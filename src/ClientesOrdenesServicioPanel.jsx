@@ -175,7 +175,20 @@ export default function ClientesOrdenesServicioPanel({
                 </thead>
                 <tbody>
                   {filas.map((f) => (
-                    <tr key={f.rep.id} className={f.activa ? '' : 'clientes-ordenes-fila--entregada'}>
+                    <tr
+                      key={f.rep.id}
+                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.activa ? '' : ' clientes-ordenes-fila--entregada'}`}
+                      role="button"
+                      tabIndex={0}
+                      title={`Abrir orden #${f.ordenId}`}
+                      onClick={() => onSelectRep?.(f.rep)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSelectRep?.(f.rep)
+                        }
+                      }}
+                    >
                       <td className="cuentas-cliente-tabla-orden">{f.ordenId}</td>
                       <td>{f.serie}</td>
                       <td className="cuentas-cliente-tabla-fecha">{f.fechaIngreso}</td>
@@ -197,7 +210,10 @@ export default function ClientesOrdenesServicioPanel({
                         <button
                           type="button"
                           className="cuentas-cliente-btn-abrir"
-                          onClick={() => onSelectRep?.(f.rep)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onSelectRep?.(f.rep)
+                          }}
                         >
                           Ver →
                         </button>

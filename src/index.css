@@ -4087,6 +4087,23 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   opacity: 0.92;
 }
 
+.clientes-ordenes-tabla-fila--clic {
+  cursor: pointer;
+}
+
+.clientes-ordenes-tabla-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.clientes-ordenes-tabla-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.clientes-ordenes-tabla-fila--clic:hover td {
+  border-color: #90caf9;
+}
+
 .rep-orden-badge--tabla {
   display: inline-block;
   font-size: 0.72rem;

@@ -28,16 +28,6 @@ function inferirTipoProducto(p) {
   return 'CONSUMIBLE'
 }
 
-function tiempoCreacionProducto(p) {
-  const raw = p?.created_at ?? p?.updated_at ?? null
-  if (raw != null) {
-    const t = new Date(raw).getTime()
-    if (Number.isFinite(t)) return t
-  }
-  const id = Number(p?.id)
-  return Number.isFinite(id) ? id : 0
-}
-
 async function obtenerSiguienteConsecutivoSerie(supabase, prefijo) {
   const pref = String(prefijo ?? '').trim().toUpperCase()
   if (!supabase) return null
@@ -139,10 +129,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setLoading(true)
     try {
       if (supabase) {
-        const { data, error } = await supabase
-          .from('productos')
-          .select('*')
-          .order('created_at', { ascending: false })
+        const { data, error } = await supabase.from('productos').select('*')
         if (error) throw error
         setProductos(data ?? [])
       } else {
@@ -170,7 +157,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           return s.includes(t) || d.includes(t)
         })
 
-    base.sort((a, b) => tiempoCreacionProducto(b) - tiempoCreacionProducto(a))
+    base.sort((a, b) => {
+      const da = String(a?.descripcion ?? '').trim()
+      const db = String(b?.descripcion ?? '').trim()
+      return da.localeCompare(db, 'es', { sensitivity: 'base' })
+    })
     return base
   }, [productos, busqueda])
 
