@@ -36,12 +36,25 @@ function ymdATime(ymd) {
 }
 
 function fechaIngresoTime(rep) {
-  const t = ymdATime(fechaIngresoYmd(rep))
-  if (t != null) return t
-  const raw = rep.fecha_creacion ?? rep.created_at
-  if (raw == null) return null
-  const n = new Date(raw).getTime()
-  return Number.isNaN(n) ? null : n
+  const raw =
+    rep?.fecha_creacion ??
+    rep?.created_at ??
+    rep?.fecha_ingreso ??
+    rep?.fechaIngreso ??
+    rep?.fecha_registro
+  if (raw != null) {
+    const n = new Date(raw).getTime()
+    if (!Number.isNaN(n)) return n
+  }
+  return ymdATime(fechaIngresoYmd(rep))
+}
+
+/** Orden de llegada: primero la más antigua, desempate por no. de orden. */
+function compararPorLlegada(a, b, tiempoFn) {
+  const ta = tiempoFn(a) ?? 0
+  const tb = tiempoFn(b) ?? 0
+  if (ta !== tb) return ta - tb
+  return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
 }
 
 function hoyYmdLocal() {
@@ -127,7 +140,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     () => new Set(TIPOS_SERVICIO_FILTRO),
   )
   /** 'asc' = más antigua primero, 'desc' = más reciente primero */
-  const [ordenFecha, setOrdenFecha] = useState('desc')
+  const [ordenFecha, setOrdenFecha] = useState('asc')
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
   /** Rango de fechas (arriba); lo usan los modos «Fecha ingresado» / «Fecha entrega». */
@@ -343,14 +356,27 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
         ymdPago,
       }
     })
+    const ordenarPorLlegada =
+      filtroRangoSuperiorActivo || modoFechaActivo === 'ingreso' || modoFechaActivo === 'entrega'
+
     conTiempo.sort((a, b) => {
+      if (ordenarPorLlegada) {
+        if (modoFechaActivo === 'entrega') {
+          const ya = a.ymdEntrega ? ymdATime(a.ymdEntrega) : null
+          const yb = b.ymdEntrega ? ymdATime(b.ymdEntrega) : null
+          if (ya !== yb) {
+            if (ya == null) return 1
+            if (yb == null) return -1
+            return ya - yb
+          }
+          return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
+        }
+        return compararPorLlegada(a, b, (row) => row.t)
+      }
       const ta = a.t ?? 0
       const tb = b.t ?? 0
-      if (ta === tb) return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
-      if (a.t == null && b.t == null) return 0
-      if (a.t == null) return 1
-      if (b.t == null) return -1
-      return ordenFecha === 'asc' ? ta - tb : tb - ta
+      if (ta !== tb) return ordenFecha === 'asc' ? ta - tb : tb - ta
+      return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
     })
     return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({ rep, ymd, ymdEntrega, dias }))
   }, [
@@ -370,6 +396,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
     entregaDesdePagosPorRepara,
     hayRangoFechaInvalido,
     modoFechaSinRango,
+    filtroRangoSuperiorActivo,
   ])
 
   function toggleEstatus(est) {
