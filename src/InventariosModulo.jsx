@@ -102,6 +102,16 @@ function toIntOrNull(v) {
   return Number.isFinite(n) ? n : null
 }
 
+/** Orden A→Z solo por descripción (la serie no influye). */
+function compararProductosPorDescripcion(a, b) {
+  const da = String(a?.descripcion ?? '').trim()
+  const db = String(b?.descripcion ?? '').trim()
+  if (!da && !db) return 0
+  if (!da) return 1
+  if (!db) return -1
+  return da.localeCompare(db, 'es', { sensitivity: 'base', numeric: true })
+}
+
 /**
  * Inventarios / catálogo de productos (tabla `productos`), flujo tipo pantalla dedicada en Android:
  * lista con búsqueda, alta, edición y baja.
@@ -129,11 +139,18 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setLoading(true)
     try {
       if (supabase) {
-        const { data, error } = await supabase.from('productos').select('*')
+        const { data, error } = await supabase
+          .from('productos')
+          .select('*')
+          .order('descripcion', { ascending: true })
         if (error) throw error
-        setProductos(data ?? [])
+        const lista = [...(data ?? [])]
+        lista.sort(compararProductosPorDescripcion)
+        setProductos(lista)
       } else {
-        setProductos(readLs(LS_PRODUCTOS, []))
+        const lista = [...readLs(LS_PRODUCTOS, [])]
+        lista.sort(compararProductosPorDescripcion)
+        setProductos(lista)
       }
     } catch (e) {
       onError?.(`Error al cargar inventario: ${e.message}`)
@@ -157,11 +174,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           return s.includes(t) || d.includes(t)
         })
 
-    base.sort((a, b) => {
-      const da = String(a?.descripcion ?? '').trim()
-      const db = String(b?.descripcion ?? '').trim()
-      return da.localeCompare(db, 'es', { sensitivity: 'base' })
-    })
+    base.sort(compararProductosPorDescripcion)
     return base
   }, [productos, busqueda])
 

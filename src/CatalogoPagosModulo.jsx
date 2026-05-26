@@ -39,6 +39,16 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null
 }
 
+/** Orden A→Z por nombre del concepto. */
+function compararCatalogoPorConcepto(a, b) {
+  const ca = String(a?.concepto ?? '').trim()
+  const cb = String(b?.concepto ?? '').trim()
+  if (!ca && !cb) return 0
+  if (!ca) return 1
+  if (!cb) return -1
+  return ca.localeCompare(cb, 'es', { sensitivity: 'base', numeric: true })
+}
+
 /**
  * Catálogo de conceptos de pago (`catalogopagos`), pantalla dedicada como en Android:
  * lista, búsqueda, alta/edición y baja (concepto + cantidad/monto por defecto).
@@ -60,11 +70,18 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
     setLoading(true)
     try {
       if (supabase) {
-        const { data, error } = await supabase.from('catalogopagos').select('*').order('id', { ascending: false })
+        const { data, error } = await supabase
+          .from('catalogopagos')
+          .select('*')
+          .order('concepto', { ascending: true })
         if (error) throw error
-        setItems(data ?? [])
+        const lista = [...(data ?? [])]
+        lista.sort(compararCatalogoPorConcepto)
+        setItems(lista)
       } else {
-        setItems(readLs(LS_CATALOGO, []))
+        const lista = [...readLs(LS_CATALOGO, [])]
+        lista.sort(compararCatalogoPorConcepto)
+        setItems(lista)
       }
     } catch (e) {
       onError?.(`Error al cargar catálogo: ${e.message}`)
@@ -80,8 +97,11 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
 
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
-    if (!t) return items
-    return items.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
+    const base = !t
+      ? [...items]
+      : items.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
+    base.sort(compararCatalogoPorConcepto)
+    return base
   }, [items, busqueda])
 
   function cambiarVista(modo) {
