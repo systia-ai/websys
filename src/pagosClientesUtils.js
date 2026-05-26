@@ -41,7 +41,6 @@ export function extractFechaPagoYmd(pago, cuentasPorId = null) {
   if (!cuenta) return null
   return (
     aYmdLocalDesdeRaw(cuenta.fecha_liquidada ?? cuenta.fechaLiquidada) ??
-    aYmdLocalDesdeRaw(cuenta.updated_at) ??
     aYmdLocalDesdeRaw(cuenta.created_at)
   )
 }
@@ -96,7 +95,7 @@ export async function cargarCuentasMapParaPagos(supabase) {
   if (!supabase?.from) return new Map()
   const { data, error } = await supabase
     .from('cuentas')
-    .select('id, fecha_liquidada, updated_at, created_at')
+    .select('id, fecha_liquidada, created_at')
   if (error) throw error
   return new Map((data ?? []).map((c) => [String(c.id), c]))
 }
