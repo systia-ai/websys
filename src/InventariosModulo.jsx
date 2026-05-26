@@ -2,17 +2,67 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { sameId } from './clienteUtils.js'
-import {
-  EMOJIS_ELEGIR,
-  emojiParaProducto,
-  guardarIconoProducto,
-  readIconosMap,
-  sugerirEmojiPorTexto,
-} from './productoEmoji.js'
 import { esProductoContable } from './productoUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_VISTA_INVENTARIO = 'sistefix_inventario_vista'
+const LS_DATOS = 'sistefix_local_datos'
+
+const TIPOS_PRODUCTO = [
+  { id: 'CONSUMIBLE', label: 'Consumible', prefijo: 'C', contable: true },
+  { id: 'REFACCION', label: 'Refacción', prefijo: 'R', contable: true },
+  { id: 'SERVICIO', label: 'Servicio', prefijo: 'S', contable: false },
+]
+
+function prefijoSeriePorTipo(tipoProducto) {
+  const tipo = TIPOS_PRODUCTO.find((t) => t.id === String(tipoProducto ?? '').trim().toUpperCase())
+  return tipo?.prefijo ?? 'C'
+}
+
+function inferirTipoProducto(p) {
+  const tipoDb = String(p?.tipo_producto ?? p?.tipo ?? '').trim().toUpperCase()
+  if (TIPOS_PRODUCTO.some((t) => t.id === tipoDb)) return tipoDb
+  const serieUpper = String(p?.serie ?? '').trim().toUpperCase()
+  if (serieUpper.startsWith('S-')) return 'SERVICIO'
+  if (serieUpper.startsWith('R-')) return 'REFACCION'
+  return 'CONSUMIBLE'
+}
+
+async function obtenerSiguienteConsecutivoSerie(supabase, prefijo) {
+  const pref = String(prefijo ?? '').trim().toUpperCase()
+  if (!supabase) return null
+  const { data, error } = await supabase.from('productos').select('serie').ilike('serie', `${pref}-%`)
+  if (error) throw error
+  let max = 0
+  for (const row of data ?? []) {
+    const s = String(row?.serie ?? '').trim().toUpperCase()
+    const m = s.match(new RegExp(`^${pref}-(\\d{1,})$`))
+    if (!m) continue
+    const n = Number(m[1])
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return max + 1
+}
+
+async function escribirId2Datos(supabase, valor) {
+  const n = Math.max(1, Math.floor(Number(valor) || 1))
+  if (supabase) {
+    const { data, error } = await supabase.from('Datos').select('id, id2').limit(1).maybeSingle()
+    if (error) throw error
+    if (data?.id != null) {
+      const { error: upError } = await supabase.from('Datos').update({ id2: n }).eq('id', data.id)
+      if (upError) throw upError
+    }
+    return
+  }
+  const rows = readLs(LS_DATOS, [])
+  if (!rows.length) {
+    writeLs(LS_DATOS, [{ id: 1, Serie: 1, id2: n }])
+    return
+  }
+  const first = { ...rows[0], id2: n }
+  writeLs(LS_DATOS, [first, ...rows.slice(1)])
+}
 
 function leerVistaInventario() {
   try {
@@ -64,6 +114,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
 
   const [dialogo, setDialogo] = useState(false)
   const [editando, setEditando] = useState(null)
+  const [tipoProducto, setTipoProducto] = useState('CONSUMIBLE')
   const [serie, setSerie] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [cantidad, setCantidad] = useState('')
@@ -73,11 +124,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [contable, setContable] = useState(true)
 
   const [eliminar, setEliminar] = useState(null)
-
-  const [iconosMap, setIconosMap] = useState(() => readIconosMap())
-  const [emojiSel, setEmojiSel] = useState('📦')
-  const [emojiManual, setEmojiManual] = useState(false)
-  const [menuIconoAbierto, setMenuIconoAbierto] = useState(false)
 
   const cargarProductos = useCallback(async () => {
     setLoading(true)
@@ -93,7 +139,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       onError?.(`Error al cargar inventario: ${e.message}`)
       setProductos([])
     } finally {
-      setIconosMap(readIconosMap())
       setLoading(false)
     }
   }, [supabase, onError])
@@ -114,6 +159,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
 
   function abrirNuevo() {
     setEditando(null)
+    setTipoProducto('CONSUMIBLE')
     setSerie('')
     setDescripcion('')
     setCantidad('')
@@ -121,14 +167,12 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setPrecioCompra('')
     setPrecioVenta('')
     setContable(true)
-    setEmojiSel('📦')
-    setEmojiManual(false)
-    setMenuIconoAbierto(false)
     setDialogo(true)
   }
 
   function abrirEditar(p) {
     setEditando(p)
+    setTipoProducto(inferirTipoProducto(p))
     setSerie(String(p.serie ?? '').toUpperCase())
     setDescripcion(String(p.descripcion ?? '').toUpperCase())
     setCantidad(p.cantidad != null && p.cantidad !== '' ? String(p.cantidad) : '')
@@ -136,29 +180,26 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setPrecioCompra(p.precio_compra != null && p.precio_compra !== '' ? String(p.precio_compra) : '')
     setPrecioVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
     setContable(esProductoContable(p))
-    setEmojiSel(emojiParaProducto(p, iconosMap))
-    setEmojiManual(false)
-    setMenuIconoAbierto(false)
     setDialogo(true)
   }
 
   function onDescripcionChange(val) {
     setDescripcion(val)
-    if (!emojiManual) {
-      setEmojiSel(sugerirEmojiPorTexto(serie, val))
-    }
   }
 
   function onSerieChange(val) {
     setSerie(val)
-    if (!emojiManual) {
-      setEmojiSel(sugerirEmojiPorTexto(val, descripcion))
-    }
   }
 
   async function guardar() {
     const ser = serie.trim().toUpperCase()
     const desc = descripcion.trim().toUpperCase()
+    const tipo = String(tipoProducto ?? '').trim().toUpperCase()
+    const tipoValido = TIPOS_PRODUCTO.some((t) => t.id === tipo)
+    if (!tipoValido) {
+      onError?.('Seleccione tipo de producto')
+      return
+    }
     if (!ser) {
       onError?.('La serie es obligatoria')
       return
@@ -170,15 +211,15 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     const esContable = contable
     const row = {
       serie: ser,
+      tipo_producto: tipo,
       descripcion: desc,
       cantidad: esContable ? (toIntOrNull(cantidad) ?? 0) : 0,
       existencia: esContable ? (toIntOrNull(existencia) ?? 0) : 0,
       precio_compra: toNum(precioCompra),
       precio_venta: toNum(precioVenta),
       contable: esContable,
-      icono: emojiSel,
     }
-    const { icono, ...rowDb } = row
+    const rowDb = row
     try {
       if (supabase) {
         if (editando?.id != null) {
@@ -188,6 +229,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
         } else {
           const { error } = await supabase.from('productos').insert(rowDb)
           if (error) throw error
+          await escribirId2Datos(supabase, Number(ser.split('-')[1] ?? 1)).catch(() => {})
           onNotice?.('Producto agregado')
         }
       } else {
@@ -199,6 +241,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           )
         } else {
           writeLs(LS_PRODUCTOS, [{ id: nextLocalProductId(list), ...row }, ...list])
+          escribirId2Datos(null, Number(ser.split('-')[1] ?? 1)).catch(() => {})
         }
         onNotice?.(editando?.id != null ? 'Producto actualizado' : 'Producto agregado')
       }
@@ -206,18 +249,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       const idGuardado = editando?.id
       setEditando(null)
       await cargarProductos()
-      if (idGuardado != null) {
-        guardarIconoProducto(idGuardado, icono)
-      } else if (supabase) {
-        const { data: rows } = await supabase.from('productos').select('id').eq('serie', ser).limit(1)
-        const found = rows?.[0]
-        if (found?.id != null) guardarIconoProducto(found.id, icono)
-      } else {
-        const list = readLs(LS_PRODUCTOS, [])
-        const found = list.find((x) => String(x.serie ?? '').toUpperCase() === ser)
-        if (found?.id != null) guardarIconoProducto(found.id, icono)
-      }
-      setIconosMap(readIconosMap())
     } catch (e) {
       const msg = e.message ?? String(e)
       if (msg.includes('duplicate') || msg.includes('23505')) {
@@ -225,6 +256,34 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       } else {
         onError?.(`Error al guardar: ${msg}`)
       }
+    }
+  }
+
+  async function generarSerieProducto() {
+    const tipo = String(tipoProducto ?? '').trim().toUpperCase()
+    const pref = prefijoSeriePorTipo(tipo)
+    try {
+      let next = 1
+      if (supabase) {
+        next = await obtenerSiguienteConsecutivoSerie(supabase, pref)
+      } else {
+        const list = readLs(LS_PRODUCTOS, [])
+        const nums = list
+          .map((p) => String(p?.serie ?? '').trim().toUpperCase())
+          .map((s) => {
+            const m = s.match(new RegExp(`^${pref}-(\\d{1,})$`))
+            return m ? Number(m[1]) : null
+          })
+          .filter((n) => Number.isFinite(n))
+        const max = nums.length ? Math.max(...nums) : 0
+        next = max + 1
+      }
+      const serieGenerada = `${pref}-${String(next).padStart(4, '0')}`
+      setSerie(serieGenerada)
+      await escribirId2Datos(supabase, next).catch(() => {})
+      onNotice?.(`Serie sugerida: ${serieGenerada}`)
+    } catch (e) {
+      onError?.(`Error al generar serie: ${e.message}`)
     }
   }
 
@@ -461,11 +520,34 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
             <div className="modal-header">
               <h3>{editando ? 'Editar producto' : 'Agregar producto'}</h3>
             </div>
-            <div className="modal-body form-stack">
+              <div className="modal-body form-stack">
+              <label>
+                Tipo de producto
+                <select
+                  value={tipoProducto}
+                  onChange={(e) => {
+                    const tipo = String(e.target.value ?? '').toUpperCase()
+                    setTipoProducto(tipo)
+                    const cfg = TIPOS_PRODUCTO.find((t) => t.id === tipo)
+                    if (cfg) setContable(cfg.contable)
+                  }}
+                >
+                  {TIPOS_PRODUCTO.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label} ({t.prefijo})
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Serie
                 <input value={serie} onChange={(e) => onSerieChange(e.target.value.toUpperCase())} placeholder="Serie del producto" />
               </label>
+              {!editando ? (
+                <button type="button" className="btn-secondary" onClick={() => void generarSerieProducto()}>
+                  Generar Serie
+                </button>
+              ) : null}
               <label>
                 Descripción
                 <input
@@ -512,42 +594,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                 <input inputMode="decimal" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} placeholder="0.00" />
               </label>
 
-              <div className="inventario-icono-seccion">
-                <div className="inventario-icono-row">
-                  <span className="inventario-emoji-preview compacto" aria-hidden="true">
-                    {emojiSel}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-cambio-icono"
-                    onClick={() => setMenuIconoAbierto((v) => !v)}
-                    aria-expanded={menuIconoAbierto}
-                  >
-                    Cambio de icono
-                  </button>
-                </div>
-                {menuIconoAbierto ? (
-                  <div className="inventario-emoji-field">
-                    <div className="inventario-emoji-picker" role="group" aria-label="Icono del producto">
-                      {EMOJIS_ELEGIR.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          className={emojiSel === e ? 'inventario-emoji-btn activo' : 'inventario-emoji-btn'}
-                          onClick={() => {
-                            setEmojiSel(e)
-                            setEmojiManual(true)
-                          }}
-                          aria-label={`Icono ${e}`}
-                          aria-pressed={emojiSel === e}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
             </div>
             <div className="modal-footer">
               <button type="button" className="secondary" onClick={() => setDialogo(false)}>
