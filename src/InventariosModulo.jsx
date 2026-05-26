@@ -28,6 +28,16 @@ function inferirTipoProducto(p) {
   return 'CONSUMIBLE'
 }
 
+function tiempoCreacionProducto(p) {
+  const raw = p?.created_at ?? p?.updated_at ?? null
+  if (raw != null) {
+    const t = new Date(raw).getTime()
+    if (Number.isFinite(t)) return t
+  }
+  const id = Number(p?.id)
+  return Number.isFinite(id) ? id : 0
+}
+
 async function obtenerSiguienteConsecutivoSerie(supabase, prefijo) {
   const pref = String(prefijo ?? '').trim().toUpperCase()
   if (!supabase) return null
@@ -129,7 +139,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setLoading(true)
     try {
       if (supabase) {
-        const { data, error } = await supabase.from('productos').select('*').order('id', { ascending: false })
+        const { data, error } = await supabase
+          .from('productos')
+          .select('*')
+          .order('created_at', { ascending: false })
         if (error) throw error
         setProductos(data ?? [])
       } else {
@@ -149,12 +162,16 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
 
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
-    if (!t) return productos
-    return productos.filter((p) => {
-      const s = String(p.serie ?? '').toLowerCase()
-      const d = String(p.descripcion ?? '').toLowerCase()
-      return s.includes(t) || d.includes(t)
-    })
+    const base = !t
+      ? [...productos]
+      : productos.filter((p) => {
+          const s = String(p.serie ?? '').toLowerCase()
+          const d = String(p.descripcion ?? '').toLowerCase()
+          return s.includes(t) || d.includes(t)
+        })
+
+    base.sort((a, b) => tiempoCreacionProducto(b) - tiempoCreacionProducto(a))
+    return base
   }, [productos, busqueda])
 
   function abrirNuevo() {
