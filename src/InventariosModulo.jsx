@@ -127,7 +127,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [tipoProducto, setTipoProducto] = useState('CONSUMIBLE')
   const [serie, setSerie] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [cantidad, setCantidad] = useState('')
   const [existencia, setExistencia] = useState('')
   const [precioCompra, setPrecioCompra] = useState('')
   const [precioVenta, setPrecioVenta] = useState('')
@@ -183,7 +182,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setTipoProducto('CONSUMIBLE')
     setSerie('')
     setDescripcion('')
-    setCantidad('')
     setExistencia('')
     setPrecioCompra('')
     setPrecioVenta('')
@@ -196,7 +194,6 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setTipoProducto(inferirTipoProducto(p))
     setSerie(String(p.serie ?? '').toUpperCase())
     setDescripcion(String(p.descripcion ?? '').toUpperCase())
-    setCantidad(p.cantidad != null && p.cantidad !== '' ? String(p.cantidad) : '')
     setExistencia(p.existencia != null && p.existencia !== '' ? String(p.existencia) : '')
     setPrecioCompra(p.precio_compra != null && p.precio_compra !== '' ? String(p.precio_compra) : '')
     setPrecioVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
@@ -234,7 +231,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       serie: ser,
       tipo_producto: tipo,
       descripcion: desc,
-      cantidad: esContable ? (toIntOrNull(cantidad) ?? 0) : 0,
+      cantidad: esContable ? (toIntOrNull(editando?.cantidad) ?? 0) : 0,
       existencia: esContable ? (toIntOrNull(existencia) ?? 0) : 0,
       precio_compra: toNum(precioCompra),
       precio_venta: toNum(precioVenta),
@@ -595,16 +592,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                 </span>
               </label>
               {contable ? (
-                <>
-                  <label>
-                    Cantidad
-                    <input inputMode="numeric" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="0" />
-                  </label>
-                  <label>
-                    Existencia
-                    <input inputMode="numeric" value={existencia} onChange={(e) => setExistencia(e.target.value)} placeholder="0" />
-                  </label>
-                </>
+                <label>
+                  Existencia
+                  <input inputMode="numeric" value={existencia} onChange={(e) => setExistencia(e.target.value)} placeholder="0" />
+                </label>
               ) : null}
               <label>
                 Precio compra
