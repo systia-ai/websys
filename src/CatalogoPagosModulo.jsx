@@ -5,6 +5,44 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_CATALOGO = 'sistefix_local_catalogopagos'
 const LS_VISTA_CATALOGO_PAGOS = 'sistefix_catalogo_pagos_vista'
+const LS_DATOS = 'sistefix_local_datos'
+const PREFIJO_SERIE_CATALOGO = 'S'
+
+async function obtenerSiguienteSerieCatalogo(supabase) {
+  const pref = PREFIJO_SERIE_CATALOGO
+  if (!supabase) return null
+  const { data, error } = await supabase.from('catalogopagos').select('serie').ilike('serie', `${pref}-%`)
+  if (error) throw error
+  let max = 0
+  for (const row of data ?? []) {
+    const s = String(row?.serie ?? '').trim().toUpperCase()
+    const m = s.match(new RegExp(`^${pref}-(\\d{1,})$`))
+    if (!m) continue
+    const n = Number(m[1])
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return max + 1
+}
+
+async function escribirId3Datos(supabase, valor) {
+  const n = Math.max(1, Math.floor(Number(valor) || 1))
+  if (supabase) {
+    const { data, error } = await supabase.from('Datos').select('id, id3').limit(1).maybeSingle()
+    if (error) throw error
+    if (data?.id != null) {
+      const { error: upError } = await supabase.from('Datos').update({ id3: n }).eq('id', data.id)
+      if (upError) throw upError
+    }
+    return
+  }
+  const rows = readLs(LS_DATOS, [])
+  if (!rows.length) {
+    writeLs(LS_DATOS, [{ id: 1, Serie: 1, id2: 1, id3: n }])
+    return
+  }
+  const first = { ...rows[0], id3: n }
+  writeLs(LS_DATOS, [first, ...rows.slice(1)])
+}
 
 function leerVistaCatalogoPagos() {
   try {
@@ -61,6 +99,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
 
   const [dialogo, setDialogo] = useState(false)
   const [editando, setEditando] = useState(null)
+  const [serie, setSerie] = useState('')
   const [concepto, setConcepto] = useState('')
   const [cantidad, setCantidad] = useState('')
 
@@ -99,7 +138,11 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
     const t = busqueda.trim().toLowerCase()
     const base = !t
       ? [...items]
-      : items.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
+      : items.filter((c) => {
+          const con = String(c.concepto ?? '').toLowerCase()
+          const ser = String(c.serie ?? '').toLowerCase()
+          return con.includes(t) || ser.includes(t)
+        })
     base.sort(compararCatalogoPorConcepto)
     return base
   }, [items, busqueda])
@@ -115,6 +158,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
 
   function abrirNuevo() {
     setEditando(null)
+    setSerie('')
     setConcepto('')
     setCantidad('')
     setDialogo(true)
@@ -122,23 +166,55 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
 
   function abrirEditar(row) {
     setEditando(row)
+    setSerie(String(row.serie ?? '').toUpperCase())
     setConcepto(String(row.concepto ?? '').toUpperCase())
     setCantidad(row.cantidad != null && row.cantidad !== '' ? String(row.cantidad) : '')
     setDialogo(true)
   }
 
+  async function generarSerieCatalogo() {
+    try {
+      let next = 1
+      if (supabase) {
+        next = await obtenerSiguienteSerieCatalogo(supabase)
+      } else {
+        const list = readLs(LS_CATALOGO, [])
+        const nums = list
+          .map((c) => String(c?.serie ?? '').trim().toUpperCase())
+          .map((s) => {
+            const m = s.match(new RegExp(`^${PREFIJO_SERIE_CATALOGO}-(\\d{1,})$`))
+            return m ? Number(m[1]) : null
+          })
+          .filter((n) => Number.isFinite(n))
+        const max = nums.length ? Math.max(...nums) : 0
+        next = max + 1
+      }
+      const serieGenerada = `${PREFIJO_SERIE_CATALOGO}-${String(next).padStart(4, '0')}`
+      setSerie(serieGenerada)
+      await escribirId3Datos(supabase, next).catch(() => {})
+      onNotice?.(`Serie sugerida: ${serieGenerada}`)
+    } catch (e) {
+      onError?.(`Error al generar serie: ${e.message}`)
+    }
+  }
+
   async function guardar() {
+    const ser = serie.trim().toUpperCase()
     const con = concepto.trim().toUpperCase()
+    if (!ser) {
+      onError?.('La serie es obligatoria')
+      return
+    }
     if (!con) {
       onError?.('El concepto es obligatorio')
       return
     }
     const cant = toNum(cantidad)
-    if (cant == null || cant < 0) {
-      onError?.('Indique una cantidad o monto válido (≥ 0)')
+    if (cant == null) {
+      onError?.('Indique una cantidad o monto válido')
       return
     }
-    const row = { concepto: con, cantidad: cant }
+    const row = { serie: ser, concepto: con, cantidad: cant }
     try {
       if (supabase) {
         if (editando?.id != null) {
@@ -148,6 +224,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
         } else {
           const { error } = await supabase.from('catalogopagos').insert(row)
           if (error) throw error
+          await escribirId3Datos(supabase, Number(ser.split('-')[1] ?? 1)).catch(() => {})
           onNotice?.('Concepto agregado')
         }
       } else {
@@ -168,7 +245,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
     } catch (e) {
       const msg = e.message ?? String(e)
       if (msg.includes('duplicate') || msg.includes('23505')) {
-        onError?.('Ya existe un concepto con ese nombre.')
+        onError?.('Ya existe un concepto con esa serie o nombre.')
       } else {
         onError?.(`Error al guardar: ${msg}`)
       }
@@ -237,7 +314,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
             🔍
           </span>
           <input
-            placeholder="Buscar por concepto…"
+            placeholder="Buscar por serie o concepto…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -280,6 +357,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
               <div className="inventario-tabla-grid catalogo-pagos-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
+                    <span className="inventario-tabla-th inventario-celda inventario-celda--serie-cat">Serie</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--concepto">Concepto</span>
                     <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Monto por defecto</span>
                   </div>
@@ -288,6 +366,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                 {filtrados.map((c) => (
                   <div key={c.id} className="inventario-tabla-fila-grupo" role="row">
                     <div className="inventario-tabla-grupo-celdas">
+                      <span className="inventario-celda inventario-celda--serie-cat">{c.serie || '—'}</span>
                       <button
                         type="button"
                         className="inventario-tabla-link inventario-celda inventario-celda--concepto"
@@ -328,8 +407,9 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
             {filtrados.map((c) => (
               <li key={c.id} className="equipo-card inventario-card">
                 <button type="button" className="equipo-card-main inventario-card-main" onClick={() => abrirEditar(c)}>
-                  <strong>{c.concepto || '—'}</strong>
-                  <span className="muted small">Cantidad / monto por defecto: ${Number(c.cantidad ?? 0).toFixed(2)}</span>
+                  <strong>{c.serie || '—'}</strong>
+                  <span className="muted">{c.concepto || '—'}</span>
+                  <span className="muted small">Monto por defecto: ${Number(c.cantidad ?? 0).toFixed(2)}</span>
                 </button>
                 <div className="equipo-card-actions">
                   <button type="button" className="btn-icon edit" onClick={() => abrirEditar(c)} title="Editar" aria-label="Editar">
@@ -352,6 +432,19 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
               <h3>{editando ? 'Editar concepto' : 'Agregar concepto'}</h3>
             </div>
             <div className="modal-body form-stack">
+              <label>
+                Serie
+                <input
+                  value={serie}
+                  onChange={(e) => setSerie(e.target.value.toUpperCase())}
+                  placeholder="Ej. S-0001"
+                />
+              </label>
+              {!editando ? (
+                <button type="button" className="btn-secondary" onClick={() => void generarSerieCatalogo()}>
+                  Generar Serie
+                </button>
+              ) : null}
               <label>
                 Concepto
                 <input

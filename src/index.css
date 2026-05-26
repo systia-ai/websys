@@ -1172,7 +1172,14 @@ td {
 
 /* Tabla catálogo de pagos */
 .catalogo-pagos-tabla-grid {
-  min-width: 520px;
+  min-width: 620px;
+}
+
+.catalogo-pagos-tabla-grid .inventario-celda--serie-cat {
+  flex: 0 0 88px;
+  min-width: 72px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .inventario-celda--concepto {
