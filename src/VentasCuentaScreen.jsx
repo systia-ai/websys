@@ -244,12 +244,26 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const cuentaId = cuentaInfo?.id ?? cuentaInicial?.id ?? null
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
   const cuentaEstatus = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '')
-  const totalVenta = useMemo(() => sumSubtotales(lineas), [lineas])
-  const saldoPendiente = useMemo(
-    () => calcularSaldoPendiente(lineas, cuentaInfo?.total ?? cuentaInicial?.total),
-    [lineas, cuentaInfo?.total, cuentaInicial?.total],
-  )
-  const totalStr = totalVenta.toFixed(2)
+  const totalCargos = useMemo(() => {
+    const cargos = totalCargosDesdeLineas(lineas)
+    if (cargos > 0.0001) return cargos
+    const ct = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
+    return ct > 0.0001 ? ct : cargos
+  }, [lineas, cuentaInfo?.total, cuentaInicial?.total])
+  const saldoPendiente = useMemo(() => {
+    const tieneLineas =
+      lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
+    if (tieneLineas) {
+      return calcularSaldoPendiente(lineas, totalCargos)
+    }
+    const base = cuentaInfo ?? cuentaInicial
+    if (base?.saldo != null && base.saldo !== '' && !Number.isNaN(Number(base.saldo))) {
+      return Math.max(0, Number(base.saldo))
+    }
+    return calcularSaldoPendiente(lineas, totalCargos)
+  }, [lineas, cuentaInfo, cuentaInicial, totalCargos])
+  const totalStr = totalCargos.toFixed(2)
+  const saldoStr = saldoPendiente.toFixed(2)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
@@ -407,7 +421,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const persistirTotalCuenta = useCallback(async () => {
     if (cuentaId == null || Number(cuentaId) <= 0) return
     try {
-      const totalSync = totalVentaParaSync(totalVenta, lineas)
+      const totalSync = totalVentaParaSync(totalCargos, lineas)
       let pagosSync = pagosDesdeLineas(lineas)
       if (supabase) {
         const { data: pagosDb, error: ePag } = await supabase
@@ -430,11 +444,17 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         const prev = list.find((c) => sameId(c.id, cuentaId)) ?? { id: cuentaId }
         const pagado = pagosSync.reduce((s, p) => s + Number(p.pago ?? 0), 0)
         const adeudo = Math.max(0, totalSync - pagado)
-        let next = { ...prev, total: totalSync }
+        let next = { ...prev, total: totalSync, saldo: adeudo }
         if (adeudo > 0.01) {
           next = { ...next, estatus: 'PENDIENTE', fecha_liquidada: null }
         } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
-          next = { ...next, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: new Date().toISOString() }
+          next = {
+            ...next,
+            total: totalSync,
+            saldo: 0,
+            estatus: 'LIQUIDADA',
+            fecha_liquidada: new Date().toISOString(),
+          }
         }
         writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? next : c)))
         setCuentaInfo(next)
@@ -442,13 +462,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     } catch (e) {
       onError?.(`Error al guardar total: ${e.message}`)
     }
-  }, [supabase, cuentaId, totalVenta, lineas, cuentaInfo, cuentaInicial, onError])
+  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError])
 
   useEffect(() => {
     if (!esCuentaExistente || loading) return
     const t = setTimeout(() => void persistirTotalCuenta(), 600)
     return () => clearTimeout(t)
-  }, [totalVenta, esCuentaExistente, loading, persistirTotalCuenta])
+  }, [totalCargos, esCuentaExistente, loading, persistirTotalCuenta])
 
   async function crearCuentaVacia() {
     if (!cliente.id) {
@@ -458,6 +478,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     const row = {
       cliente_id: cliente.id,
       total: 0,
+      saldo: 0,
       estatus: 'PENDIENTE',
       tipo_pago: 'EFECTIVO',
       repara_id: null,
@@ -796,7 +817,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
 
   async function aplicarLiquidacionCuenta({ avisar = true, totalOverride = null } = {}) {
     if (!cuentaId) return false
-    const totalCheck = totalOverride != null ? Number(totalOverride) : totalVenta
+    const totalCheck = totalOverride != null ? Number(totalOverride) : sumSubtotales(lineas)
     if (Math.abs(totalCheck) > 0.0001) {
       if (avisar) {
         onError?.(`No se puede liquidar. El total debe ser $0.00. Total actual: $${totalStr}`)
@@ -830,14 +851,27 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         }
       }
     }
+    const totalCuenta = Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
     const nowLiq = new Date().toISOString()
     if (supabase) {
-      await actualizarCuentaSupabase(supabase, cuentaId, {
-        total: 0,
-        estatus: 'LIQUIDADA',
-        fecha_liquidada: nowLiq,
-        updated_at: nowLiq,
+      const pagosDb =
+        (
+          await supabase.from('pagosclientes').select('*').eq('cuenta_id', cuentaId)
+        ).data ?? []
+      const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
+      const actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, base, pagosDb, {
+        totalVenta: totalCuenta,
       })
+      setCuentaInfo(actualizada)
+      if (!actualizada || String(actualizada.estatus).toUpperCase() !== 'LIQUIDADA') {
+        await actualizarCuentaSupabase(supabase, cuentaId, {
+          total: totalCuenta,
+          saldo: 0,
+          estatus: 'LIQUIDADA',
+          fecha_liquidada: nowLiq,
+          updated_at: nowLiq,
+        })
+      }
       if (reparaIdCuenta != null) {
         await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
       }
@@ -847,7 +881,14 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         LS_CUENTAS,
         list.map((c) =>
           sameId(c.id, cuentaId)
-            ? { ...c, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+            ? {
+                ...c,
+                total: totalCuenta,
+                saldo: 0,
+                estatus: 'LIQUIDADA',
+                fecha_liquidada: nowLiq,
+                updated_at: nowLiq,
+              }
             : c,
         ),
       )
@@ -862,8 +903,8 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     }
     setCuentaInfo((prev) =>
       prev
-        ? { ...prev, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
-        : { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq },
+        ? { ...prev, total: totalCuenta, saldo: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
+        : { total: totalCuenta, saldo: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq },
     )
     return true
   }
@@ -1065,10 +1106,18 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           </div>
         ) : null}
 
-        <label className="ventas-total-block">
-          <span>Total</span>
-          <input value={totalStr} readOnly />
-        </label>
+        <div className="ventas-cuenta-resumen" role="group" aria-label="Total y saldo de la cuenta">
+          <div className="ventas-cuenta-recuadro ventas-cuenta-recuadro--total">
+            <span className="ventas-cuenta-recuadro-etiqueta">Total</span>
+            <span className="ventas-cuenta-recuadro-monto">${totalStr}</span>
+          </div>
+          <div
+            className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--saldo${saldoPendiente > 0.0001 ? ' ventas-cuenta-recuadro--saldo-pend' : ''}`}
+          >
+            <span className="ventas-cuenta-recuadro-etiqueta">Saldo</span>
+            <span className="ventas-cuenta-recuadro-monto">${saldoStr}</span>
+          </div>
+        </div>
 
         <label className="ventas-total-block">
           <span>Estatus de la Cuenta</span>

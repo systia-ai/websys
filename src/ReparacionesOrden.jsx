@@ -636,6 +636,7 @@ export default function ReparacionesOrden({
       const cuenta = {
         cliente_id: cid,
         total: 0,
+        saldo: 0,
         estatus: 'PENDIENTE',
         created_at: now,
         fecha_liquidada: null,
@@ -899,6 +900,7 @@ export default function ReparacionesOrden({
           cliente_id: cid,
           repara_id: Number(rid),
           total: 0,
+          saldo: 0,
           estatus: 'PENDIENTE',
           tipo_pago: 'EFECTIVO',
         }

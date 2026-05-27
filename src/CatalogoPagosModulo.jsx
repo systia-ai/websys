@@ -364,16 +364,23 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                   <span className="inventario-tabla-th inventario-tabla-th--acc">Acciones</span>
                 </div>
                 {filtrados.map((c) => (
-                  <div key={c.id} className="inventario-tabla-fila-grupo" role="row">
+                  <div
+                    key={c.id}
+                    className="inventario-tabla-fila-grupo inventario-tabla-fila-grupo--clic"
+                    role="button"
+                    tabIndex={0}
+                    title={`Editar · ${c.concepto || c.serie || 'concepto'}`}
+                    onClick={() => abrirEditar(c)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        abrirEditar(c)
+                      }
+                    }}
+                  >
                     <div className="inventario-tabla-grupo-celdas">
                       <span className="inventario-celda inventario-celda--serie-cat">{c.serie || '—'}</span>
-                      <button
-                        type="button"
-                        className="inventario-tabla-link inventario-celda inventario-celda--concepto"
-                        onClick={() => abrirEditar(c)}
-                      >
-                        {c.concepto || '—'}
-                      </button>
+                      <span className="inventario-celda inventario-celda--concepto">{c.concepto || '—'}</span>
                       <span className="inventario-celda inventario-celda--monto-cat">
                         ${Number(c.cantidad ?? 0).toFixed(2)}
                       </span>
@@ -382,7 +389,10 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                       <button
                         type="button"
                         className="btn-icon edit"
-                        onClick={() => abrirEditar(c)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          abrirEditar(c)
+                        }}
                         title="Editar"
                         aria-label="Editar"
                       >
@@ -391,7 +401,10 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                       <button
                         type="button"
                         className="btn-icon danger"
-                        onClick={() => setEliminar(c)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEliminar(c)
+                        }}
                         title="Eliminar"
                         aria-label="Eliminar"
                       >

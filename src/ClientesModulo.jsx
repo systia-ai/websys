@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { confirmarDatosAntesDeGuardar } from './confirmarDatosUtils.js'
+import { cargarTodosPagosClientes } from './pagosClientesUtils.js'
 import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
@@ -17,6 +18,17 @@ const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
+const LS_CUENTAMOV = 'sistefix_local_cuentamov'
+
+function sumCargosCuentamov(movs = []) {
+  return movs.reduce((s, m) => s + Number(m.cantidad ?? 0) * Number(m.costo ?? 0), 0)
+}
+
+function totalVentaCuenta(cuenta, movs = []) {
+  const cargos = sumCargosCuentamov(movs)
+  const ct = Number(cuenta?.total ?? 0)
+  return Math.max(ct, cargos)
+}
 
 function nextLocalClienteId(list) {
   const max = list.reduce((m, r) => {
@@ -81,8 +93,6 @@ export default function ClientesModulo({
   const [panelCuentasAbierto, setPanelCuentasAbierto] = useState(false)
   const [clienteCuentasPanel, setClienteCuentasPanel] = useState(null)
   const [cuentasEncontradas, setCuentasEncontradas] = useState([])
-  const [repsPorReparaId, setRepsPorReparaId] = useState({})
-  const [equiposPorIdCuentas, setEquiposPorIdCuentas] = useState({})
   const [pagosClienteCuentas, setPagosClienteCuentas] = useState([])
   const [loadingCuentas, setLoadingCuentas] = useState(false)
   const [cuentaTitle, setCuentaTitle] = useState('Cuentas del Cliente')
@@ -235,57 +245,51 @@ export default function ClientesModulo({
       setClienteCuentasPanel(cli)
       setPanelCuentasAbierto(true)
       setLoadingCuentas(true)
+      setCuentasEncontradas([])
+      setPagosClienteCuentas([])
       setCuentaTitle(`Cuentas de ${cli.nombre || 'Cliente'}`)
       setCuentaSubtitle('')
       try {
         let todasCuentas = []
         if (supabase) {
-          const { data, error } = await supabase.from('cuentas').select('*').order('id', { ascending: false })
+          const { data, error } = await supabase
+            .from('cuentas')
+            .select('*')
+            .eq('cliente_id', cli.id)
+            .order('id', { ascending: false })
           if (error) throw error
           todasCuentas = data ?? []
         } else {
-          todasCuentas = readLs(LS_CUENTAS, [])
+          todasCuentas = readLs(LS_CUENTAS, []).filter((cu) => sameId(cu.cliente_id, cli.id))
         }
-        const cuentasCliente = todasCuentas.filter((cu) => sameId(cu.cliente_id, cli.id))
-        const ids = [...new Set(cuentasCliente.map((c) => c.repara_id).filter((id) => id != null && id !== ''))]
-        const map = {}
-        if (ids.length) {
-          const pairs = await Promise.all(
-            ids.map(async (rid) => {
-              if (supabase) {
-                const { data: rep } = await supabase.from('reparaciones').select('*').eq('id', rid).maybeSingle()
-                return [rid, rep ?? null]
-              }
-              const allRep = readLs(LS_REP, [])
-              const rep = allRep.find((r) => sameId(r.id, rid))
-              return [rid, rep ?? null]
-            }),
-          )
-          for (const [rid, rep] of pairs) {
-            if (rep) {
-              map[rid] = rep
-              map[String(rid)] = rep
-            }
-          }
-        }
-        const eqMap = {}
+        const cuentasCliente = supabase
+          ? todasCuentas
+          : todasCuentas.filter((cu) => sameId(cu.cliente_id, cli.id))
         let pagosTodos = []
+        const movsPorCuenta = new Map()
         if (supabase) {
-          const [eqRes, pagRes] = await Promise.all([
-            supabase.from('equipos').select('*'),
-            supabase.from('pagosclientes').select('*'),
+          const idsCuentaArr = cuentasCliente.map((c) => c.id).filter((id) => id != null)
+          const [pagRes, movRes] = await Promise.all([
+            cargarTodosPagosClientes(supabase),
+            idsCuentaArr.length
+              ? supabase.from('cuentamov').select('*').in('cuenta_id', idsCuentaArr)
+              : Promise.resolve({ data: [], error: null }),
           ])
-          if (!eqRes.error) {
-            for (const e of eqRes.data ?? []) {
-              if (e?.id != null) eqMap[String(e.id)] = e
-            }
+          pagosTodos = pagRes ?? []
+          if (movRes.error) throw movRes.error
+          for (const m of movRes.data ?? []) {
+            const k = String(m.cuenta_id)
+            if (!movsPorCuenta.has(k)) movsPorCuenta.set(k, [])
+            movsPorCuenta.get(k).push(m)
           }
-          if (!pagRes.error) pagosTodos = pagRes.data ?? []
         } else {
-          for (const e of readLs(LS_EQUIPOS, [])) {
-            if (e?.id != null) eqMap[String(e.id)] = e
-          }
           pagosTodos = readLs(LS_PAGOS, [])
+          for (const m of readLs(LS_CUENTAMOV, [])) {
+            const k = String(m.cuenta_id)
+            if (!cuentasCliente.some((cu) => sameId(cu.id, m.cuenta_id))) continue
+            if (!movsPorCuenta.has(k)) movsPorCuenta.set(k, [])
+            movsPorCuenta.get(k).push(m)
+          }
         }
         const idsCuenta = new Set(cuentasCliente.map((c) => String(c.id)))
         const pagosDelCliente = pagosTodos.filter((p) => idsCuenta.has(String(p?.cuenta_id)))
@@ -294,15 +298,27 @@ export default function ClientesModulo({
           cuentasFinales = await Promise.all(
             cuentasCliente.map((cu) => {
               const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
-              return sincronizarEstatusCuentaPorSaldo(supabase, cu, pagosC)
+              const movs = movsPorCuenta.get(String(cu.id)) ?? []
+              const totalVenta = totalVentaCuenta(cu, movs)
+              return sincronizarEstatusCuentaPorSaldo(supabase, cu, pagosC, { totalVenta })
             }),
           )
+          const { data: refreshed, error: errRef } = await supabase
+            .from('cuentas')
+            .select('*')
+            .eq('cliente_id', cli.id)
+            .order('id', { ascending: false })
+          if (!errRef && refreshed?.length) cuentasFinales = refreshed
         } else {
-          cuentasFinales = cuentasCliente
+          cuentasFinales = cuentasCliente.map((cu) => {
+            const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
+            const movs = movsPorCuenta.get(String(cu.id)) ?? []
+            const total = totalVentaCuenta(cu, movs)
+            const pagado = pagosC.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+            return { ...cu, total, saldo: Math.max(0, total - pagado) }
+          })
         }
         setCuentasEncontradas(cuentasFinales)
-        setRepsPorReparaId(map)
-        setEquiposPorIdCuentas(eqMap)
         setPagosClienteCuentas(pagosDelCliente)
         setCuentaSubtitle(
           cuentasCliente.length === 0
@@ -313,8 +329,6 @@ export default function ClientesModulo({
         setCuentaTitle('Error')
         setCuentaSubtitle(`Error al buscar cuentas: ${e.message}`)
         setCuentasEncontradas([])
-        setRepsPorReparaId({})
-        setEquiposPorIdCuentas({})
         setPagosClienteCuentas([])
       } finally {
         setLoadingCuentas(false)
@@ -328,11 +342,16 @@ export default function ClientesModulo({
     if (!r?.openAccionesModal || !r?.cliente?.id) return
     const cli = normalizeClienteRow(r.cliente)
     setClienteAccion(cli)
-    setClienteCuentasPanel(null)
-    setPanelCuentasAbierto(false)
-    setModalAcciones(true)
+    if (r.reopenCuentasPanel) {
+      setModalAcciones(false)
+      void cargarCuentasParaCliente(cli)
+    } else {
+      setClienteCuentasPanel(null)
+      setPanelCuentasAbierto(false)
+      setModalAcciones(true)
+    }
     onRetornoVentasConsumido?.()
-  }, [retornoVentas, onRetornoVentasConsumido])
+  }, [retornoVentas, onRetornoVentasConsumido, cargarCuentasParaCliente])
 
   async function buscarCuentasCliente() {
     const cliente = clienteAccion
@@ -813,8 +832,6 @@ export default function ClientesModulo({
           title={cuentaTitle}
           subtitle={cuentaSubtitle}
           cuentas={cuentasEncontradas}
-          repsPorReparaId={repsPorReparaId}
-          equiposPorId={equiposPorIdCuentas}
           pagosCliente={pagosClienteCuentas}
           loading={loadingCuentas}
           onClose={cerrarPanelCuentas}

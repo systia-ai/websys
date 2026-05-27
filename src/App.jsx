@@ -108,7 +108,17 @@ function App() {
     const nextStack = navStackRef.current
     const target = nextStack[nextStack.length - 1] ?? 'home'
     if (leaving === 'reparaciones') setRepSession(null)
-    if (leaving === 'ventas') setVentasContext(null)
+    if (leaving === 'ventas') {
+      const vctx = ventasContext
+      setVentasContext(null)
+      if (vctx?.returnTo === 'clientes' && vctx?.cliente) {
+        setClientesRetornoVentas({
+          openAccionesModal: true,
+          cliente: normalizeClienteRow(vctx.cliente),
+          reopenCuentasPanel: true,
+        })
+      }
+    }
     if (leaving === 'servicios') setClienteVinculoServicios(null)
     setActiveModule(target)
     setNotice('')
@@ -585,16 +595,41 @@ function App() {
               </thead>
               <tbody>
                 {filteredRows.map((row) => (
-                  <tr key={row.id}>
+                  <tr
+                    key={row.id}
+                    className="cuentas-cliente-tabla-fila cuentas-cliente-tabla-fila--clic"
+                    role="button"
+                    tabIndex={0}
+                    title={`Editar registro #${row.id}`}
+                    onClick={() => onEdit(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onEdit(row)
+                      }
+                    }}
+                  >
                     <td>{row.id}</td>
                     {current.fields.map((f) => (
                       <td key={f}>{String(row[f] ?? '')}</td>
                     ))}
                     <td className="row-actions">
-                      <button type="button" onClick={() => onEdit(row)}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEdit(row)
+                        }}
+                      >
                         Editar
                       </button>
-                      <button type="button" onClick={() => onDelete(row.id)}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onDelete(row.id)
+                        }}
+                      >
                         Eliminar
                       </button>
                     </td>

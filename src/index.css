@@ -1032,6 +1032,15 @@ td {
     0 0 0 1px rgba(129, 212, 250, 0.35);
 }
 
+.inventario-tabla-fila-grupo--clic {
+  cursor: pointer;
+}
+
+.inventario-tabla-fila-grupo--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: 2px;
+}
+
 .inventario-celda {
   padding: 8px 12px;
   background: linear-gradient(180deg, #f0f9ff 0%, #e1f5fe 55%, #d4effc 100%);
@@ -3306,6 +3315,54 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   display: block;
 }
 
+.cuenta-tarjeta-linea--destacar {
+  font-weight: 700;
+}
+
+.cuenta-tarjeta-saldo-pend {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.cuenta-tarjeta-totales {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f5fbff 0%, #e8f4fc 100%);
+  border: 1px solid #b3e5fc;
+}
+
+.cuenta-tarjeta-total-principal {
+  font-size: 1rem;
+  color: #1565c0;
+}
+
+.cuenta-tarjeta-saldo-linea {
+  font-size: 0.92rem;
+  color: #2e7d32;
+}
+
+.cuenta-tarjeta-saldo-linea--pend {
+  color: #c62828;
+}
+
+.ventas-saldo-block .ventas-saldo-cuenta-input--pend {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.ventas-total-cuenta-input {
+  font-weight: 700;
+  color: #1565c0;
+}
+
+.cuentas-cliente-tabla--resumen {
+  min-width: 720px;
+}
+
 .cuentas-cliente-tabla-wrap {
   flex: 1;
   min-height: 120px;
@@ -3358,6 +3415,23 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 
 .cuentas-cliente-tabla tbody tr:hover {
   background: #f0f7ff;
+}
+
+.cuentas-cliente-tabla-fila--clic {
+  cursor: pointer;
+}
+
+.cuentas-cliente-tabla-fila--clic:focus-visible {
+  outline: 2px solid #42a5f5;
+  outline-offset: -2px;
+}
+
+.cuentas-cliente-tabla-fila--clic:hover {
+  background: #e3f2fd !important;
+}
+
+.cuentas-cliente-tabla-fila--clic:hover td {
+  border-color: #90caf9;
 }
 
 .cuentas-cliente-tabla-orden {
@@ -5567,6 +5641,71 @@ input.full {
   font-weight: 700;
   cursor: pointer;
   margin-top: 8px;
+}
+
+.ventas-cuenta-resumen {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 4px;
+}
+
+@media (max-width: 520px) {
+  .ventas-cuenta-resumen {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ventas-cuenta-recuadro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 2px solid #b3e5fc;
+  background: linear-gradient(180deg, #f5fbff 0%, #e8f4fc 100%);
+  box-shadow: 0 1px 4px rgba(33, 150, 243, 0.08);
+}
+
+.ventas-cuenta-recuadro--total {
+  border-color: #90caf9;
+}
+
+.ventas-cuenta-recuadro--saldo {
+  border-color: #a5d6a7;
+  background: linear-gradient(180deg, #f1f8e9 0%, #e8f5e9 100%);
+}
+
+.ventas-cuenta-recuadro--saldo-pend {
+  border-color: #ef9a9a;
+  background: linear-gradient(180deg, #fff5f5 0%, #ffebee 100%);
+}
+
+.ventas-cuenta-recuadro-etiqueta {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #546e7a;
+}
+
+.ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto {
+  color: #1565c0;
+}
+
+.ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto {
+  color: #2e7d32;
+}
+
+.ventas-cuenta-recuadro--saldo-pend .ventas-cuenta-recuadro-monto {
+  color: #c62828;
+}
+
+.ventas-cuenta-recuadro-monto {
+  font-size: 1.45rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .ventas-total-block {

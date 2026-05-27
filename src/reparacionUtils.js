@@ -378,6 +378,22 @@ export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
   return Math.max(0, total - pagado)
 }
 
+/** Saldo persistido en BD o calculado desde total y pagos. */
+export function saldoDesdeCuenta(cuenta, pagosCuenta = []) {
+  if (cuenta?.saldo != null && cuenta.saldo !== '' && !Number.isNaN(Number(cuenta.saldo))) {
+    return Math.max(0, Number(cuenta.saldo))
+  }
+  return saldoPendienteCuenta(cuenta?.total, pagosCuenta)
+}
+
+function patchTotalesSaldoCuenta(totalVenta, saldo, extras = {}) {
+  return {
+    total: Number(totalVenta ?? 0),
+    saldo: Math.max(0, Number(saldo ?? 0)),
+    ...extras,
+  }
+}
+
 /**
  * Ajusta PENDIENTE / LIQUIDADA según el adeudo real.
  * - Anticipo sin productos: queda PENDIENTE (no se auto-marca liquidada).
@@ -399,15 +415,20 @@ export async function sincronizarEstatusCuentaPorSaldo(
   const adeudo = saldoPendienteCuenta(totalVenta, pagos)
   const est = String(cuenta.estatus ?? '').trim().toUpperCase()
 
-  const patchPendiente = {
+  const patchPendiente = patchTotalesSaldoCuenta(totalVenta, adeudo, {
     estatus: 'PENDIENTE',
-    total: totalVenta,
     fecha_liquidada: null,
-  }
+  })
 
   // Hay adeudo (p. ej. agregaron producto tras anticipo o cuenta mal liquidada).
   if (adeudo > 0.01) {
-    if (est === 'PENDIENTE' && cuenta.fecha_liquidada == null && Number(cuenta.total) === totalVenta) {
+    const saldoDb = saldoDesdeCuenta(cuenta, pagos)
+    if (
+      est === 'PENDIENTE' &&
+      cuenta.fecha_liquidada == null &&
+      Math.abs(Number(cuenta.total ?? 0) - totalVenta) < 0.01 &&
+      Math.abs(saldoDb - adeudo) < 0.01
+    ) {
       return cuenta
     }
     if (supabase) {
@@ -419,22 +440,42 @@ export async function sincronizarEstatusCuentaPorSaldo(
   // Anticipo u otros pagos sin cargos en la cuenta: no cerrar como liquidada.
   if (totalVenta <= 0.0001 && pagado > 0.0001) {
     if (est === 'LIQUIDADA' || cuenta.fecha_liquidada != null) {
-      const patchAnticipo = { estatus: 'PENDIENTE', total: 0, fecha_liquidada: null }
+      const patchAnticipo = patchTotalesSaldoCuenta(0, 0, {
+        estatus: 'PENDIENTE',
+        fecha_liquidada: null,
+      })
       if (supabase) {
         await actualizarCuentaSupabase(supabase, cuenta.id, patchAnticipo)
       }
       return { ...cuenta, ...patchAnticipo }
     }
-    return cuenta
+    const patchSoloSaldo = patchTotalesSaldoCuenta(0, 0, {
+      estatus: cuenta.estatus ?? 'PENDIENTE',
+      fecha_liquidada: cuenta.fecha_liquidada ?? null,
+    })
+    if (supabase && Number(cuenta.saldo ?? -1) !== 0) {
+      await actualizarCuentaSupabase(supabase, cuenta.id, patchSoloSaldo)
+    }
+    return { ...cuenta, ...patchSoloSaldo }
   }
 
-  // Pagos cubren el total de cargos → liquidada (saldo $0 en BD).
+  // Pagos cubren el total de cargos → liquidada (total se conserva, saldo $0).
   const pagosCubrenTotal = totalVenta > 0.0001 && pagado >= totalVenta - 0.01
   if (!pagosCubrenTotal) return cuenta
-  if (est === 'LIQUIDADA') return cuenta
 
   const nowLiq = new Date().toISOString()
-  const patchLiq = { total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq, updated_at: nowLiq }
+  const patchLiq = patchTotalesSaldoCuenta(totalVenta, 0, {
+    estatus: 'LIQUIDADA',
+    fecha_liquidada: cuenta.fecha_liquidada ?? nowLiq,
+    updated_at: nowLiq,
+  })
+
+  const totalDesactualizado = Math.abs(Number(cuenta.total ?? 0) - totalVenta) > 0.01
+  const saldoDesactualizado = Math.abs(saldoDesdeCuenta(cuenta, pagos)) > 0.01
+  if (est === 'LIQUIDADA' && !totalDesactualizado && !saldoDesactualizado) {
+    return { ...cuenta, ...patchLiq }
+  }
+
   if (supabase) {
     await actualizarCuentaSupabase(supabase, cuenta.id, patchLiq)
   }
@@ -471,6 +512,11 @@ export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
     }
     if (payload.updated_at != null && esErrorColumnaDesconocida(error, 'updated_at')) {
       const { updated_at: _u, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if (payload.saldo != null && esErrorColumnaDesconocida(error, 'saldo')) {
+      const { saldo: _s, ...rest } = payload
       payload = rest
       continue
     }
