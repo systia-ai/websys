@@ -331,6 +331,12 @@ export default function ClientesModulo({
         if (supabase) {
           cuentasFinales = await Promise.all(
             cuentasCliente.map((cu) => {
+              const est = String(cu.estatus ?? '').trim().toUpperCase()
+              if (est === 'LIQUIDADA' || est === 'PAGADA') {
+                const movs = movsPorCuenta.get(String(cu.id)) ?? []
+                const totalVenta = totalVentaCuenta(cu, movs)
+                return { ...cu, total: totalVenta, saldo: 0 }
+              }
               const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
               const movs = movsPorCuenta.get(String(cu.id)) ?? []
               const totalVenta = totalVentaCuenta(cu, movs)

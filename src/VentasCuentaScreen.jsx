@@ -262,6 +262,8 @@ export default function VentasCuentaScreen({
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
+  /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
+  const estatusElegidoManualRef = useRef(null)
 
   const cuentaId = cuentaInfo?.id ?? cuentaInicial?.id ?? null
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
@@ -318,6 +320,19 @@ export default function VentasCuentaScreen({
     if (!t) return catalogo
     return catalogo.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
   }, [catalogo, busqCat])
+
+  const recargarCuentaInfoDesdeServidor = useCallback(
+    async (cid) => {
+      if (cid == null) return null
+      if (supabase) {
+        const { data, error } = await supabase.from('cuentas').select('*').eq('id', cid).maybeSingle()
+        if (error) throw error
+        return data
+      }
+      return readLs(LS_CUENTAS, []).find((c) => sameId(c.id, cid)) ?? null
+    },
+    [supabase],
+  )
 
   const cargarTodo = useCallback(
     async (cid, reparaBoot) => {
@@ -394,8 +409,12 @@ export default function VentasCuentaScreen({
 
         if (cuentaRow?.id) {
           const totalSync = totalVentaParaSync(cuentaRow.total, built)
+          const estInicial = String(cuentaRow.estatus ?? '').trim().toUpperCase()
           let actualizada = cuentaRow
-          if (supabase) {
+          if (estInicial === 'LIQUIDADA' || estInicial === 'PAGADA') {
+            estatusElegidoManualRef.current = estInicial
+            actualizada = { ...cuentaRow, total: totalSync, saldo: estInicial === 'LIQUIDADA' ? 0 : cuentaRow.saldo }
+          } else if (supabase) {
             actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, cuentaRow, pagos, {
               totalVenta: totalSync,
             })
@@ -469,6 +488,30 @@ export default function VentasCuentaScreen({
           .eq('cuenta_id', cuentaId)
         if (!ePag && (pagosDb ?? []).length > 0) pagosSync = pagosDb
       }
+      const estFijado =
+        estatusElegidoManualRef.current || String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '').trim().toUpperCase()
+      if (estFijado === 'LIQUIDADA' || estFijado === 'PAGADA') {
+        const pagado = sumMontoPagos(pagosSync)
+        const patch = {
+          total: totalSync,
+          saldo: 0,
+          estatus: estFijado,
+          fecha_liquidada: estFijado === 'LIQUIDADA' ? cuentaInfo?.fecha_liquidada ?? new Date().toISOString() : null,
+        }
+        if (supabase) {
+          await actualizarCuentaSupabase(supabase, cuentaId, patch)
+          const refreshed = await recargarCuentaInfoDesdeServidor(cuentaId)
+          if (refreshed) setCuentaInfo(refreshed)
+          else setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patch }))
+        } else {
+          const list = readLs(LS_CUENTAS, [])
+          const prev = list.find((c) => sameId(c.id, cuentaId)) ?? { id: cuentaId }
+          const next = { ...prev, ...patch }
+          writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? next : c)))
+          setCuentaInfo(next)
+        }
+        return
+      }
       if (supabase) {
         const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
         const actualizada = await sincronizarEstatusCuentaPorSaldo(
@@ -508,7 +551,7 @@ export default function VentasCuentaScreen({
     } catch (e) {
       onError?.(`Error al guardar total: ${e.message}`)
     }
-  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError])
+  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError, recargarCuentaInfoDesdeServidor])
 
   useEffect(() => {
     if (!esCuentaExistente || loading) return
@@ -606,7 +649,9 @@ export default function VentasCuentaScreen({
       const actualizada = await aplicarCuentaPagadaActiva(supabase, base, pagosSync, {
         totalVenta: totalCuenta,
       })
-      setCuentaInfo(actualizada)
+      estatusElegidoManualRef.current = 'PAGADA'
+      const refreshed = await recargarCuentaInfoDesdeServidor(cuentaId)
+      setCuentaInfo(refreshed ?? actualizada)
     } else {
       const list = readLs(LS_CUENTAS, [])
       const patch = {
@@ -616,6 +661,7 @@ export default function VentasCuentaScreen({
         fecha_liquidada: null,
       }
       writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...patch } : c)))
+      estatusElegidoManualRef.current = 'PAGADA'
       setCuentaInfo((prev) => (prev ? { ...prev, ...patch } : { id: cuentaId, ...patch }))
     }
   }
@@ -912,10 +958,11 @@ export default function VentasCuentaScreen({
 
   async function aplicarLiquidacionCuenta({ avisar = true, totalOverride = null } = {}) {
     if (!cuentaId) return false
-    const totalCheck = totalOverride != null ? Number(totalOverride) : sumSubtotales(lineas)
-    if (Math.abs(totalCheck) > 0.0001) {
+    const saldoNet =
+      totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas, totalCargos)
+    if (saldoNet > 0.0001) {
       if (avisar) {
-        onError?.(`No se puede liquidar. El total debe ser $0.00. Total actual: $${totalStr}`)
+        onError?.(`No se puede liquidar: aún hay saldo pendiente de $${saldoNet.toFixed(2)}.`)
       }
       return false
     }
@@ -948,44 +995,27 @@ export default function VentasCuentaScreen({
     }
     const totalCuenta = Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
     const nowLiq = new Date().toISOString()
+    const patchLiq = {
+      total: totalCuenta,
+      saldo: 0,
+      estatus: 'LIQUIDADA',
+      fecha_liquidada: nowLiq,
+      updated_at: nowLiq,
+    }
     if (supabase) {
-      const pagosDb =
-        (
-          await supabase.from('pagosclientes').select('*').eq('cuenta_id', cuentaId)
-        ).data ?? []
-      const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
-      const actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, base, pagosDb, {
-        totalVenta: totalCuenta,
-      })
-      setCuentaInfo(actualizada)
-      if (!actualizada || String(actualizada.estatus).toUpperCase() !== 'LIQUIDADA') {
-        await actualizarCuentaSupabase(supabase, cuentaId, {
-          total: totalCuenta,
-          saldo: 0,
-          estatus: 'LIQUIDADA',
-          fecha_liquidada: nowLiq,
-          updated_at: nowLiq,
-        })
-      }
+      await actualizarCuentaSupabase(supabase, cuentaId, patchLiq)
       if (reparaIdCuenta != null) {
         await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
       }
+      estatusElegidoManualRef.current = 'LIQUIDADA'
+      const refreshed = await recargarCuentaInfoDesdeServidor(cuentaId)
+      if (refreshed) setCuentaInfo(refreshed)
+      else setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patchLiq }))
     } else {
       const list = readLs(LS_CUENTAS, [])
       writeLs(
         LS_CUENTAS,
-        list.map((c) =>
-          sameId(c.id, cuentaId)
-            ? {
-                ...c,
-                total: totalCuenta,
-                saldo: 0,
-                estatus: 'LIQUIDADA',
-                fecha_liquidada: nowLiq,
-                updated_at: nowLiq,
-              }
-            : c,
-        ),
+        list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...patchLiq } : c)),
       )
       if (reparaIdCuenta != null) {
         const lr = readLs(LS_REP, [])
@@ -995,12 +1025,9 @@ export default function VentasCuentaScreen({
           lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
         )
       }
+      estatusElegidoManualRef.current = 'LIQUIDADA'
+      setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patchLiq }))
     }
-    setCuentaInfo((prev) =>
-      prev
-        ? { ...prev, total: totalCuenta, saldo: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
-        : { total: totalCuenta, saldo: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq },
-    )
     return true
   }
 
