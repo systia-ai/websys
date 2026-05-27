@@ -15,6 +15,26 @@ function fmtFechaCuenta(v) {
   })
 }
 
+function marcaTiempoPago(pago) {
+  const raw = pago?.created_at ?? pago?.fecha ?? pago?.fecha_pago ?? null
+  if (!raw) return 0
+  const t = new Date(raw).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+function tipoPagoVisible(cuenta, pagosCuenta = []) {
+  const ultimoPago = [...pagosCuenta].sort((a, b) => {
+    const ta = marcaTiempoPago(a)
+    const tb = marcaTiempoPago(b)
+    if (ta !== tb) return tb - ta
+    return Number(b?.id ?? 0) - Number(a?.id ?? 0)
+  })[0]
+  const formaPagoReciente = String(ultimoPago?.forma_pago ?? '').trim()
+  if (formaPagoReciente) return formaPagoReciente
+  const formaCuenta = String(cuenta?.tipo_pago ?? cuenta?.tipoPago ?? '').trim()
+  return formaCuenta || '—'
+}
+
 /**
  * Pantalla de cuentas del cliente: tarjetas o tabla con datos de la cuenta (total, saldo, estatus).
  */
@@ -48,7 +68,6 @@ export default function CuentasClientePanel({
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
       const total = Number(cuenta.total ?? 0)
       const saldo = saldoDesdeCuenta(cuenta, pagosC)
-      const tipoPago = String(cuenta.tipo_pago ?? cuenta.tipoPago ?? '').trim()
       return {
         cuenta,
         idCuenta: cuenta.id != null ? String(cuenta.id) : '—',
@@ -56,7 +75,7 @@ export default function CuentasClientePanel({
         total,
         saldo,
         estatus: String(cuenta.estatus ?? '—').trim() || '—',
-        tipoPago: tipoPago || '—',
+        tipoPago: tipoPagoVisible(cuenta, pagosC),
         ordenRef:
           cuenta.repara_id != null && cuenta.repara_id !== '' && String(cuenta.repara_id) !== String(cuenta.id)
             ? String(cuenta.repara_id)
