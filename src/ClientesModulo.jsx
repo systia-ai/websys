@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
+import { buscarClientesSimilares } from './duplicadosUtils.js'
 import { cargarTodosPagosClientes } from './pagosClientesUtils.js'
 import {
   aYmdLocalDesdeRaw,
@@ -102,6 +103,7 @@ export default function ClientesModulo({
   const [dialogoCliente, setDialogoCliente] = useState(false)
   const [modalConfirmGuardarCliente, setModalConfirmGuardarCliente] = useState(false)
   const [guardandoCliente, setGuardandoCliente] = useState(false)
+  const [coincidenciasCliente, setCoincidenciasCliente] = useState([])
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [domicilio, setDomicilio] = useState('')
@@ -183,6 +185,7 @@ export default function ClientesModulo({
     setDomicilio('')
     setCorreo('')
     setClienteEditando(null)
+    setCoincidenciasCliente([])
     setDialogoCliente(true)
   }
 
@@ -193,6 +196,7 @@ export default function ClientesModulo({
     setDomicilio(row.domicilio)
     setCorreo(row.correo)
     setClienteEditando(row)
+    setCoincidenciasCliente([])
     setDialogoCliente(true)
   }
 
@@ -205,6 +209,12 @@ export default function ClientesModulo({
       onError?.('El teléfono es requerido')
       return
     }
+    const similares = buscarClientesSimilares(clientes, {
+      nombre: nombre,
+      telefono: telefono,
+      excludeId: clienteEditando?.id ?? null,
+    })
+    setCoincidenciasCliente(similares.slice(0, 4))
     setModalConfirmGuardarCliente(true)
   }
 
@@ -242,6 +252,7 @@ export default function ClientesModulo({
         }
       }
       setModalConfirmGuardarCliente(false)
+      setCoincidenciasCliente([])
       setDialogoCliente(false)
       setClienteEditando(null)
       await cargarClientes()
@@ -844,17 +855,44 @@ export default function ClientesModulo({
 
       <ConfirmarDatosModal
         open={modalConfirmGuardarCliente}
-        onClose={() => setModalConfirmGuardarCliente(false)}
+        onClose={() => {
+          setModalConfirmGuardarCliente(false)
+          setCoincidenciasCliente([])
+        }}
         onConfirm={ejecutarGuardarCliente}
-        tituloGrupo={clienteEditando ? 'Datos del cliente (actualizar)' : 'Datos del cliente (nuevo)'}
-        lineas={[
-          { label: 'Nombre', value: nombre.trim().toUpperCase() },
-          { label: 'Teléfono', value: telefono.trim() },
-          { label: 'Domicilio', value: domicilio.trim().toUpperCase() },
-          { label: 'Correo', value: correo.trim().toLowerCase() },
-        ]}
+        tituloGrupo={
+          coincidenciasCliente.length > 0
+            ? 'Posibles clientes similares'
+            : clienteEditando
+              ? 'Datos del cliente (actualizar)'
+              : 'Datos del cliente (nuevo)'
+        }
+        lineas={
+          coincidenciasCliente.length > 0
+            ? [
+                { label: 'Pregunta', value: 'Es el mismo cliente?' },
+                { label: 'Nuevo nombre', value: nombre.trim().toUpperCase() },
+                { label: 'Nuevo teléfono', value: telefono.trim() },
+                ...coincidenciasCliente.map((c, i) => ({
+                  label: `Similar ${i + 1}`,
+                  value: `${String(c.nombre ?? '').toUpperCase()} · ${c.telefono || 'SIN TELEFONO'}`,
+                })),
+              ]
+            : [
+                { label: 'Nombre', value: nombre.trim().toUpperCase() },
+                { label: 'Teléfono', value: telefono.trim() },
+                { label: 'Domicilio', value: domicilio.trim().toUpperCase() },
+                { label: 'Correo', value: correo.trim().toLowerCase() },
+              ]
+        }
         confirmando={guardandoCliente}
-        textoConfirmar={clienteEditando ? 'Confirmar y actualizar' : 'Confirmar y guardar'}
+        textoConfirmar={
+          coincidenciasCliente.length > 0
+            ? 'No, es diferente. Guardar'
+            : clienteEditando
+              ? 'Confirmar y actualizar'
+              : 'Confirmar y guardar'
+        }
       />
 
       {modalAcciones && clienteAccion && (

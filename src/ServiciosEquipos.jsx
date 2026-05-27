@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
+import { buscarClientesSimilares, buscarEquiposPorSerieExacta, buscarEquiposSimilares } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
@@ -376,6 +377,49 @@ export default function ServiciosEquipos({
       onError('El tipo de equipo es requerido')
       return
     }
+    const serieExacta = buscarEquiposPorSerieExacta(equipos, {
+      serie: serie,
+      excludeId: editandoId ?? null,
+    }).slice(0, 4)
+    if (serieExacta.length > 0) {
+      setConfirmDatos({
+        tituloGrupo: 'Serie ya registrada',
+        lineas: [
+          { label: 'Pregunta', value: 'Es el mismo equipo?' },
+          { label: 'Serie nueva', value: String(serie).trim().toUpperCase() },
+          ...serieExacta.map((e, i) => ({
+            label: `Coincidencia ${i + 1}`,
+            value: `${String(e.serie ?? '').toUpperCase()} · ${String(e.tipo_equipo ?? '').toUpperCase()}${e.descripcion ? ` · ${String(e.descripcion).toUpperCase()}` : ''}`,
+          })),
+        ],
+        run: ejecutarGuardarEquipo,
+        textoConfirmar: 'No, es diferente. Guardar',
+      })
+      return
+    }
+
+    const similares = buscarEquiposSimilares(equipos, {
+      serie: serie,
+      tipoEquipo: tipoEquipo,
+      descripcion: descripcion,
+      excludeId: editandoId ?? null,
+    }).slice(0, 4)
+    if (similares.length > 0) {
+      setConfirmDatos({
+        tituloGrupo: 'Posibles equipos duplicados',
+        lineas: [
+          { label: 'Pregunta', value: 'Es el mismo equipo?' },
+          { label: 'Nuevo', value: `${String(serie).trim().toUpperCase()} · ${String(tipoEquipo).trim().toUpperCase()}` },
+          ...similares.map((e, i) => ({
+            label: `Similar ${i + 1}`,
+            value: `${String(e.serie ?? '').toUpperCase()} · ${String(e.tipo_equipo ?? '').toUpperCase()}${e.descripcion ? ` · ${String(e.descripcion).toUpperCase()}` : ''}`,
+          })),
+        ],
+        run: ejecutarGuardarEquipo,
+        textoConfirmar: 'No, es diferente. Guardar',
+      })
+      return
+    }
     setConfirmDatos({
       tituloGrupo: editandoId ? 'Equipo (actualizar)' : 'Equipo nuevo',
       lineas: lineasConfirmacionEquipo(),
@@ -584,6 +628,28 @@ export default function ServiciosEquipos({
     }
     if (!ncTel.trim()) {
       onError('El teléfono del cliente es requerido')
+      return
+    }
+    const similares = buscarClientesSimilares(clientes, {
+      nombre: ncNombre,
+      telefono: ncTel,
+      excludeId: null,
+    }).slice(0, 4)
+    if (similares.length > 0) {
+      setConfirmDatos({
+        tituloGrupo: 'Posibles clientes similares',
+        lineas: [
+          { label: 'Pregunta', value: 'Es el mismo cliente?' },
+          { label: 'Nuevo nombre', value: ncNombre.trim().toUpperCase() },
+          { label: 'Nuevo teléfono', value: ncTel.trim() },
+          ...similares.map((c, i) => ({
+            label: `Similar ${i + 1}`,
+            value: `${String(c.nombre ?? '').toUpperCase()} · ${c.telefono || 'SIN TELEFONO'}`,
+          })),
+        ],
+        run: ejecutarAgregarClienteNuevo,
+        textoConfirmar: 'No, es diferente. Guardar',
+      })
       return
     }
     setConfirmDatos({
@@ -1060,6 +1126,7 @@ export default function ServiciosEquipos({
         tituloGrupo={confirmDatos?.tituloGrupo ?? 'Resumen'}
         lineas={confirmDatos?.lineas ?? []}
         confirmando={confirmandoDatos}
+        textoConfirmar={confirmDatos?.textoConfirmar ?? 'Confirmar y guardar'}
       />
 
       {eliminarEquipo && (
