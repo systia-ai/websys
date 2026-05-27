@@ -2,9 +2,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares, buscarEquiposPorSerieExacta, buscarEquiposSimilares } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -83,7 +85,9 @@ export default function ServiciosEquipos({
   onNotice,
   clienteDesdeClientes = null,
   onConsumeClienteVinculo,
+  puedeEliminar = true,
 }) {
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const [equipos, setEquipos] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -739,6 +743,7 @@ export default function ServiciosEquipos({
       </header>
 
       <div className="servicios-body">
+        <AlertaPermiso mensaje={alertaPermiso} />
         {clienteDesdeModuloClientes?.id != null && (
           <div className="clientes-vinculo-banner">
             <p>
@@ -856,7 +861,7 @@ export default function ServiciosEquipos({
                         className="btn-icon danger equipos-lista-btn-icon"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setEliminarEquipo(eq)
+                          intentarEliminar(() => setEliminarEquipo(eq))
                         }}
                         title="Eliminar equipo"
                         aria-label="Eliminar equipo"
@@ -886,7 +891,13 @@ export default function ServiciosEquipos({
                   <button type="button" className="btn-icon edit" onClick={() => abrirEditar(eq)} title="Editar" aria-label="Editar">
                     ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminarEquipo(eq)} title="Eliminar" aria-label="Eliminar">
+                  <button
+                    type="button"
+                    className="btn-icon danger"
+                    onClick={() => intentarEliminar(() => setEliminarEquipo(eq))}
+                    title="Eliminar"
+                    aria-label="Eliminar"
+                  >
                     🗑️
                   </button>
                 </div>

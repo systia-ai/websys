@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   aYmdLocalDesdeRaw,
   estatusEsEntregado,
@@ -124,8 +126,16 @@ function todosTiposServicioSeleccionados(sel) {
  * Monitor de órdenes: lista de reparaciones filtrable por estatus, orden por fecha de registro,
  * columnas tipo taller (Android).
  */
-export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNotice, onEditarOrden }) {
+export default function MonitorOrdenesModulo({
+  supabase,
+  onHome,
+  onError,
+  onNotice,
+  onEditarOrden,
+  puedeEliminar = true,
+}) {
   void onNotice
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])
@@ -555,6 +565,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
       </header>
 
       <div className="servicios-body">
+        <AlertaPermiso mensaje={alertaPermiso} />
         <section className="monitor-ordenes-filtros card-pad">
           <h2 className="monitor-ordenes-filtros-titulo">
             <span className="monitor-ordenes-filtros-titulo-icon" aria-hidden="true">
@@ -971,7 +982,7 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
                         <button
                           type="button"
                           className="btn-icon danger"
-                          onClick={() => handleEliminarTecnico(t)}
+                          onClick={() => intentarEliminar(() => handleEliminarTecnico(t))}
                           title={`Eliminar ${t}`}
                           aria-label={`Eliminar ${t}`}
                         >

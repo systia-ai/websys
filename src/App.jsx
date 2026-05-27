@@ -13,6 +13,8 @@ import MonitorOrdenesModulo from './MonitorOrdenesModulo.jsx'
 import AdministracionModulo from './AdministracionModulo.jsx'
 import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import AlertaPermiso from './AlertaPermiso.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
@@ -108,6 +110,9 @@ function App() {
   }, [supabase, user?.id])
 
   const esAdmin = rolUsuario === 'ADMIN'
+  const puedeEliminar = esAdmin
+  const { alertaPermiso: alertaPermisoApp, intentarEliminar: intentarEliminarApp } =
+    usePermisoEliminar(puedeEliminar)
 
   function navigateTo(nextKey) {
     if (nextKey === 'home') {
@@ -257,6 +262,10 @@ function App() {
 
   async function onDelete(id) {
     if (!current) return
+    if (!puedeEliminar) {
+      intentarEliminarApp()
+      return
+    }
     if (!confirm('Deseas eliminar este registro?')) return
     try {
       if (supabase) {
@@ -407,6 +416,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <InventariosModulo
           supabase={supabase}
+          puedeEliminar={puedeEliminar}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -429,6 +439,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <CatalogoPagosModulo
           supabase={supabase}
+          puedeEliminar={puedeEliminar}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -494,6 +505,7 @@ function App() {
         {error && <p className="error">{error}</p>}
         <MonitorOrdenesModulo
           supabase={supabase}
+          puedeEliminar={puedeEliminar}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -539,6 +551,7 @@ function App() {
     return (
       <ServiciosEquipos
         supabase={supabase}
+        puedeEliminar={puedeEliminar}
         clienteDesdeClientes={clienteVinculoServicios}
         onConsumeClienteVinculo={() => setClienteVinculoServicios(null)}
         onHome={goBack}
@@ -564,6 +577,7 @@ function App() {
     return (
       <OrdenServicioModulo
         supabase={supabase}
+        puedeEliminar={puedeEliminar}
         session={repSession ?? {}}
         error={error}
         notice={notice}
@@ -593,6 +607,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <VentasCuentaScreen
           supabase={supabase}
+          puedeEliminar={puedeEliminar}
           context={ventasContext}
           onSalir={goBack}
           onError={(msg) => {
@@ -627,6 +642,7 @@ function App() {
 
   return (
     <main className="module">
+      <AlertaPermiso mensaje={alertaPermisoApp} />
       <div className="toolbar">
         <button type="button" onClick={goBack}>
           Atrás

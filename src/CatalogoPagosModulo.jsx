@@ -1,7 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial catálogo (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import { sameId } from './clienteUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 
 const LS_CATALOGO = 'sistefix_local_catalogopagos'
 const LS_VISTA_CATALOGO_PAGOS = 'sistefix_catalogo_pagos_vista'
@@ -91,7 +93,8 @@ function compararCatalogoPorConcepto(a, b) {
  * Catálogo de conceptos de pago (`catalogopagos`), pantalla dedicada como en Android:
  * lista, búsqueda, alta/edición y baja (concepto + cantidad/monto por defecto).
  */
-export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotice }) {
+export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = true }) {
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -311,6 +314,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
       </header>
 
       <div className="servicios-body">
+        <AlertaPermiso mensaje={alertaPermiso} />
         <button type="button" className="btn-agregar-equipo btn-agregar-catalogo-pagos" onClick={abrirNuevo}>
           + AGREGAR CONCEPTO
         </button>
@@ -409,7 +413,7 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                         className="btn-icon danger"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setEliminar(c)
+                          intentarEliminar(() => setEliminar(c))
                         }}
                         title="Eliminar"
                         aria-label="Eliminar"
@@ -434,7 +438,13 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
                   <button type="button" className="btn-icon edit" onClick={() => abrirEditar(c)} title="Editar" aria-label="Editar">
                     ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(c)} title="Eliminar" aria-label="Eliminar">
+                  <button
+                    type="button"
+                    className="btn-icon danger"
+                    onClick={() => intentarEliminar(() => setEliminar(c))}
+                    title="Eliminar"
+                    aria-label="Eliminar"
+                  >
                     🗑️
                   </button>
                 </div>

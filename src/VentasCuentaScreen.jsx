@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
 import { emojiParaProducto, readIconosMap } from './productoEmoji.js'
@@ -219,7 +221,15 @@ function buildLineasDesdeServidor({ movs, reps, pagos, productosPorId = new Map(
 /**
  * Pantalla Cuentas / Ventas alineada con VentasScreen.kt (lista, total, estatus, pagos, productos, liquidar, comprobante, salir).
  */
-export default function VentasCuentaScreen({ supabase, context, onSalir, onError, onNotice }) {
+export default function VentasCuentaScreen({
+  supabase,
+  context,
+  onSalir,
+  onError,
+  onNotice,
+  puedeEliminar = true,
+}) {
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const cliente = useMemo(() => normalizeClienteRow(context?.cliente ?? {}), [context?.cliente])
   const cuentaInicial = context?.cuenta
 
@@ -1038,6 +1048,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
 
   return (
     <div className="ventas-cuenta-root">
+      <AlertaPermiso mensaje={alertaPermiso} />
       <header className="ventas-cuenta-header">
         <h1>Cuentas</h1>
       </header>
@@ -1100,7 +1111,12 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
                         </span>
                         <span>${Number(L.precioUnitario).toFixed(2)}</span>
                         <span>${Number(L.subtotal).toFixed(2)}</span>
-                        <button type="button" className="btn-elim-linea" onClick={() => void eliminarLinea(L)} aria-label="Eliminar">
+                        <button
+                          type="button"
+                          className="btn-elim-linea"
+                          onClick={() => intentarEliminar(() => void eliminarLinea(L))}
+                          aria-label="Eliminar"
+                        >
                           ×
                         </button>
                       </li>

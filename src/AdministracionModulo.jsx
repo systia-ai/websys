@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -25,12 +27,7 @@ export default function AdministracionModulo({
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
-  const [alertaPermiso, setAlertaPermiso] = useState('')
-
-  const mostrarAlertaSinPermiso = useCallback((mensaje) => {
-    setAlertaPermiso(mensaje)
-    setTimeout(() => setAlertaPermiso(''), 3800)
-  }, [])
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(isAdmin)
 
   const cargarUsuarios = useCallback(async () => {
     if (!supabase) {
@@ -69,7 +66,7 @@ export default function AdministracionModulo({
 
   async function guardarRolUsuario(userId, rol) {
     if (!isAdmin) {
-      mostrarAlertaSinPermiso('Tu usuario no tiene permisos para cambiar roles.')
+      mostrarSinPermiso('Tu usuario no tiene permisos para cambiar roles.')
       return
     }
     setGuardandoId(userId)
@@ -92,7 +89,7 @@ export default function AdministracionModulo({
 
   async function quitarRolUsuario(userId) {
     if (!isAdmin) {
-      mostrarAlertaSinPermiso('Tu usuario no tiene permisos para borrar.')
+      mostrarSinPermiso()
       return
     }
     const fila = usuarios.find((u) => String(u.user_id) === String(userId))
@@ -136,11 +133,7 @@ export default function AdministracionModulo({
       </header>
 
       <div className="servicios-body administracion-body">
-        {alertaPermiso ? (
-          <div className="admin-alerta-permiso" role="alert">
-            <strong>⚠️ Sin permisos:</strong> {alertaPermiso}
-          </div>
-        ) : null}
+        <AlertaPermiso mensaje={alertaPermiso} />
 
         <section className="card-pad administracion-panel">
           <header className="administracion-panel-head">
@@ -197,7 +190,7 @@ export default function AdministracionModulo({
                       <button
                         type="button"
                         className="btn-icon danger administracion-btn-borrar-rol"
-                        onClick={() => void quitarRolUsuario(u.user_id)}
+                        onClick={() => intentarEliminar(() => void quitarRolUsuario(u.user_id))}
                         disabled={guardandoId === u.user_id}
                         title="Quitar rol personalizado (queda TECNICO)"
                         aria-label={`Quitar rol de ${u.email}`}

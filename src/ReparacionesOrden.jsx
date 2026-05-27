@@ -6,7 +6,9 @@ import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { insertPagoCliente } from './pagosClientesUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   abrirWhatsAppAnticipo,
   abrirWhatsAppOrden,
@@ -146,7 +148,9 @@ export default function ReparacionesOrden({
   onNotice,
   /** Si true, no se muestra la franja azul "Reparaciones" (el padre ya muestra el título, p. ej. OrdenServicioModulo). */
   omitOuterHeader = false,
+  puedeEliminar = true,
 }) {
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const s = session ?? {}
   const repIdStr = s.reparacionId != null ? String(s.reparacionId).trim() : ''
   const [numeroOrden, setNumeroOrden] = useState(() => (repIdStrEsOrdenExistente(repIdStr) ? repIdStr : ''))
@@ -1255,6 +1259,7 @@ export default function ReparacionesOrden({
 
   return (
     <div className="rep-root">
+      <AlertaPermiso mensaje={alertaPermiso} />
       {!omitOuterHeader ? (
         <header className="rep-header-bar">
           <h1>Reparaciones</h1>
@@ -1559,7 +1564,7 @@ export default function ReparacionesOrden({
             <button
               type="button"
               className="btn-eliminar-orden wide"
-              onClick={() => setEliminarConfirmAbierto(true)}
+              onClick={() => intentarEliminar(() => setEliminarConfirmAbierto(true))}
             >
               🗑️ Eliminar orden
             </button>

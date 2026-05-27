@@ -26,6 +26,7 @@ export default function OrdenServicioModulo({
   onNotice,
   error,
   notice,
+  puedeEliminar = true,
 }) {
   const mostrarFormulario = tieneSesionOrdenCargada(session)
 
@@ -84,6 +85,7 @@ export default function OrdenServicioModulo({
             onSalir={onSalir}
             onError={onError}
             onNotice={onNotice}
+            puedeEliminar={puedeEliminar}
             omitOuterHeader
           />
         )}

@@ -1,7 +1,9 @@
 ﻿/* eslint-disable react-hooks/set-state-in-effect -- carga inicial de productos (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { sameId } from './clienteUtils.js'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { esProductoContable } from './productoUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
@@ -116,7 +118,8 @@ function compararProductosPorDescripcion(a, b) {
  * Inventarios / catálogo de productos (tabla `productos`), flujo tipo pantalla dedicada en Android:
  * lista con búsqueda, alta, edición y baja.
  */
-export default function InventariosModulo({ supabase, onHome, onError, onNotice }) {
+export default function InventariosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = true }) {
+  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -479,6 +482,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       </header>
 
       <div className="servicios-body">
+        <AlertaPermiso mensaje={alertaPermiso} />
         <button type="button" className="btn-agregar-equipo btn-surtir-inventario" onClick={abrirSurtido}>
           + SURTIR INVENTARIO
         </button>
@@ -597,7 +601,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                           className="btn-icon danger inventarios-lista-btn-icon"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setEliminar(p)
+                            intentarEliminar(() => setEliminar(p))
                           }}
                           title="Eliminar producto"
                           aria-label="Eliminar producto"
@@ -637,7 +641,13 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   <button type="button" className="btn-icon edit" onClick={() => abrirEditar(p)} title="Editar" aria-label="Editar">
                     ✏️
                   </button>
-                  <button type="button" className="btn-icon danger" onClick={() => setEliminar(p)} title="Eliminar" aria-label="Eliminar">
+                  <button
+                    type="button"
+                    className="btn-icon danger"
+                    onClick={() => intentarEliminar(() => setEliminar(p))}
+                    title="Eliminar"
+                    aria-label="Eliminar"
+                  >
                     🗑️
                   </button>
                 </div>
