@@ -141,6 +141,8 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   const [cantidadSurtido, setCantidadSurtido] = useState('')
   const [costoCompraSurtido, setCostoCompraSurtido] = useState('')
   const [precioVentaSurtido, setPrecioVentaSurtido] = useState('')
+  /** Tras guardar surtido: pregunta si surtir otro producto. */
+  const [surtidoExitoPregunta, setSurtidoExitoPregunta] = useState(null)
 
   const [eliminar, setEliminar] = useState(null)
 
@@ -242,6 +244,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
     setCostoCompraSurtido('')
     setPrecioVentaSurtido('')
     setDialogoSurtido(true)
+  }
+
+  function surtirOtroProducto() {
+    setSurtidoExitoPregunta(null)
+    abrirSurtido()
   }
 
   function abrirEditar(p) {
@@ -374,9 +381,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
           list.map((x) => (sameId(x.id, prod.id) ? { ...x, ...payload } : x)),
         )
       }
+      const etiqueta = [prod.serie, prod.descripcion].filter(Boolean).join(' · ') || 'producto'
       setDialogoSurtido(false)
       await cargarProductos()
-      onNotice?.(`Surtido registrado: +${entrada} a ${prod.serie || prod.descripcion || 'producto'}`)
+      onNotice?.(`Surtido registrado: +${entrada} a ${etiqueta}`)
+      setSurtidoExitoPregunta({ etiqueta, entrada })
     } catch (e) {
       onError?.(`Error al registrar surtido: ${e.message}`)
     }
@@ -447,6 +456,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   }
 
   function handleAtras() {
+    if (surtidoExitoPregunta) {
+      setSurtidoExitoPregunta(null)
+      return
+    }
     if (dialogoSurtido) {
       setDialogoSurtido(false)
       return
@@ -866,6 +879,36 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
               </button>
               <button type="button" onClick={() => void guardarSurtido()}>
                 Guardar surtido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {surtidoExitoPregunta && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSurtidoExitoPregunta(null)}>
+          <div
+            className="modal inventarios-surtido-exito-modal"
+            role="dialog"
+            aria-labelledby="inventarios-surtido-exito-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="inventarios-surtido-exito-titulo">✅ Surtido guardado</h3>
+            </div>
+            <div className="modal-body">
+              <p>
+                Se registró <strong>+{surtidoExitoPregunta.entrada}</strong> en{' '}
+                <strong>{surtidoExitoPregunta.etiqueta}</strong>.
+              </p>
+              <p className="muted">¿Desea surtir otro producto del inventario?</p>
+            </div>
+            <div className="modal-footer modal-footer-wrap">
+              <button type="button" className="secondary" onClick={() => setSurtidoExitoPregunta(null)}>
+                No, terminar
+              </button>
+              <button type="button" className="btn-surtir-inventario" onClick={surtirOtroProducto}>
+                Sí, surtir otro
               </button>
             </div>
           </div>

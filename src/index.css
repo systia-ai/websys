@@ -584,6 +584,10 @@ td {
   transform: translateY(-1px);
 }
 
+.inventarios-surtido-exito-modal .btn-surtir-inventario {
+  margin-bottom: 0;
+}
+
 .inventarios-surtido-resumen {
   border: 1px solid #bbdefb;
   border-left: 4px solid #1e88e5;

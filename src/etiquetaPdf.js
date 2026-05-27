@@ -145,3 +145,66 @@ export function downloadEtiquetaPdf(p) {
   const pdf = createEtiquetaPdf(p)
   pdf.save(buildEtiquetaPdfFilename(p.orden))
 }
+
+/**
+ * Abre el diálogo de impresión del navegador con el PDF de etiqueta (2×1 in).
+ * @param {{ nombre: string, orden: string|number, qrDataUrl: string }} p
+ * @returns {Promise<void>}
+ */
+export function printEtiquetaPdf(p) {
+  const pdf = createEtiquetaPdf(p)
+  if (typeof pdf.autoPrint === 'function') {
+    pdf.autoPrint()
+  }
+
+  const blob = pdf.output('blob')
+  const url = URL.createObjectURL(blob)
+
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('title', 'Imprimir etiqueta')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;'
+    document.body.appendChild(iframe)
+
+    let settled = false
+
+    function quitarIframe() {
+      URL.revokeObjectURL(url)
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+    }
+
+    function fallar(err) {
+      if (settled) return
+      settled = true
+      quitarIframe()
+      reject(err instanceof Error ? err : new Error(String(err)))
+    }
+
+    const timer = window.setTimeout(() => {
+      fallar(new Error('Tiempo de espera al cargar la etiqueta para imprimir.'))
+    }, 15000)
+
+    iframe.onload = () => {
+      window.clearTimeout(timer)
+      if (settled) return
+      try {
+        const win = iframe.contentWindow
+        if (!win) throw new Error('No se pudo acceder al visor de impresión.')
+        win.focus()
+        win.print()
+        settled = true
+        resolve()
+        window.setTimeout(quitarIframe, 1500)
+      } catch (e) {
+        fallar(e)
+      }
+    }
+
+    iframe.onerror = () => {
+      window.clearTimeout(timer)
+      fallar(new Error('No se pudo cargar el PDF de la etiqueta.'))
+    }
+
+    iframe.src = url
+  })
+}
