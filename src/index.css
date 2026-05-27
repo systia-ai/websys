@@ -572,6 +572,20 @@ td {
   margin: 4px 0;
 }
 
+.inventarios-surtido-lista {
+  max-height: 180px;
+}
+
+.inventarios-surtido-opcion--active {
+  background: #e3f2fd;
+  border-left: 4px solid #1e88e5;
+  padding-left: 8px;
+}
+
+.inventarios-surtido-empty {
+  margin: 8px 12px;
+}
+
 .inventario-clientes-lista {
   list-style: none;
   margin: 0;

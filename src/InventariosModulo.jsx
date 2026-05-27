@@ -133,6 +133,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [contable, setContable] = useState(true)
   const [dialogoSurtido, setDialogoSurtido] = useState(false)
   const [productoSurtidoId, setProductoSurtidoId] = useState('')
+  const [busquedaSurtido, setBusquedaSurtido] = useState('')
   const [cantidadSurtido, setCantidadSurtido] = useState('')
   const [costoCompraSurtido, setCostoCompraSurtido] = useState('')
 
@@ -192,6 +193,16 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     return productosContables.find((p) => sameId(p.id, productoSurtidoId)) ?? null
   }, [productosContables, productoSurtidoId])
 
+  const productosSurtidoFiltrados = useMemo(() => {
+    const t = busquedaSurtido.trim().toLowerCase()
+    if (!t) return productosContables
+    return productosContables.filter((p) => {
+      const serieP = String(p.serie ?? '').toLowerCase()
+      const descP = String(p.descripcion ?? '').toLowerCase()
+      return serieP.includes(t) || descP.includes(t)
+    })
+  }, [productosContables, busquedaSurtido])
+
   function abrirNuevo() {
     setEditando(null)
     setTipoProducto('CONSUMIBLE')
@@ -210,6 +221,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       return
     }
     setProductoSurtidoId(String(productosContables[0].id))
+    setBusquedaSurtido('')
     setCantidadSurtido('')
     setCostoCompraSurtido('')
     setDialogoSurtido(true)
@@ -704,15 +716,35 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
             </div>
             <div className="modal-body form-stack">
               <label>
-                Producto
-                <select value={productoSurtidoId} onChange={(e) => setProductoSurtidoId(e.target.value)}>
-                  {productosContables.map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      {(p.serie || 'SIN SERIE') + ' · ' + (p.descripcion || 'SIN DESCRIPCIÓN')}
-                    </option>
-                  ))}
-                </select>
+                Buscar producto
+                <input
+                  value={busquedaSurtido}
+                  onChange={(e) => setBusquedaSurtido(e.target.value)}
+                  placeholder="Escriba serie o descripción..."
+                />
               </label>
+              <ul className="inventario-clientes-lista inventarios-surtido-lista">
+                {productosSurtidoFiltrados.length > 0 ? (
+                  productosSurtidoFiltrados.map((p) => {
+                    const activo = sameId(p.id, productoSurtidoId)
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          className={`inventario-cliente-opcion inventarios-surtido-opcion${activo ? ' inventarios-surtido-opcion--active' : ''}`}
+                          onClick={() => setProductoSurtidoId(String(p.id))}
+                        >
+                          <strong>{p.serie || 'SIN SERIE'}</strong> · {p.descripcion || 'SIN DESCRIPCIÓN'}
+                        </button>
+                      </li>
+                    )
+                  })
+                ) : (
+                  <li>
+                    <p className="muted small inventarios-surtido-empty">Sin resultados para esa búsqueda.</p>
+                  </li>
+                )}
+              </ul>
               <div className="inventarios-surtido-resumen">
                 <p>
                   <strong>Existencia actual:</strong> {toIntOrNull(productoSurtidoSel?.existencia) ?? 0}
