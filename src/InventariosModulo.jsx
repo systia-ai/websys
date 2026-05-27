@@ -586,9 +586,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
                       <td className="inventarios-lista-col-desc">{p.descripcion || '—'}</td>
                       <td className="inventarios-lista-col-stock">
                         {esContable ? (
-                          <span>
-                            Ex. {p.existencia ?? '—'} · Cant. {p.cantidad ?? '—'}
-                          </span>
+                          <span>{p.existencia ?? 0}</span>
                         ) : (
                           <span className="inventarios-badge-servicio-tabla">Servicio</span>
                         )}
@@ -625,9 +623,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
                   <span className="muted">{p.descripcion || '—'}</span>
                   <span className="muted small">
                     {esProductoContable(p) ? (
-                      <>
-                        Existencia: {p.existencia ?? '—'} · Cantidad: {p.cantidad ?? '—'}
-                      </>
+                      <>Stock: {p.existencia ?? 0}</>
                     ) : (
                       <span className="inventario-badge-servicio">Servicio · sin inventario</span>
                     )}
