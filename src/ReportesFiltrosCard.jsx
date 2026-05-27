@@ -1,5 +1,6 @@
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { crearSetEstatusTodos } from './reportesFiltros.js'
+import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
 
 /**
  * Filtros de reportes / estadísticas (rango de fechas + estatus múltiple, estilo monitor).
@@ -11,9 +12,17 @@ export default function ReportesFiltrosCard({
   onFechaFin,
   estatusSeleccionados,
   onEstatusSeleccionados,
+  tiposServicioSeleccionados = new Set(TIPOS_SERVICIO_CANONICOS),
+  onTiposServicioSeleccionados = null,
+  busqueda = '',
+  onBusqueda = null,
   rangoInvalido,
   children,
 }) {
+  const tiposServicioLista = TIPOS_SERVICIO_CANONICOS
+
+  const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
+
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
     onEstatusSeleccionados((prev) => {
@@ -27,6 +36,22 @@ export default function ReportesFiltrosCard({
   function seleccionarSolo(est) {
     const st = String(est).trim().toUpperCase()
     onEstatusSeleccionados(new Set([st]))
+  }
+
+  function toggleTipoServicio(tipo) {
+    if (!onTiposServicioSeleccionados) return
+    const t = String(tipo).trim().toUpperCase()
+    onTiposServicioSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(t)) next.delete(t)
+      else next.add(t)
+      return next
+    })
+  }
+
+  function seleccionarSoloTipoServicio(tipo) {
+    if (!onTiposServicioSeleccionados) return
+    onTiposServicioSeleccionados(new Set([String(tipo).trim().toUpperCase()]))
   }
 
   return (
@@ -80,6 +105,35 @@ export default function ReportesFiltrosCard({
         </p>
       ) : null}
 
+      <label
+        className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(
+          Boolean(String(busqueda ?? '').trim()),
+        )}`}
+      >
+        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+        <span className="monitor-ordenes-tile-label">Buscador</span>
+        <div className="monitor-ordenes-fecha-desde">
+          <input
+            type="search"
+            className="monitor-ordenes-busqueda-input"
+            value={busqueda}
+            onChange={(e) => onBusqueda?.(e.target.value)}
+            placeholder="Ej. Garantía Epson, reparado, entregado, #orden..."
+            aria-label="Buscar por cliente, orden, estatus, técnico, problema o tipo de servicio"
+          />
+          <button
+            type="button"
+            className="monitor-ordenes-fecha-clear"
+            onClick={() => onBusqueda?.('')}
+            disabled={!String(busqueda ?? '').trim()}
+            title="Limpiar buscador"
+            aria-label="Limpiar buscador"
+          >
+            Limpiar
+          </button>
+        </div>
+      </label>
+
       <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--fechas-tipo reportes-estatus-fieldset">
         <legend className="monitor-ordenes-legend">Estatus a incluir</legend>
         <div className="reportes-estatus-acciones">
@@ -99,6 +153,47 @@ export default function ReportesFiltrosCard({
                 <input type="checkbox" checked={checked} onChange={() => toggleEstatus(est)} />
                 <span>{est}</span>
                 <button type="button" className="monitor-ordenes-solo" onClick={() => seleccionarSolo(est)} title="Solo este">
+                  Solo
+                </button>
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus reportes-estatus-fieldset">
+        <legend className="monitor-ordenes-legend">Tipo de servicio</legend>
+        <div className="reportes-estatus-acciones">
+          <button
+            type="button"
+            className="monitor-ordenes-solo"
+            onClick={() => onTiposServicioSeleccionados?.(new Set(tiposServicioLista))}
+          >
+            ✓ Todos
+          </button>
+          <button type="button" className="monitor-ordenes-solo" onClick={() => onTiposServicioSeleccionados?.(new Set())}>
+            ✕ Ninguno
+          </button>
+        </div>
+        <div className="monitor-ordenes-estatus-grid">
+          {tiposServicioLista.map((tipo) => {
+            const checked = tiposServicioSeleccionados.has(tipo)
+            return (
+              <label key={tipo} className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}>
+                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                <input
+                  type="checkbox"
+                  className="monitor-ordenes-check-input"
+                  checked={checked}
+                  onChange={() => toggleTipoServicio(tipo)}
+                />
+                <span className="monitor-ordenes-check-text">{tipo}</span>
+                <button
+                  type="button"
+                  className="monitor-ordenes-solo"
+                  onClick={() => seleccionarSoloTipoServicio(tipo)}
+                  title="Solo este tipo"
+                >
                   Solo
                 </button>
               </label>

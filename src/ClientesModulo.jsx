@@ -648,24 +648,10 @@ export default function ClientesModulo({
           <span className="appbar-title-emoji" aria-hidden="true">👥</span>
           Clientes
         </h1>
-        {onIrEquipos || onIrAOrdenServicio ? (
-          <div className="appbar-actions-cluster">
-            {onIrEquipos ? (
-              <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onIrEquipos}>
-                Equipos
-              </button>
-            ) : null}
-            {onIrAOrdenServicio ? (
-              <button
-                type="button"
-                className="appbar-text-btn appbar-text-btn--narrow"
-                onClick={onIrAOrdenServicio}
-                title="Orden de servicio"
-              >
-                Orden
-              </button>
-            ) : null}
-          </div>
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
         ) : (
           <span className="servicios-appbar-placeholder" aria-hidden />
         )}

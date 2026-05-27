@@ -469,6 +469,7 @@ export default function ReportesEstadisticasView({
   loading = false,
   filtrosSlot = null,
   onVolver,
+  onHome,
 }) {
   const [agrupacion, setAgrupacion] = useState(leerAgrupacionEstadisticas)
 
@@ -500,7 +501,13 @@ export default function ReportesEstadisticasView({
           </span>
           {soloPeriodo ? 'Estadísticas del periodo' : 'Estadísticas'}
         </h1>
-        <span className="servicios-appbar-placeholder" aria-hidden />
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
+        ) : (
+          <span className="servicios-appbar-placeholder" aria-hidden />
+        )}
       </header>
 
       <div className="servicios-body corte-caja-body reportes-body">

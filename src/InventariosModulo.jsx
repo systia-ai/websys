@@ -449,7 +449,13 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
           <span className="appbar-title-emoji" aria-hidden="true">📦</span>
           Inventarios
         </h1>
-        <span className="servicios-appbar-placeholder" aria-hidden />
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
+        ) : (
+          <span className="servicios-appbar-placeholder" aria-hidden />
+        )}
       </header>
 
       <div className="servicios-body">

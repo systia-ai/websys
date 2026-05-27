@@ -19,8 +19,6 @@ export default function OrdenServicioModulo({
   supabase,
   session,
   onHome,
-  onIrEquipos,
-  onIrClientes,
   onSalir,
   onSeleccionarOrdenDesdeBusqueda,
   onClearOrdenSession,
@@ -55,11 +53,8 @@ export default function OrdenServicioModulo({
               Otra orden
             </button>
           ) : null}
-          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onIrEquipos}>
-            Equipos
-          </button>
-          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onIrClientes}>
-            Clientes
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
           </button>
         </div>
       </header>

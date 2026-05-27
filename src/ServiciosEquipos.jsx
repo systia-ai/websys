@@ -77,8 +77,6 @@ async function incrementarSerieContador(supabase) {
 export default function ServiciosEquipos({
   supabase,
   onHome,
-  onIrAClientes,
-  onIrAOrdenServicio,
   onOpenReparaciones,
   onError,
   onNotice,
@@ -665,24 +663,10 @@ export default function ServiciosEquipos({
           <span className="appbar-title-emoji" aria-hidden="true">🖨️</span>
           Equipos
         </h1>
-        {onIrAOrdenServicio || onIrAClientes ? (
-          <div className="appbar-actions-cluster">
-            {onIrAOrdenServicio ? (
-              <button
-                type="button"
-                className="appbar-text-btn appbar-text-btn--narrow"
-                onClick={onIrAOrdenServicio}
-                title="Orden de servicio"
-              >
-                Orden
-              </button>
-            ) : null}
-            {onIrAClientes ? (
-              <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onIrAClientes}>
-                Clientes
-              </button>
-            ) : null}
-          </div>
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
         ) : (
           <span className="servicios-appbar-placeholder" aria-hidden />
         )}

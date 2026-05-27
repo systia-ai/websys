@@ -273,7 +273,13 @@ td{font-size:0.9rem}
             <span className="appbar-title-emoji" aria-hidden="true">💰</span>
             Corte de caja
           </h1>
-          <span className="servicios-appbar-placeholder" aria-hidden />
+          {onHome ? (
+            <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+              Inicio
+            </button>
+          ) : (
+            <span className="servicios-appbar-placeholder" aria-hidden />
+          )}
         </header>
 
         <div className="servicios-body corte-caja-body">
@@ -332,9 +338,13 @@ td{font-size:0.9rem}
           <span className="appbar-title-emoji" aria-hidden="true">💰</span>
           Corte de caja
         </h1>
-        <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={volverAElegirFechas}>
-          📅 Fechas
-        </button>
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
+        ) : (
+          <span className="servicios-appbar-placeholder" aria-hidden />
+        )}
       </header>
 
       <div className="servicios-body corte-caja-body">

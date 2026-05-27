@@ -4,7 +4,14 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
-import { aYmdLocalDesdeRaw, formatFechaLegibleEsMx, ymdHoyLocal, ymdLocalDesdeDate } from './reparacionUtils.js'
+import {
+  aYmdLocalDesdeRaw,
+  formatFechaLegibleEsMx,
+  TIPOS_SERVICIO_CANONICOS,
+  tipoServicioDeRep,
+  ymdHoyLocal,
+  ymdLocalDesdeDate,
+} from './reparacionUtils.js'
 import {
   crearSetEstatusTodos,
   contarOrdenesDuplicadas,
@@ -31,6 +38,7 @@ function leerVistaReportes() {
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
+const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function ymdHoy() {
@@ -117,10 +125,14 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [duplicadasExcluidas, setDuplicadasExcluidas] = useState(0)
 
   const [reparaciones, setReparaciones] = useState([])
+  const [equipos, setEquipos] = useState([])
   const [pagosPeriodo, setPagosPeriodo] = useState([])
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
+    () => new Set(TIPOS_SERVICIO_CANONICOS),
+  )
   const [vista, setVista] = useState(leerVistaReportes)
 
   function cambiarVista(modo) {
@@ -150,6 +162,25 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   useEffect(() => {
     void cargarClientes()
   }, [cargarClientes])
+
+  const cargarEquipos = useCallback(async () => {
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('equipos').select('*')
+        if (error) throw error
+        setEquipos(data ?? [])
+      } else {
+        setEquipos(readLs(LS_EQUIPOS, []))
+      }
+    } catch (e) {
+      onError?.(`Error al cargar equipos: ${e.message}`)
+      setEquipos([])
+    }
+  }, [supabase, onError])
+
+  useEffect(() => {
+    void cargarEquipos()
+  }, [cargarEquipos])
 
   const cargarDatosPeriodo = useCallback(
     async (ini, fin, estatusSet) => {
@@ -280,26 +311,45 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     return { total, entregadas, activas, totalPagos, totalCosto, porEstatus }
   }, [reparaciones, pagosPeriodo])
 
+  const equipoPorId = useMemo(() => {
+    const m = new Map()
+    for (const eq of equipos) {
+      if (eq?.id != null) m.set(String(eq.id), eq)
+    }
+    return m
+  }, [equipos])
+
   const filtrados = useMemo(() => {
+    const base =
+      tiposServicioSeleccionados.size === 0
+        ? []
+        : reparaciones.filter((r) => {
+            const tipoCanon = tipoServicioDeRep(r, equipoPorId, { usarEquipoSiFalta: true })
+            return tipoCanon != null && tiposServicioSeleccionados.has(tipoCanon)
+          })
     const t = busqueda.trim().toLowerCase()
-    if (!t) return reparaciones
-    return reparaciones.filter((r) => {
+    if (!t) return base
+    return base.filter((r) => {
       const id = String(r.id ?? '')
       const est = String(r.estatus ?? '').toLowerCase()
       const nom = nombreCliente(clientes, r.cliente_id).toLowerCase()
       const desc = String(r.descripcion_equipo ?? '').toLowerCase()
       const tipo = String(r.tipo_reparacion ?? '').toLowerCase()
       const tech = String(r.tecnico ?? '').toLowerCase()
+      const problema = String(r.problemas_reportados ?? '').toLowerCase()
+      const tipoCanon = String(tipoServicioDeRep(r, equipoPorId, { usarEquipoSiFalta: true }) ?? '').toLowerCase()
       return (
         id.includes(t) ||
         est.includes(t) ||
         nom.includes(t) ||
         desc.includes(t) ||
         tipo.includes(t) ||
-        tech.includes(t)
+        tech.includes(t) ||
+        problema.includes(t) ||
+        tipoCanon.includes(t)
       )
     })
-  }, [reparaciones, busqueda, clientes])
+  }, [reparaciones, busqueda, clientes, tiposServicioSeleccionados, equipoPorId])
 
   function volverAElegirFechas() {
     setPantalla('fechas')
@@ -311,6 +361,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     setSinColumnaFecha(false)
     setDuplicadasExcluidas(0)
     setBusqueda('')
+    setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_CANONICOS))
   }
 
   if (pantalla === 'estadisticas') {
@@ -326,6 +377,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         duplicadasExcluidas={duplicadasExcluidas}
         loading={loading}
         onVolver={estadisticasDesdeReporte ? () => setPantalla('resultados') : volverAElegirFechas}
+        onHome={onHome}
         filtrosSlot={
           !estadisticasDesdeReporte ? (
             <ReportesFiltrosCard
@@ -335,6 +387,10 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
               onFechaFin={setFechaFin}
               estatusSeleccionados={estatusSeleccionados}
               onEstatusSeleccionados={setEstatusSeleccionados}
+              tiposServicioSeleccionados={tiposServicioSeleccionados}
+              onTiposServicioSeleccionados={setTiposServicioSeleccionados}
+              busqueda={busqueda}
+              onBusqueda={setBusqueda}
               rangoInvalido={rangoInvalido}
             >
               <button
@@ -414,7 +470,13 @@ p{margin:0 0 16px;line-height:1.5}
             <span className="appbar-title-emoji" aria-hidden="true">📊</span>
             Reportes
           </h1>
-          <span className="servicios-appbar-placeholder" aria-hidden />
+          {onHome ? (
+            <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+              Inicio
+            </button>
+          ) : (
+            <span className="servicios-appbar-placeholder" aria-hidden />
+          )}
         </header>
         <div className="servicios-body corte-caja-body reportes-body">
           <ReportesFiltrosCard
@@ -424,6 +486,10 @@ p{margin:0 0 16px;line-height:1.5}
             onFechaFin={setFechaFin}
             estatusSeleccionados={estatusSeleccionados}
             onEstatusSeleccionados={setEstatusSeleccionados}
+            tiposServicioSeleccionados={tiposServicioSeleccionados}
+            onTiposServicioSeleccionados={setTiposServicioSeleccionados}
+            busqueda={busqueda}
+            onBusqueda={setBusqueda}
             rangoInvalido={rangoInvalido}
           >
             <div className="reportes-inicio-acciones">
@@ -460,9 +526,13 @@ p{margin:0 0 16px;line-height:1.5}
           <span className="appbar-title-emoji" aria-hidden="true">📊</span>
           Reportes
         </h1>
-        <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={volverAElegirFechas}>
-          📅 Periodo
-        </button>
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
+        ) : (
+          <span className="servicios-appbar-placeholder" aria-hidden />
+        )}
       </header>
 
       <div className="servicios-body corte-caja-body reportes-body">
@@ -565,17 +635,6 @@ p{margin:0 0 16px;line-height:1.5}
           >
             🖨 IMPRIMIR REPORTE
           </button>
-        </div>
-
-        <div className="servicios-search card-pad">
-          <span className="search-ico" aria-hidden>
-            🔍
-          </span>
-          <input
-            placeholder="Buscar en este reporte (no, cliente, estatus, equipo…)"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
         </div>
 
         <div className="inventario-vista-bar card-pad" role="group" aria-label="Modo de visualización">

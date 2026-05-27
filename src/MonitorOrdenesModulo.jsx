@@ -545,7 +545,13 @@ export default function MonitorOrdenesModulo({ supabase, onHome, onError, onNoti
           <span className="appbar-title-emoji" aria-hidden="true">📋</span>
           Monitor de órdenes
         </h1>
-        <span className="servicios-appbar-placeholder" aria-hidden />
+        {onHome ? (
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+            Inicio
+          </button>
+        ) : (
+          <span className="servicios-appbar-placeholder" aria-hidden />
+        )}
       </header>
 
       <div className="servicios-body">
