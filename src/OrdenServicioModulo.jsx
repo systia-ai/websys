@@ -30,12 +30,22 @@ export default function OrdenServicioModulo({
 }) {
   const mostrarFormulario = tieneSesionOrdenCargada(session)
 
-  function handleAtras() {
+  function volverAlBuscadorSiAplica() {
     if (mostrarFormulario && session?._fromSearch) {
       onClearOrdenSession?.()
-      return
+      return true
     }
+    return false
+  }
+
+  function handleAtras() {
+    if (volverAlBuscadorSiAplica()) return
     onHome?.()
+  }
+
+  function handleSalir() {
+    if (volverAlBuscadorSiAplica()) return
+    onSalir?.()
   }
 
   return (
@@ -82,7 +92,7 @@ export default function OrdenServicioModulo({
             ].join('|')}
             supabase={supabase}
             session={session ?? {}}
-            onSalir={onSalir}
+            onSalir={handleSalir}
             onError={onError}
             onNotice={onNotice}
             puedeEliminar={puedeEliminar}
