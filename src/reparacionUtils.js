@@ -459,27 +459,110 @@ export async function sincronizarEstatusCuentaPorSaldo(
     return { ...cuenta, ...patchSoloSaldo }
   }
 
-  // Pagos cubren el total de cargos → liquidada (total se conserva, saldo $0).
+  // Pagos cubren el total de cargos.
   const pagosCubrenTotal = totalVenta > 0.0001 && pagado >= totalVenta - 0.01
   if (!pagosCubrenTotal) return cuenta
 
+  // Cuenta pagada pero aún no entregada al cliente (sigue activa hasta liquidar o entregar orden).
+  if (est === 'PAGADA') {
+    const patchPagada = patchTotalesSaldoCuenta(totalVenta, 0, {
+      estatus: 'PAGADA',
+      fecha_liquidada: null,
+    })
+    if (supabase) {
+      await actualizarCuentaSupabase(supabase, cuenta.id, patchPagada)
+    }
+    return { ...cuenta, ...patchPagada }
+  }
+
+  // Ya liquidada: conservar total y saldo $0.
+  if (est === 'LIQUIDADA') {
+    const nowLiq = new Date().toISOString()
+    const patchLiq = patchTotalesSaldoCuenta(totalVenta, 0, {
+      estatus: 'LIQUIDADA',
+      fecha_liquidada: cuenta.fecha_liquidada ?? nowLiq,
+      updated_at: nowLiq,
+    })
+    const totalDesactualizado = Math.abs(Number(cuenta.total ?? 0) - totalVenta) > 0.01
+    const saldoDesactualizado = Math.abs(saldoDesdeCuenta(cuenta, pagos)) > 0.01
+    if (!totalDesactualizado && !saldoDesactualizado) {
+      return { ...cuenta, ...patchLiq }
+    }
+    if (supabase) {
+      await actualizarCuentaSupabase(supabase, cuenta.id, patchLiq)
+    }
+    return { ...cuenta, ...patchLiq }
+  }
+
+  // PENDIENTE con pagos completos: solo sincroniza saldo; no auto-liquida (el usuario elige en ventas).
+  const patchSoloSaldo = patchTotalesSaldoCuenta(totalVenta, 0, {
+    estatus: 'PENDIENTE',
+    fecha_liquidada: null,
+  })
+  if (supabase) {
+    await actualizarCuentaSupabase(supabase, cuenta.id, patchSoloSaldo)
+  }
+  return { ...cuenta, ...patchSoloSaldo }
+}
+
+/** Cuenta pagada en su total pero aún no liquidada (cliente no ha recogido, etc.). */
+export function estatusEsCuentaPagadaActiva(estatus) {
+  return String(estatus ?? '').trim().toUpperCase() === 'PAGADA'
+}
+
+/** Marca la cuenta como pagada (saldo $0) sin liquidar ni cerrar la orden. */
+export async function aplicarCuentaPagadaActiva(
+  supabase,
+  cuenta,
+  pagosCuenta = [],
+  { totalVenta: totalVentaOpt } = {},
+) {
+  if (!cuenta?.id) return cuenta
+  const pagos = pagosCuenta ?? []
+  const totalVenta =
+    totalVentaOpt != null ? Number(totalVentaOpt) : Number(cuenta.total ?? 0)
+  const patch = patchTotalesSaldoCuenta(totalVenta, 0, {
+    estatus: 'PAGADA',
+    fecha_liquidada: null,
+    updated_at: new Date().toISOString(),
+  })
+  if (supabase) {
+    await actualizarCuentaSupabase(supabase, cuenta.id, patch)
+  }
+  return { ...cuenta, ...patch }
+}
+
+/** Al marcar la orden ENTREGADA, cierra cuentas que quedaron en PAGADA con saldo $0. */
+export async function liquidarCuentaPagadaAlEntregarOrden(supabase, reparaId) {
+  if (!supabase || reparaId == null) return null
+  const rid = Number(reparaId)
+  if (!Number.isFinite(rid) || rid <= 0) return null
+  const { data: cuentas, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
+  if (error) throw error
+  const lista = cuentas ?? []
+  if (!lista.length) return null
+  let cuenta = lista[0]
+  for (const c of lista) {
+    const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+    const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
+    if (tNew >= tPrev) cuenta = c
+  }
+  if (!estatusEsCuentaPagadaActiva(cuenta.estatus)) return cuenta
+  const { data: pagos, error: ePag } = await supabase
+    .from('pagosclientes')
+    .select('*')
+    .eq('cuenta_id', cuenta.id)
+  if (ePag) throw ePag
+  const totalVenta = Number(cuenta.total ?? 0)
+  if (saldoPendienteCuenta(totalVenta, pagos ?? []) > 0.01) return cuenta
   const nowLiq = new Date().toISOString()
-  const patchLiq = patchTotalesSaldoCuenta(totalVenta, 0, {
+  const patch = patchTotalesSaldoCuenta(totalVenta, 0, {
     estatus: 'LIQUIDADA',
     fecha_liquidada: cuenta.fecha_liquidada ?? nowLiq,
     updated_at: nowLiq,
   })
-
-  const totalDesactualizado = Math.abs(Number(cuenta.total ?? 0) - totalVenta) > 0.01
-  const saldoDesactualizado = Math.abs(saldoDesdeCuenta(cuenta, pagos)) > 0.01
-  if (est === 'LIQUIDADA' && !totalDesactualizado && !saldoDesactualizado) {
-    return { ...cuenta, ...patchLiq }
-  }
-
-  if (supabase) {
-    await actualizarCuentaSupabase(supabase, cuenta.id, patchLiq)
-  }
-  return { ...cuenta, ...patchLiq }
+  await actualizarCuentaSupabase(supabase, cuenta.id, patch)
+  return { ...cuenta, ...patch }
 }
 
 /** @deprecated Alias; usa {@link sincronizarEstatusCuentaPorSaldo}. */

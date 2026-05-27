@@ -436,6 +436,13 @@ export default function ClientesModulo({
     }
   }
 
+  function cerrarModalCuentasVentas() {
+    setModalCuentasVentas(false)
+    if (clienteAccion?.id != null) {
+      setModalAcciones(true)
+    }
+  }
+
   const cargarOrdenesParaCliente = useCallback(
     async (cliente, { cerrarModalAcciones = false } = {}) => {
       const cli = normalizeClienteRow(cliente)
@@ -896,7 +903,7 @@ export default function ClientesModulo({
       )}
 
       {modalCuentasVentas && clienteAccion && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setModalCuentasVentas(false)}>
+        <div className="modal-backdrop" role="presentation" onClick={cerrarModalCuentasVentas}>
           <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{cuentaTitle}</h3>
@@ -919,7 +926,7 @@ export default function ClientesModulo({
               >
                 Nueva Cuenta
               </button>
-              <button type="button" className="secondary" onClick={() => setModalCuentasVentas(false)}>
+              <button type="button" className="secondary" onClick={cerrarModalCuentasVentas}>
                 Cerrar
               </button>
             </div>

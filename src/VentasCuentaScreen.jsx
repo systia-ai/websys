@@ -15,9 +15,10 @@ import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
   actualizarCuentaSupabase,
   aYmdLocalDesdeRaw,
-  formatFechaLegibleEsMx,
   marcarReparacionEntregadaSupabase,
   patchReparacionEntregada,
+  formatFechaLegibleEsMx,
+  aplicarCuentaPagadaActiva,
   sincronizarEstatusCuentaPorSaldo,
   sumPagosCuenta,
 } from './reparacionUtils.js'
@@ -248,6 +249,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const [productoIdSel, setProductoIdSel] = useState(0)
   const [productoContableSel, setProductoContableSel] = useState(true)
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
+  const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
 
@@ -394,9 +396,21 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
             const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
             if (adeudo > 0.01 || (totalSync <= 0.0001 && pagado > 0.0001 && est === 'LIQUIDADA')) {
               actualizada = { ...cuentaRow, estatus: 'PENDIENTE', total: totalSync, fecha_liquidada: null }
-            } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01 && est !== 'LIQUIDADA') {
-              const nowLiq = new Date().toISOString()
-              actualizada = { ...cuentaRow, total: 0, estatus: 'LIQUIDADA', fecha_liquidada: nowLiq }
+            } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
+              if (est === 'LIQUIDADA') {
+                const nowLiq = new Date().toISOString()
+                actualizada = {
+                  ...cuentaRow,
+                  total: totalSync,
+                  saldo: 0,
+                  estatus: 'LIQUIDADA',
+                  fecha_liquidada: cuentaRow.fecha_liquidada ?? nowLiq,
+                }
+              } else if (est === 'PAGADA') {
+                actualizada = { ...cuentaRow, total: totalSync, saldo: 0, estatus: 'PAGADA', fecha_liquidada: null }
+              } else {
+                actualizada = { ...cuentaRow, total: totalSync, saldo: 0, estatus: 'PENDIENTE', fecha_liquidada: null }
+              }
             }
             const list = readLs(LS_CUENTAS, [])
             writeLs(
@@ -463,12 +477,19 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         if (adeudo > 0.01) {
           next = { ...next, estatus: 'PENDIENTE', fecha_liquidada: null }
         } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
-          next = {
-            ...next,
-            total: totalSync,
-            saldo: 0,
-            estatus: 'LIQUIDADA',
-            fecha_liquidada: new Date().toISOString(),
+          const est = String(prev.estatus ?? '').toUpperCase()
+          if (est === 'LIQUIDADA') {
+            next = {
+              ...next,
+              total: totalSync,
+              saldo: 0,
+              estatus: 'LIQUIDADA',
+              fecha_liquidada: prev.fecha_liquidada ?? new Date().toISOString(),
+            }
+          } else if (est === 'PAGADA') {
+            next = { ...next, total: totalSync, saldo: 0, estatus: 'PAGADA', fecha_liquidada: null }
+          } else {
+            next = { ...next, total: totalSync, saldo: 0, estatus: 'PENDIENTE', fecha_liquidada: null }
           }
         }
         writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? next : c)))
@@ -551,6 +572,66 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     setModalFormaPagoTotal(true)
   }
 
+  function debePreguntarEstatusTrasPagoCompleto(lineasUi) {
+    const est = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '').toUpperCase()
+    if (est === 'LIQUIDADA' || est === 'PAGADA') return false
+    const cargos = totalCargosDesdeLineas(lineasUi)
+    if (cargos <= 0.0001) return false
+    return calcularSaldoPendiente(lineasUi, totalCargos) <= 0.0001
+  }
+
+  async function aplicarCuentaPagadaActivaDesdePantalla() {
+    if (!cuentaId) return
+    const totalCuenta = Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
+    let pagosSync = pagosDesdeLineas(lineas)
+    if (supabase) {
+      const { data: pagosDb, error: ePag } = await supabase
+        .from('pagosclientes')
+        .select('*')
+        .eq('cuenta_id', cuentaId)
+      if (!ePag && (pagosDb ?? []).length) pagosSync = pagosDb
+    }
+    const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
+    if (supabase) {
+      const actualizada = await aplicarCuentaPagadaActiva(supabase, base, pagosSync, {
+        totalVenta: totalCuenta,
+      })
+      setCuentaInfo(actualizada)
+    } else {
+      const list = readLs(LS_CUENTAS, [])
+      const patch = {
+        total: totalCuenta,
+        saldo: 0,
+        estatus: 'PAGADA',
+        fecha_liquidada: null,
+      }
+      writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...patch } : c)))
+      setCuentaInfo((prev) => (prev ? { ...prev, ...patch } : { id: cuentaId, ...patch }))
+    }
+  }
+
+  async function elegirLiquidarCuentaTrasPago() {
+    setModalEstatusPagoCero(false)
+    const ok = await aplicarLiquidacionCuenta({ avisar: false })
+    onNotice?.(
+      ok
+        ? 'Cuenta liquidada. La orden sigue activa hasta marcarla entregada en servicio.'
+        : 'No se pudo liquidar la cuenta.',
+    )
+  }
+
+  async function elegirCuentaActivaPagadaTrasPago() {
+    setModalEstatusPagoCero(false)
+    try {
+      await aplicarCuentaPagadaActivaDesdePantalla()
+      onNotice?.(
+        'Cuenta activa y pagada (saldo $0). La orden permanece pendiente de entrega hasta que la marque entregada.',
+      )
+    } catch (e) {
+      onError?.(`Error al guardar cuenta pagada: ${e.message}`)
+    }
+  }
+
   async function ejecutarPagoAdeudoTotal(formaPagoElegida) {
     if (pagandoAdeudoRef.current) return
     if (!cuentaId) {
@@ -572,42 +653,18 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
       forma_pago: formaPagoElegida,
     }
     try {
-      let pagoGuardado
-      if (supabase) {
-        pagoGuardado = await insertPagoCliente(supabase, row)
-        const nowLiq = new Date().toISOString()
-        await actualizarCuentaSupabase(supabase, cuentaId, {
-          total: 0,
-          estatus: 'LIQUIDADA',
-          fecha_liquidada: nowLiq,
-          updated_at: nowLiq,
-        })
-        if (reparaIdCuenta != null) {
-          await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
-        }
-      } else {
-        pagoGuardado = await insertPagoCliente(null, row, { nextLocalId })
-        const lc = readLs(LS_CUENTAS, [])
-        writeLs(
-          LS_CUENTAS,
-          lc.map((c) => (sameId(c.id, cuentaId) ? { ...c, total: 0, estatus: 'LIQUIDADA' } : c)),
-        )
-        if (reparaIdCuenta != null) {
-          const lr = readLs(LS_REP, [])
-          const patchEnt = patchReparacionEntregada()
-          writeLs(
-            LS_REP,
-            lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
-          )
-        }
-      }
-      setLineas((prev) => [...prev, crearLineaPago(pagoGuardado)])
-      setCuentaInfo((prev) =>
-        prev ? { ...prev, total: 0, estatus: 'LIQUIDADA' } : { total: 0, estatus: 'LIQUIDADA' },
-      )
+      const pagoGuardado = await insertPagoCliente(supabase, row, { nextLocalId })
+      const lineasNuevas = [...lineas, crearLineaPago(pagoGuardado)]
+      setLineas(lineasNuevas)
       setModalFormaPagoTotal(false)
       setModalPago(false)
-      onNotice?.(`Adeudo total liquidado ($${monto.toFixed(2)}) — ${formaPagoElegida}`)
+      if (debePreguntarEstatusTrasPagoCompleto(lineasNuevas)) {
+        setModalEstatusPagoCero(true)
+        onNotice?.(`Pago registrado ($${monto.toFixed(2)}) — ${formaPagoElegida}`)
+      } else {
+        await persistirTotalCuenta()
+        onNotice?.(`Pago registrado ($${monto.toFixed(2)}) — ${formaPagoElegida}`)
+      }
     } catch (e) {
       onError?.(`Error al pagar adeudo total: ${e.message}`)
     } finally {
@@ -638,17 +695,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     try {
       const pagoGuardado = await insertPagoCliente(supabase, row, { nextLocalId })
       const nuevasLineas = [...lineas, crearLineaPago(pagoGuardado)]
-      const nuevoTotal = sumSubtotales(nuevasLineas)
       setLineas(nuevasLineas)
       setModalPago(false)
-      if (Math.abs(nuevoTotal) <= 0.0001) {
-        const liq = await aplicarLiquidacionCuenta({ avisar: false, totalOverride: nuevoTotal })
-        onNotice?.(
-          liq
-            ? 'Pago registrado. Cuenta liquidada (saldo $0).'
-            : 'Pago registrado. Pulse LIQUIDAR CUENTA para cerrar la cuenta.',
-        )
+      if (debePreguntarEstatusTrasPagoCompleto(nuevasLineas)) {
+        setModalEstatusPagoCero(true)
+        onNotice?.('Pago registrado. Saldo en $0.00.')
       } else {
+        await persistirTotalCuenta()
         onNotice?.('Pago agregado')
       }
     } catch (e) {
@@ -1187,6 +1240,47 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
               </button>
               <button type="button" onClick={() => void registrarPago()} disabled={!selCat}>
                 Registrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalEstatusPagoCero && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setModalEstatusPagoCero(false)}>
+          <div className="modal modal-confirmar-datos" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header confirmar-datos-header">
+              <span className="confirmar-datos-header-ico" aria-hidden="true">
+                💰
+              </span>
+              <div>
+                <h3>Cuenta pagada (saldo $0.00)</h3>
+                <p className="confirmar-datos-lead">
+                  ¿Desea liquidar la cuenta o dejarla activa? Si el cliente aún no recoge, deje la cuenta activa y la
+                  orden pendiente de entrega.
+                </p>
+              </div>
+            </div>
+            <div className="modal-body">
+              <div className="confirmar-datos-recuadro">
+                <p className="ventas-estatus-pago-opcion">
+                  <strong>Liquidar cuenta:</strong> cierra la cuenta en el sistema.
+                </p>
+                <p className="ventas-estatus-pago-opcion">
+                  <strong>Dejar activa (pagada):</strong> saldo $0, cuenta en estatus PAGADA; la orden sigue hasta
+                  marcarla entregada en servicio.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer modal-footer-wrap">
+              <button type="button" className="secondary" onClick={() => setModalEstatusPagoCero(false)}>
+                Decidir después
+              </button>
+              <button type="button" className="btn-cuentas" onClick={() => void elegirCuentaActivaPagadaTrasPago()}>
+                Activa pagada
+              </button>
+              <button type="button" className="btn-liquidar-cuenta" onClick={() => void elegirLiquidarCuentaTrasPago()}>
+                Liquidar cuenta
               </button>
             </div>
           </div>

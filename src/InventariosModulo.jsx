@@ -131,6 +131,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [precioCompra, setPrecioCompra] = useState('')
   const [precioVenta, setPrecioVenta] = useState('')
   const [contable, setContable] = useState(true)
+  const [dialogoSurtido, setDialogoSurtido] = useState(false)
+  const [productoSurtidoId, setProductoSurtidoId] = useState('')
+  const [cantidadSurtido, setCantidadSurtido] = useState('')
+  const [costoCompraSurtido, setCostoCompraSurtido] = useState('')
 
   const [eliminar, setEliminar] = useState(null)
 
@@ -177,6 +181,17 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     return base
   }, [productos, busqueda])
 
+  const productosContables = useMemo(() => {
+    const base = productos.filter((p) => esProductoContable(p))
+    base.sort(compararProductosPorDescripcion)
+    return base
+  }, [productos])
+
+  const productoSurtidoSel = useMemo(() => {
+    if (!productoSurtidoId) return null
+    return productosContables.find((p) => sameId(p.id, productoSurtidoId)) ?? null
+  }, [productosContables, productoSurtidoId])
+
   function abrirNuevo() {
     setEditando(null)
     setTipoProducto('CONSUMIBLE')
@@ -187,6 +202,17 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     setPrecioVenta('')
     setContable(true)
     setDialogo(true)
+  }
+
+  function abrirSurtido() {
+    if (productosContables.length === 0) {
+      onError?.('No hay productos contables para surtir. Agregue uno primero.')
+      return
+    }
+    setProductoSurtidoId(String(productosContables[0].id))
+    setCantidadSurtido('')
+    setCostoCompraSurtido('')
+    setDialogoSurtido(true)
   }
 
   function abrirEditar(p) {
@@ -277,6 +303,50 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
     }
   }
 
+  async function guardarSurtido() {
+    const prod = productoSurtidoSel
+    if (!prod?.id) {
+      onError?.('Seleccione un producto para surtir')
+      return
+    }
+    const entrada = toIntOrNull(cantidadSurtido)
+    if (!Number.isFinite(entrada) || entrada <= 0) {
+      onError?.('La cantidad de surtido debe ser mayor a 0')
+      return
+    }
+    const costoCompra = costoCompraSurtido.trim() ? toNum(costoCompraSurtido) : null
+    if (costoCompraSurtido.trim() && (costoCompra == null || costoCompra <= 0)) {
+      onError?.('Ingrese un costo de compra válido')
+      return
+    }
+
+    const exActual = toIntOrNull(prod.existencia) ?? 0
+    const cantActual = toIntOrNull(prod.cantidad) ?? 0
+    const payload = {
+      existencia: exActual + entrada,
+      cantidad: cantActual + entrada,
+    }
+    if (costoCompra != null) payload.precio_compra = costoCompra
+
+    try {
+      if (supabase) {
+        const { error } = await supabase.from('productos').update(payload).eq('id', prod.id)
+        if (error) throw error
+      } else {
+        const list = readLs(LS_PRODUCTOS, [])
+        writeLs(
+          LS_PRODUCTOS,
+          list.map((x) => (sameId(x.id, prod.id) ? { ...x, ...payload } : x)),
+        )
+      }
+      setDialogoSurtido(false)
+      await cargarProductos()
+      onNotice?.(`Surtido registrado: +${entrada} a ${prod.serie || prod.descripcion || 'producto'}`)
+    } catch (e) {
+      onError?.(`Error al registrar surtido: ${e.message}`)
+    }
+  }
+
   async function generarSerieProducto() {
     const tipo = String(tipoProducto ?? '').trim().toUpperCase()
     const pref = prefijoSeriePorTipo(tipo)
@@ -342,6 +412,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   }
 
   function handleAtras() {
+    if (dialogoSurtido) {
+      setDialogoSurtido(false)
+      return
+    }
     if (eliminar) {
       setEliminar(null)
       return
@@ -367,6 +441,9 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       </header>
 
       <div className="servicios-body">
+        <button type="button" className="btn-agregar-equipo btn-surtir-inventario" onClick={abrirSurtido}>
+          + SURTIR INVENTARIO
+        </button>
         <button type="button" className="btn-agregar-equipo btn-agregar-inventario" onClick={abrirNuevo}>
           + AGREGAR PRODUCTO
         </button>
@@ -613,6 +690,63 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
               </button>
               <button type="button" onClick={() => void guardar()}>
                 {editando ? 'Actualizar' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dialogoSurtido && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setDialogoSurtido(false)}>
+          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Registrar surtido de inventario</h3>
+            </div>
+            <div className="modal-body form-stack">
+              <label>
+                Producto
+                <select value={productoSurtidoId} onChange={(e) => setProductoSurtidoId(e.target.value)}>
+                  {productosContables.map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {(p.serie || 'SIN SERIE') + ' · ' + (p.descripcion || 'SIN DESCRIPCIÓN')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="inventarios-surtido-resumen">
+                <p>
+                  <strong>Existencia actual:</strong> {toIntOrNull(productoSurtidoSel?.existencia) ?? 0}
+                </p>
+                <p>
+                  <strong>Nueva existencia:</strong>{' '}
+                  {(toIntOrNull(productoSurtidoSel?.existencia) ?? 0) + (toIntOrNull(cantidadSurtido) ?? 0)}
+                </p>
+              </div>
+              <label>
+                Cantidad comprada
+                <input
+                  inputMode="numeric"
+                  value={cantidadSurtido}
+                  onChange={(e) => setCantidadSurtido(e.target.value)}
+                  placeholder="Ej. 12"
+                />
+              </label>
+              <label>
+                Costo compra unitario (opcional)
+                <input
+                  inputMode="decimal"
+                  value={costoCompraSurtido}
+                  onChange={(e) => setCostoCompraSurtido(e.target.value)}
+                  placeholder="Ej. 85.50"
+                />
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary" onClick={() => setDialogoSurtido(false)}>
+                Cancelar
+              </button>
+              <button type="button" onClick={() => void guardarSurtido()}>
+                Guardar surtido
               </button>
             </div>
           </div>

@@ -29,6 +29,7 @@ import {
   corregirEntregadaIndebidaSiAplica,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
+  liquidarCuentaPagadaAlEntregarOrden,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -789,6 +790,31 @@ export default function ReparacionesOrden({
       setEstatus(estatusGuardar)
       if (estatusEsEntregado(estatusGuardar)) {
         await cargarCuentaYEntregaAux(id)
+        if (supabase) {
+          try {
+            await liquidarCuentaPagadaAlEntregarOrden(supabase, id)
+          } catch (eLiq) {
+            console.warn('No se pudo liquidar cuenta PAGADA al entregar:', eLiq.message)
+          }
+        } else {
+          const cuentas = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id, id))
+          for (const c of cuentas) {
+            if (String(c.estatus ?? '').toUpperCase() !== 'PAGADA') continue
+            writeLs(
+              LS_CUENTAS,
+              readLs(LS_CUENTAS, []).map((x) =>
+                sameId(x.id, c.id)
+                  ? {
+                      ...x,
+                      saldo: 0,
+                      estatus: 'LIQUIDADA',
+                      fecha_liquidada: new Date().toISOString(),
+                    }
+                  : x,
+              ),
+            )
+          }
+        }
       } else {
         setCuentaOrden(null)
         setYmdEntregaDesdePagos(null)

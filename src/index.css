@@ -548,6 +548,30 @@ td {
   background: #2e7d32;
 }
 
+.btn-surtir-inventario {
+  background: linear-gradient(135deg, #ff9800 0%, #ffb300 55%, #f57c00 100%);
+  color: #1f2937;
+  box-shadow: 0 6px 16px rgba(245, 124, 0, 0.35);
+  margin-bottom: 10px;
+}
+
+.btn-surtir-inventario:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
+.inventarios-surtido-resumen {
+  border: 1px solid #bbdefb;
+  border-left: 4px solid #1e88e5;
+  border-radius: 8px;
+  background: #f5faff;
+  padding: 10px 12px;
+}
+
+.inventarios-surtido-resumen p {
+  margin: 4px 0;
+}
+
 .inventario-clientes-lista {
   list-style: none;
   margin: 0;
@@ -4430,6 +4454,22 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   color: #0d47a1;
 }
 
+.rep-orden-badge--pagada {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+.clientes-cuentas-fila--pagada:hover {
+  background: #fff8e1 !important;
+}
+
+.ventas-estatus-pago-opcion {
+  margin: 8px 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .rep-orden-badge--entregada {
   background: #e8f5e9;
   color: #2e7d32;
@@ -4976,6 +5016,12 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 1rem;
   cursor: pointer;
   margin-bottom: 16px;
+}
+
+.btn-agregar-equipo.btn-surtir-inventario {
+  background: linear-gradient(135deg, #ff9800 0%, #ffb300 55%, #f57c00 100%);
+  color: #1f2937;
+  box-shadow: 0 6px 16px rgba(245, 124, 0, 0.35);
 }
 
 .servicios-search {

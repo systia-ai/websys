@@ -66,7 +66,9 @@ export default function ClientesCuentasVentasPanel({
       const saldo = saldoDesdeCuenta(cuenta, pagosC)
       const tipoPago = String(cuenta.tipo_pago ?? cuenta.tipoPago ?? '').trim()
       const estatus = String(cuenta.estatus ?? '—').trim() || '—'
-      const liquidada = estatus.toUpperCase() === 'LIQUIDADA'
+      const estatusUpper = estatus.toUpperCase()
+      const liquidada = estatusUpper === 'LIQUIDADA'
+      const pagadaActiva = estatusUpper === 'PAGADA'
       const ordenRef =
         cuenta.repara_id != null &&
         cuenta.repara_id !== '' &&
@@ -81,6 +83,7 @@ export default function ClientesCuentasVentasPanel({
         saldo,
         estatus,
         liquidada,
+        pagadaActiva,
         tipoPago: tipoPago || '—',
         ordenRef,
       }
@@ -180,7 +183,7 @@ export default function ClientesCuentasVentasPanel({
                   {filas.map((f) => (
                     <tr
                       key={f.cuenta.id}
-                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.liquidada ? ' clientes-cuentas-fila--liquidada' : ''}`}
+                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.liquidada ? ' clientes-cuentas-fila--liquidada' : ''}${f.pagadaActiva ? ' clientes-cuentas-fila--pagada' : ''}`}
                       role="button"
                       tabIndex={0}
                       title={`Abrir cuenta #${f.idCuenta}`}
@@ -202,9 +205,9 @@ export default function ClientesCuentasVentasPanel({
                       </td>
                       <td>
                         <span
-                          className={`rep-orden-badge rep-orden-badge--tabla${f.liquidada ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
+                          className={`rep-orden-badge rep-orden-badge--tabla${f.liquidada ? ' rep-orden-badge--entregada' : f.pagadaActiva ? ' rep-orden-badge--pagada' : ' rep-orden-badge--activa'}`}
                         >
-                          {f.estatus}
+                          {f.pagadaActiva ? 'Pagada (activa)' : f.estatus}
                         </span>
                       </td>
                       <td>{f.tipoPago}</td>
@@ -231,13 +234,13 @@ export default function ClientesCuentasVentasPanel({
                 <li key={f.cuenta.id}>
                   <button
                     type="button"
-                    className={`rep-activa-card cuenta-tarjeta-android cuentas-cliente-tile${f.liquidada ? ' rep-orden-entregada' : ''}`}
+                    className={`rep-activa-card cuenta-tarjeta-android cuentas-cliente-tile${f.liquidada ? ' rep-orden-entregada' : ''}${f.pagadaActiva ? ' rep-orden-pagada' : ''}`}
                     onClick={() => onSelectCuenta?.(f.cuenta)}
                   >
                     <span
-                      className={`rep-orden-badge${f.liquidada ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
+                      className={`rep-orden-badge${f.liquidada ? ' rep-orden-badge--entregada' : f.pagadaActiva ? ' rep-orden-badge--pagada' : ' rep-orden-badge--activa'}`}
                     >
-                      {f.estatus}
+                      {f.pagadaActiva ? 'Pagada (activa)' : f.estatus}
                     </span>
                     <strong>💳 Cuenta #{f.idCuenta}</strong>
                     {f.ordenRef ? (
