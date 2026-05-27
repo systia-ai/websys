@@ -38,6 +38,25 @@ function nextLocalClienteId(list) {
   return max + 1
 }
 
+function nextLocalCuentaId(list) {
+  const max = list.reduce((m, r) => {
+    const id = Number(r.id)
+    return Number.isFinite(id) && id > m ? id : m
+  }, 0)
+  return max + 1
+}
+
+function cuentaParaVentas(cuenta) {
+  if (!cuenta?.id) return undefined
+  return {
+    id: cuenta.id,
+    total: cuenta.total,
+    saldo: cuenta.saldo,
+    estatus: cuenta.estatus,
+    repara_id: cuenta.repara_id ?? null,
+  }
+}
+
 function readLs(key, fallback) {
   try {
     return JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback))
@@ -247,7 +266,7 @@ export default function ClientesModulo({
       setLoadingCuentas(true)
       setCuentasEncontradas([])
       setPagosClienteCuentas([])
-      setCuentaTitle(`Cuentas de ${cli.nombre || 'Cliente'}`)
+      setCuentaTitle(`Cuentas // Ventas · ${cli.nombre || 'Cliente'}`)
       setCuentaSubtitle('')
       try {
         let todasCuentas = []
@@ -353,13 +372,60 @@ export default function ClientesModulo({
     onRetornoVentasConsumido?.()
   }, [retornoVentas, onRetornoVentasConsumido, cargarCuentasParaCliente])
 
-  async function buscarCuentasCliente() {
+  async function crearCuentaVaciaParaCliente(cli) {
+    const row = {
+      cliente_id: cli.id,
+      total: 0,
+      saldo: 0,
+      estatus: 'PENDIENTE',
+      tipo_pago: 'EFECTIVO',
+      repara_id: null,
+    }
+    if (supabase) {
+      const { data, error } = await supabase.from('cuentas').insert(row).select('*').single()
+      if (error) throw error
+      return data
+    }
+    const list = readLs(LS_CUENTAS, [])
+    const nuevo = { id: nextLocalCuentaId(list), ...row, created_at: new Date().toISOString() }
+    writeLs(LS_CUENTAS, [nuevo, ...list])
+    return nuevo
+  }
+
+  async function abrirCuentasVentasCliente() {
     const cliente = clienteAccion
     if (!cliente?.id) {
       onError?.('Cliente sin ID válido')
       return
     }
-    await cargarCuentasParaCliente(cliente)
+    const cli = normalizeClienteRow(cliente)
+    setModalAcciones(false)
+    setClienteAccion(null)
+
+    try {
+      let tieneCuentas = false
+      if (supabase) {
+        const { count, error } = await supabase
+          .from('cuentas')
+          .select('id', { count: 'exact', head: true })
+          .eq('cliente_id', cli.id)
+        if (error) throw error
+        tieneCuentas = (count ?? 0) > 0
+      } else {
+        tieneCuentas = readLs(LS_CUENTAS, []).some((cu) => sameId(cu.cliente_id, cli.id))
+      }
+
+      if (!tieneCuentas) {
+        const nueva = await crearCuentaVaciaParaCliente(cli)
+        onOpenVentas?.({ cliente: cli, cuenta: cuentaParaVentas(nueva) })
+        onNotice?.('Cuenta nueva creada (venta sin orden de servicio)')
+        return
+      }
+
+      await cargarCuentasParaCliente(cli)
+    } catch (e) {
+      onError?.(`Error al abrir cuentas/ventas: ${e.message}`)
+    }
   }
 
   const cargarOrdenesParaCliente = useCallback(
@@ -537,14 +603,7 @@ export default function ClientesModulo({
     setClienteCuentasPanel(null)
     onOpenVentas?.({
       cliente,
-      cuenta: cuenta
-        ? {
-            id: cuenta.id,
-            total: cuenta.total,
-            estatus: cuenta.estatus,
-            repara_id: cuenta.repara_id,
-          }
-        : undefined,
+      cuenta: cuentaParaVentas(cuenta),
     })
   }
 
@@ -808,8 +867,8 @@ export default function ClientesModulo({
               <button type="button" className="btn-servicio" onClick={() => void buscarOrdenesServicioCliente()}>
                 Servicio
               </button>
-              <button type="button" className="btn-cuentas" onClick={() => void buscarCuentasCliente()}>
-                Cuentas
+              <button type="button" className="btn-cuentas" onClick={() => void abrirCuentasVentasCliente()}>
+                Cuentas // Ventas
               </button>
               <button
                 type="button"
