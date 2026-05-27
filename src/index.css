@@ -962,7 +962,8 @@ td {
 .tabla-scroll-wrap.inventarios-lista-tabla-wrap,
 .tabla-scroll-wrap.orden-resultados-tabla-wrap,
 .tabla-scroll-wrap.table-wrap,
-.tabla-scroll-wrap.monitor-ordenes-tabla-wrap {
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap,
+.tabla-scroll-wrap.corte-caja-tabla-wrap {
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -974,7 +975,8 @@ td {
 .tabla-scroll-wrap.inventarios-lista-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.table-wrap > .inventario-tabla-scroll,
-.tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll {
+.tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll {
   overflow-x: auto;
   overflow-y: auto;
   flex: 1;
@@ -1364,6 +1366,24 @@ td {
 .corte-caja-body {
   max-width: 960px;
   margin: 0 auto;
+}
+
+.corte-caja-module-wrap:has(.corte-caja-modulo--tabla) {
+  max-width: none;
+  width: 100%;
+}
+
+.corte-caja-modulo--tabla {
+  min-height: 100vh;
+}
+
+.corte-caja-modulo--tabla .corte-caja-body,
+.corte-caja-body--tabla {
+  max-width: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .corte-caja-hero-card {
@@ -3188,8 +3208,79 @@ td {
   color: #e65100;
 }
 
-.corte-caja-tabla-grid {
-  min-width: 920px;
+/* Corte de caja — tabla a ancho completo (sin barra horizontal) */
+.tabla-scroll-wrap.corte-caja-tabla-wrap {
+  flex: 1;
+  min-height: 200px;
+  max-height: min(62vh, 720px);
+  margin-top: 4px;
+  padding: 0;
+  border: 1px solid #b3e5fc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fafcff 0%, #fff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 2px 10px rgba(33, 150, 243, 0.08);
+}
+
+.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll-hint,
+.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll-top {
+  display: none;
+}
+
+.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin-bottom: 0;
+  padding: 8px 10px 12px;
+  border: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: none;
+  background: transparent;
+}
+
+.corte-caja-tabla-grid.inventario-tabla-grid {
+  min-width: 0;
+  width: 100%;
+}
+
+.corte-caja-tabla-grid .inventario-tabla-fila-grupo {
+  min-width: 0;
+  width: 100%;
+}
+
+.corte-caja-tabla-grid .inventario-tabla-grupo-celdas {
+  display: grid;
+  grid-template-columns:
+    minmax(88px, 0.7fr)
+    minmax(120px, 2fr)
+    minmax(100px, 1.4fr)
+    minmax(56px, 0.45fr)
+    minmax(96px, 0.85fr)
+    minmax(92px, 0.65fr);
+  width: 100%;
+  flex: none;
+}
+
+.corte-caja-tabla-grid .inventario-celda--monto-cat,
+.corte-caja-tabla-grid .inventario-celda--concepto,
+.corte-caja-tabla-grid .inventario-celda--cliente-corte,
+.corte-caja-tabla-grid .inventario-celda--cuenta-corte,
+.corte-caja-tabla-grid .inventario-celda--forma-corte,
+.corte-caja-tabla-grid .inventario-celda--fecha-corte {
+  flex: unset;
+  min-width: 0;
+}
+
+.corte-caja-tabla-grid .inventario-celda--concepto,
+.corte-caja-tabla-grid .inventario-celda--cliente-corte {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
 .inventario-celda--cliente-corte {

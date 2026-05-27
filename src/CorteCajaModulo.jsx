@@ -329,7 +329,9 @@ td{font-size:0.9rem}
   }
 
   return (
-    <div className="servicios-root inventarios-root corte-caja-root">
+    <div
+      className={`servicios-root inventarios-root corte-caja-root${vista === 'tabla' && periodoAplicado ? ' corte-caja-modulo--tabla' : ''}`}
+    >
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={volverAElegirFechas} aria-label="Atrás">
           ←
@@ -347,7 +349,7 @@ td{font-size:0.9rem}
         )}
       </header>
 
-      <div className="servicios-body corte-caja-body">
+      <div className={`servicios-body corte-caja-body${vista === 'tabla' ? ' corte-caja-body--tabla' : ''}`}>
         {periodoAplicado ? (
           <div className="corte-caja-periodo-banner card-pad" role="status">
             <span className="corte-caja-periodo-ico" aria-hidden="true">
@@ -485,6 +487,7 @@ td{font-size:0.9rem}
           <TablaScrollSuperior
             ariaLabel="Movimientos del corte en tabla"
             classNameWrap="corte-caja-tabla-wrap"
+            showHint={false}
             syncDeps={[vista, filtrados, loadingCorte]}
           >
               <div className="inventario-tabla-grid corte-caja-tabla-grid">

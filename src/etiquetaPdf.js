@@ -1,6 +1,9 @@
 import { jsPDF } from 'jspdf'
 
-/** 2 in × 1 in (51 × 25 mm), orientación horizontal tipo etiqueta adhesiva. */
+/** Etiqueta adhesiva 2 in (ancho) × 1 in (alto). */
+export const ETIQUETA_IN_W = 2
+export const ETIQUETA_IN_H = 1
+/** Mismas medidas en mm que antes (51 × 25). */
 export const ETIQUETA_MM_W = 51
 export const ETIQUETA_MM_H = 25
 
@@ -48,6 +51,7 @@ export function createEtiquetaPdf(p) {
   const pdf = new jsPDF({
     unit: 'mm',
     format: [ETIQUETA_MM_W, ETIQUETA_MM_H],
+    /** jsPDF: landscape deja 51×25 mm (2″×1″ ancho); portrait lo voltea a vertical. */
     orientation: 'landscape',
     compress: true,
   })
@@ -147,62 +151,85 @@ export function downloadEtiquetaPdf(p) {
 }
 
 /**
- * Abre el diálogo de impresión del navegador con el PDF de etiqueta (2×1 in).
+ * Abre el diálogo de impresión con el PDF a tamaño real de etiqueta (2×1 in / 51×25 mm).
  * @param {{ nombre: string, orden: string|number, qrDataUrl: string }} p
  * @returns {Promise<void>}
  */
 export function printEtiquetaPdf(p) {
   const pdf = createEtiquetaPdf(p)
-  if (typeof pdf.autoPrint === 'function') {
-    pdf.autoPrint()
-  }
-
-  const blob = pdf.output('blob')
-  const url = URL.createObjectURL(blob)
+  const url = pdf.output('bloburl')
 
   return new Promise((resolve, reject) => {
-    const iframe = document.createElement('iframe')
-    iframe.setAttribute('title', 'Imprimir etiqueta')
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;'
-    document.body.appendChild(iframe)
-
     let settled = false
 
-    function quitarIframe() {
-      URL.revokeObjectURL(url)
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-    }
-
-    function fallar(err) {
+    function terminar(ok, err) {
       if (settled) return
       settled = true
-      quitarIframe()
-      reject(err instanceof Error ? err : new Error(String(err)))
+      window.setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url)
+        } catch {
+          /* ignore */
+        }
+      }, 60000)
+      if (ok) resolve()
+      else reject(err instanceof Error ? err : new Error(String(err)))
     }
 
     const timer = window.setTimeout(() => {
-      fallar(new Error('Tiempo de espera al cargar la etiqueta para imprimir.'))
+      terminar(false, new Error('Tiempo de espera al cargar la etiqueta para imprimir.'))
     }, 15000)
+
+    /** Ventana con visor PDF: respeta el tamaño de página 51×25 mm como al descargar. */
+    const printWin = window.open(url, '_blank', 'noopener,noreferrer')
+    if (printWin) {
+      let printLanzado = false
+      const lanzarPrint = () => {
+        if (printLanzado) return
+        printLanzado = true
+        window.clearTimeout(timer)
+        try {
+          printWin.focus()
+          printWin.print()
+          terminar(true)
+        } catch (e) {
+          terminar(false, e)
+        }
+      }
+      printWin.addEventListener('load', lanzarPrint, { once: true })
+      window.setTimeout(lanzarPrint, 900)
+      return
+    }
+
+    /** Respaldo: iframe con tamaño físico de etiqueta (no 0×0, que escala mal). */
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('title', 'Imprimir etiqueta')
+    iframe.style.cssText = `position:fixed;left:0;top:0;width:${ETIQUETA_MM_W}mm;height:${ETIQUETA_MM_H}mm;border:none;opacity:0;pointer-events:none;`
+    document.body.appendChild(iframe)
+
+    function quitarIframe() {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+    }
 
     iframe.onload = () => {
       window.clearTimeout(timer)
-      if (settled) return
       try {
         const win = iframe.contentWindow
         if (!win) throw new Error('No se pudo acceder al visor de impresión.')
         win.focus()
         win.print()
-        settled = true
-        resolve()
+        terminar(true)
         window.setTimeout(quitarIframe, 1500)
       } catch (e) {
-        fallar(e)
+        quitarIframe()
+        terminar(false, e)
       }
     }
 
     iframe.onerror = () => {
       window.clearTimeout(timer)
-      fallar(new Error('No se pudo cargar el PDF de la etiqueta.'))
+      quitarIframe()
+      terminar(false, new Error('No se pudo cargar el PDF de la etiqueta.'))
     }
 
     iframe.src = url

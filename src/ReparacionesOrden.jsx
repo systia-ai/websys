@@ -1062,11 +1062,11 @@ export default function ReparacionesOrden({
     }
 
     try {
-      const { printEtiquetaPdf } = await import('./etiquetaPdf.js')
-      await printEtiquetaPdf({ nombre, orden: ord, qrDataUrl })
-      onNotice('Diálogo de impresión abierto (etiqueta 2×1 in). Elija su impresora de etiquetas.')
+      const { downloadEtiquetaPdf } = await import('./etiquetaPdf.js')
+      downloadEtiquetaPdf({ nombre, orden: ord, qrDataUrl })
+      onNotice('PDF de etiqueta descargado (2×1 in).')
     } catch (e) {
-      onError(`No se pudo imprimir la etiqueta: ${e?.message ?? e}`)
+      onError(`No se pudo generar el PDF de la etiqueta: ${e?.message ?? e}`)
     }
   }
 
@@ -1534,7 +1534,7 @@ export default function ReparacionesOrden({
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
-            Imprimir etiqueta
+            Imprimir etiqueta (PDF)
           </button>
           <button type="button" className="btn-primary wide" disabled={!puedeAccionesPdf} onClick={enviarOrdenPdf}>
             Enviar orden de servicio
