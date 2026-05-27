@@ -126,6 +126,30 @@ body {
   background: #bbdefb;
 }
 
+.home-header-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.home-header-role--admin {
+  color: #2e7d32;
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+}
+
+.home-header-role--tecnico {
+  color: #ef6c00;
+  background: #fff8e1;
+  border-color: #ffcc80;
+}
+
 .header.home-header h1 {
   color: #0d47a1;
   font-size: clamp(1.35rem, 2.5vw, 2rem);
@@ -1267,7 +1291,8 @@ td {
 .catalogo-pagos-module-wrap,
 .corte-caja-module-wrap,
 .reportes-module-wrap,
-.monitor-ordenes-module-wrap {
+.monitor-ordenes-module-wrap,
+.administracion-module-wrap {
   padding: 0;
   background: transparent;
   box-shadow: none;
@@ -1286,7 +1311,10 @@ td {
 .reportes-module-wrap > .error,
 .reportes-module-wrap > .ok,
 .monitor-ordenes-module-wrap > .warning,
-.monitor-ordenes-module-wrap > .error {
+.monitor-ordenes-module-wrap > .error,
+.administracion-module-wrap > .warning,
+.administracion-module-wrap > .error,
+.administracion-module-wrap > .ok {
   margin: 0 0 12px 0;
 }
 
@@ -6518,4 +6546,77 @@ input.full {
   color: rgba(255, 255, 255, 0.9);
   font-size: 1.1rem;
   text-align: center;
+}
+
+.administracion-body {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.administracion-panel {
+  margin-bottom: 12px;
+  border: 1px solid #bbdefb;
+  background: linear-gradient(180deg, #f5fbff 0%, #fff 100%);
+}
+
+.administracion-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.administracion-panel-head h2 {
+  margin: 0;
+}
+
+.administracion-panel-help {
+  margin: 6px 0 0;
+}
+
+.administracion-tabla-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.administracion-tabla th,
+.administracion-tabla td {
+  vertical-align: middle;
+}
+
+.administracion-rol-select {
+  min-width: 120px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #90caf9;
+  font-weight: 700;
+}
+
+.administracion-rol-select--admin {
+  background: #e8f5e9;
+  border-color: #a5d6a7;
+  color: #2e7d32;
+}
+
+.administracion-rol-select--tecnico {
+  background: #fff8e1;
+  border-color: #ffcc80;
+  color: #ef6c00;
+}
+
+.administracion-btn-borrar-rol {
+  white-space: nowrap;
+}
+
+.admin-alerta-permiso {
+  position: sticky;
+  top: 12px;
+  z-index: 50;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #ef5350;
+  background: linear-gradient(135deg, #fff9c4 0%, #ffcdd2 100%);
+  color: #b71c1c;
+  box-shadow: 0 4px 14px rgba(183, 28, 28, 0.24);
 }

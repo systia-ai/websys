@@ -71,6 +71,13 @@ export default function HomeModuleIcon({ moduleKey }) {
           <path d="M8 21h8M12 17v4" />
         </svg>
       )
+    case 'administracion':
+      return (
+        <svg {...common}>
+          <path d="M12 2 4 5v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V5l-8-3z" />
+          <path d="M9.5 12.5 11.5 14.5 15.5 10.5" />
+        </svg>
+      )
     default:
       return (
         <svg {...common}>

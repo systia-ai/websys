@@ -10,6 +10,7 @@ import CatalogoPagosModulo from './CatalogoPagosModulo.jsx'
 import CorteCajaModulo from './CorteCajaModulo.jsx'
 import ReportesModulo from './ReportesModulo.jsx'
 import MonitorOrdenesModulo from './MonitorOrdenesModulo.jsx'
+import AdministracionModulo from './AdministracionModulo.jsx'
 import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
@@ -27,6 +28,7 @@ const homeMenuItems = [
   { key: 'corte_caja', title: 'Corte de Caja', table: 'pagosclientes' },
   { key: 'reportes', title: 'Reportes', table: 'reparaciones' },
   { key: 'monitor_ordenes', title: 'MONITOR de ORDENES', table: 'reparaciones' },
+  { key: 'administracion', title: 'Administración', table: 'user_roles' },
 ]
 
 function App() {
@@ -48,6 +50,8 @@ function App() {
   const [clientesRetornoVentas, setClientesRetornoVentas] = useState(null)
   /** Al volver de Orden de servicio → Clientes, reabrir la lista de órdenes del mismo cliente. */
   const [clientesRetornoOrdenes, setClientesRetornoOrdenes] = useState(null)
+  const [rolUsuario, setRolUsuario] = useState('ADMIN')
+  const [rolesReady, setRolesReady] = useState(false)
 
   const limpiarRetornoVentasClientes = useCallback(() => {
     setClientesRetornoVentas(null)
@@ -63,6 +67,47 @@ function App() {
   useEffect(() => {
     activeModuleRef.current = activeModule
   }, [activeModule])
+
+  useEffect(() => {
+    let cancelado = false
+    async function cargarRolUsuario() {
+      if (!supabase || !user?.id) {
+        if (!cancelado) {
+          setRolUsuario('ADMIN')
+          setRolesReady(true)
+        }
+        return
+      }
+      try {
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('rol')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (error) throw error
+        const rol = String(data?.rol ?? 'ADMIN').toUpperCase()
+        if (!cancelado) setRolUsuario(rol === 'ADMIN' ? 'ADMIN' : 'TECNICO')
+      } catch (e) {
+        const msg = String(e?.message ?? '')
+        if (/relation .*user_roles.* does not exist/i.test(msg)) {
+          if (!cancelado) setRolUsuario('ADMIN')
+        } else {
+          if (!cancelado) setRolUsuario('ADMIN')
+          setError(`No se pudo verificar rol de usuario: ${msg}`)
+          setTimeout(() => setError(''), 6000)
+        }
+      } finally {
+        if (!cancelado) setRolesReady(true)
+      }
+    }
+    setRolesReady(false)
+    void cargarRolUsuario()
+    return () => {
+      cancelado = true
+    }
+  }, [supabase, user?.id])
+
+  const esAdmin = rolUsuario === 'ADMIN'
 
   function navigateTo(nextKey) {
     if (nextKey === 'home') {
@@ -144,7 +189,13 @@ function App() {
   const filteredRows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
 
   useEffect(() => {
-    if (!current || activeModule === 'servicios' || activeModule === 'reparaciones' || activeModule === 'clientes')
+    if (
+      !current ||
+      activeModule === 'servicios' ||
+      activeModule === 'reparaciones' ||
+      activeModule === 'clientes' ||
+      activeModule === 'administracion'
+    )
       return
     if (activeModule === 'ventas' && ventasContext) return
     loadRows()
@@ -258,6 +309,9 @@ function App() {
                   </span>
                   <span className="home-header-user-email">{user.email}</span>
                 </span>
+                <span className={`home-header-role home-header-role--${String(rolUsuario).toLowerCase()}`}>
+                  Rol: {rolUsuario}
+                </span>
                 <button type="button" className="home-header-signout" onClick={() => signOut()}>
                   Cerrar sesión
                 </button>
@@ -291,6 +345,14 @@ function App() {
   }
 
   if (activeModule === 'home') return renderHome()
+
+  if (!rolesReady) {
+    return (
+      <main className="module">
+        <p className="muted center">Verificando permisos…</p>
+      </main>
+    )
+  }
 
   if (activeModule === 'clientes') {
     return (
@@ -442,6 +504,32 @@ function App() {
             setTimeout(() => setNotice(''), 4000)
           }}
           onEditarOrden={(payload) => openReparacionesFromServicios(payload)}
+        />
+      </main>
+    )
+  }
+
+  if (activeModule === 'administracion') {
+    return (
+      <main className="module administracion-module-wrap">
+        {!supabase && (
+          <p className="warning">Modo local: la administración de roles requiere Supabase configurado.</p>
+        )}
+        {error && <p className="error">{error}</p>}
+        {notice && <p className="ok">{notice}</p>}
+        <AdministracionModulo
+          supabase={supabase}
+          onHome={goBack}
+          isAdmin={esAdmin}
+          miRol={rolUsuario}
+          onError={(msg) => {
+            setError(msg)
+            setTimeout(() => setError(''), 6000)
+          }}
+          onNotice={(msg) => {
+            setNotice(msg)
+            setTimeout(() => setNotice(''), 4000)
+          }}
         />
       </main>
     )
