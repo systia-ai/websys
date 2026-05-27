@@ -1,15 +1,15 @@
 /* eslint-disable react-hooks/set-state-in-effect -- efecto de carga inicial de clientes (Supabase/local) */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { confirmarDatosAntesDeGuardar } from './confirmarDatosUtils.js'
+import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { cargarTodosPagosClientes } from './pagosClientesUtils.js'
 import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
   sincronizarEstatusCuentaPorSaldo,
 } from './reparacionUtils.js'
+import ClientesCuentasVentasPanel from './ClientesCuentasVentasPanel.jsx'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
-import CuentasClientePanel from './CuentasClientePanel.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -100,6 +100,8 @@ export default function ClientesModulo({
   const [textoBusqueda, setTextoBusqueda] = useState('')
 
   const [dialogoCliente, setDialogoCliente] = useState(false)
+  const [modalConfirmGuardarCliente, setModalConfirmGuardarCliente] = useState(false)
+  const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
   const [domicilio, setDomicilio] = useState('')
@@ -109,13 +111,14 @@ export default function ClientesModulo({
   const [modalAcciones, setModalAcciones] = useState(false)
   const [clienteAccion, setClienteAccion] = useState(null)
 
-  const [panelCuentasAbierto, setPanelCuentasAbierto] = useState(false)
-  const [clienteCuentasPanel, setClienteCuentasPanel] = useState(null)
+  const [modalCuentasVentas, setModalCuentasVentas] = useState(false)
   const [cuentasEncontradas, setCuentasEncontradas] = useState([])
   const [pagosClienteCuentas, setPagosClienteCuentas] = useState([])
   const [loadingCuentas, setLoadingCuentas] = useState(false)
-  const [cuentaTitle, setCuentaTitle] = useState('Cuentas del Cliente')
+  const [cuentaTitle, setCuentaTitle] = useState('Cuentas / Ventas')
   const [cuentaSubtitle, setCuentaSubtitle] = useState('')
+  /** Resumen del modal de cuentas (totales por cliente). null si error o aún no cargado. */
+  const [cuentaResumen, setCuentaResumen] = useState(null)
 
   const [modalRepActivas, setModalRepActivas] = useState(false)
   const [repsActivas, setRepsActivas] = useState([])
@@ -193,7 +196,7 @@ export default function ClientesModulo({
     setDialogoCliente(true)
   }
 
-  async function guardarCliente() {
+  function solicitarGuardarCliente() {
     if (!nombre.trim()) {
       onError?.('El nombre es requerido')
       return
@@ -202,19 +205,17 @@ export default function ClientesModulo({
       onError?.('El teléfono es requerido')
       return
     }
-    if (
-      !confirmarDatosAntesDeGuardar(
-        `Nombre: ${nombre.trim()}\nTeléfono: ${telefono.trim()}`,
-      )
-    ) {
-      return
-    }
+    setModalConfirmGuardarCliente(true)
+  }
+
+  async function ejecutarGuardarCliente() {
     const row = {
       nombre: nombre.trim().toUpperCase(),
       telefono: telefono.trim(),
       domicilio: domicilio.trim().toUpperCase(),
       correo: correo.trim().toLowerCase(),
     }
+    setGuardandoCliente(true)
     try {
       if (supabase) {
         if (clienteEditando?.id != null) {
@@ -240,11 +241,14 @@ export default function ClientesModulo({
           onNotice?.('Cliente agregado')
         }
       }
+      setModalConfirmGuardarCliente(false)
       setDialogoCliente(false)
       setClienteEditando(null)
       await cargarClientes()
     } catch (e) {
       onError?.(`Error al guardar cliente: ${e.message}`)
+    } finally {
+      setGuardandoCliente(false)
     }
   }
 
@@ -253,21 +257,21 @@ export default function ClientesModulo({
     setModalAcciones(true)
   }
 
-  const cargarCuentasParaCliente = useCallback(
-    async (cliente) => {
+  const cargarCuentasVentasModal = useCallback(
+    async (cliente, { cerrarModalAcciones = false } = {}) => {
       if (!cliente?.id) {
         onError?.('Cliente sin ID válido')
         return
       }
       const cli = normalizeClienteRow(cliente)
-      setModalAcciones(false)
-      setClienteCuentasPanel(cli)
-      setPanelCuentasAbierto(true)
+      setClienteAccion(cli)
+      if (cerrarModalAcciones) setModalAcciones(false)
       setLoadingCuentas(true)
       setCuentasEncontradas([])
       setPagosClienteCuentas([])
-      setCuentaTitle(`Cuentas // Ventas · ${cli.nombre || 'Cliente'}`)
+      setCuentaTitle('Cuentas / Ventas')
       setCuentaSubtitle('')
+      setCuentaResumen(null)
       try {
         let todasCuentas = []
         if (supabase) {
@@ -339,16 +343,24 @@ export default function ClientesModulo({
         }
         setCuentasEncontradas(cuentasFinales)
         setPagosClienteCuentas(pagosDelCliente)
-        setCuentaSubtitle(
-          cuentasCliente.length === 0
-            ? 'No se encontraron cuentas para este cliente'
-            : `Se encontraron ${cuentasCliente.length} cuenta(s):`,
-        )
+        const n = cuentasFinales.length
+        const pendientes = cuentasFinales.filter(
+          (c) => String(c.estatus ?? '').toUpperCase() !== 'LIQUIDADA',
+        ).length
+        setCuentaResumen({
+          nombre: String(cli.nombre || 'Cliente').trim() || 'Cliente',
+          total: n,
+          pendientes,
+          liquidadas: n - pendientes,
+        })
+        setModalCuentasVentas(true)
       } catch (e) {
-        setCuentaTitle('Error')
-        setCuentaSubtitle(`Error al buscar cuentas: ${e.message}`)
+        setCuentaTitle('Error de búsqueda')
+        setCuentaResumen(null)
+        setCuentaSubtitle(`Error: ${e.message}`)
         setCuentasEncontradas([])
         setPagosClienteCuentas([])
+        setModalCuentasVentas(true)
       } finally {
         setLoadingCuentas(false)
       }
@@ -363,14 +375,13 @@ export default function ClientesModulo({
     setClienteAccion(cli)
     if (r.reopenCuentasPanel) {
       setModalAcciones(false)
-      void cargarCuentasParaCliente(cli)
+      void cargarCuentasVentasModal(cli)
     } else {
-      setClienteCuentasPanel(null)
-      setPanelCuentasAbierto(false)
+      setModalCuentasVentas(false)
       setModalAcciones(true)
     }
     onRetornoVentasConsumido?.()
-  }, [retornoVentas, onRetornoVentasConsumido, cargarCuentasParaCliente])
+  }, [retornoVentas, onRetornoVentasConsumido, cargarCuentasVentasModal])
 
   async function crearCuentaVaciaParaCliente(cli) {
     const row = {
@@ -398,33 +409,30 @@ export default function ClientesModulo({
       onError?.('Cliente sin ID válido')
       return
     }
+    await cargarCuentasVentasModal(cliente, { cerrarModalAcciones: true })
+  }
+
+  function seleccionarCuentaVentas(cuenta) {
+    const cliente = clienteAccion
+    if (!cliente) return
+    setModalCuentasVentas(false)
+    onOpenVentas?.({
+      cliente: normalizeClienteRow(cliente),
+      cuenta: cuentaParaVentas(cuenta),
+    })
+  }
+
+  async function nuevaCuentaVentasCliente() {
+    const cliente = clienteAccion
+    if (!cliente?.id) return
     const cli = normalizeClienteRow(cliente)
-    setModalAcciones(false)
-    setClienteAccion(null)
-
     try {
-      let tieneCuentas = false
-      if (supabase) {
-        const { count, error } = await supabase
-          .from('cuentas')
-          .select('id', { count: 'exact', head: true })
-          .eq('cliente_id', cli.id)
-        if (error) throw error
-        tieneCuentas = (count ?? 0) > 0
-      } else {
-        tieneCuentas = readLs(LS_CUENTAS, []).some((cu) => sameId(cu.cliente_id, cli.id))
-      }
-
-      if (!tieneCuentas) {
-        const nueva = await crearCuentaVaciaParaCliente(cli)
-        onOpenVentas?.({ cliente: cli, cuenta: cuentaParaVentas(nueva) })
-        onNotice?.('Cuenta nueva creada (venta sin orden de servicio)')
-        return
-      }
-
-      await cargarCuentasParaCliente(cli)
+      const nueva = await crearCuentaVaciaParaCliente(cli)
+      setModalCuentasVentas(false)
+      onOpenVentas?.({ cliente: cli, cuenta: cuentaParaVentas(nueva) })
+      onNotice?.('Cuenta nueva lista para venta')
     } catch (e) {
-      onError?.(`Error al abrir cuentas/ventas: ${e.message}`)
+      onError?.(`Error al crear cuenta: ${e.message}`)
     }
   }
 
@@ -596,25 +604,12 @@ export default function ClientesModulo({
     }
   }
 
-  function irVentasConCuenta(cuenta) {
-    const cliente = clienteCuentasPanel
-    if (!cliente) return
-    setPanelCuentasAbierto(false)
-    setClienteCuentasPanel(null)
-    onOpenVentas?.({
-      cliente,
-      cuenta: cuentaParaVentas(cuenta),
-    })
-  }
-
-  function cerrarPanelCuentas() {
-    setPanelCuentasAbierto(false)
-    setClienteCuentasPanel(null)
-  }
-
   function handleAtras() {
-    if (panelCuentasAbierto) {
-      cerrarPanelCuentas()
+    if (modalCuentasVentas) {
+      setModalCuentasVentas(false)
+      if (clienteAccion?.id != null) {
+        setModalAcciones(true)
+      }
       return
     }
     if (modalRepActivas) {
@@ -846,13 +841,28 @@ export default function ClientesModulo({
               <button type="button" className="secondary" onClick={() => setDialogoCliente(false)}>
                 Cancelar
               </button>
-              <button type="button" onClick={() => void guardarCliente()}>
+              <button type="button" onClick={solicitarGuardarCliente}>
                 {clienteEditando ? 'Actualizar' : 'Guardar'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmarDatosModal
+        open={modalConfirmGuardarCliente}
+        onClose={() => setModalConfirmGuardarCliente(false)}
+        onConfirm={ejecutarGuardarCliente}
+        tituloGrupo={clienteEditando ? 'Datos del cliente (actualizar)' : 'Datos del cliente (nuevo)'}
+        lineas={[
+          { label: 'Nombre', value: nombre.trim().toUpperCase() },
+          { label: 'Teléfono', value: telefono.trim() },
+          { label: 'Domicilio', value: domicilio.trim().toUpperCase() },
+          { label: 'Correo', value: correo.trim().toLowerCase() },
+        ]}
+        confirmando={guardandoCliente}
+        textoConfirmar={clienteEditando ? 'Confirmar y actualizar' : 'Confirmar y guardar'}
+      />
 
       {modalAcciones && clienteAccion && (
         <div className="modal-backdrop" role="presentation" onClick={() => { setModalAcciones(false); setClienteAccion(null) }}>
@@ -868,7 +878,7 @@ export default function ClientesModulo({
                 Servicio
               </button>
               <button type="button" className="btn-cuentas" onClick={() => void abrirCuentasVentasCliente()}>
-                Cuentas // Ventas
+                Cuentas / Ventas
               </button>
               <button
                 type="button"
@@ -885,19 +895,37 @@ export default function ClientesModulo({
         </div>
       )}
 
-      {panelCuentasAbierto && clienteCuentasPanel ? (
-        <CuentasClientePanel
-          cliente={clienteCuentasPanel}
-          title={cuentaTitle}
-          subtitle={cuentaSubtitle}
-          cuentas={cuentasEncontradas}
-          pagosCliente={pagosClienteCuentas}
-          loading={loadingCuentas}
-          onClose={cerrarPanelCuentas}
-          onSelectCuenta={(cuenta) => irVentasConCuenta(cuenta)}
-          onNuevaCuenta={() => irVentasConCuenta(null)}
-        />
-      ) : null}
+      {modalCuentasVentas && clienteAccion && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setModalCuentasVentas(false)}>
+          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{cuentaTitle}</h3>
+            </div>
+            <div className="modal-body modal-body--ordenes-cliente">
+              <ClientesCuentasVentasPanel
+                loading={loadingCuentas}
+                errorSubtitle={cuentaTitle === 'Error de búsqueda' ? cuentaSubtitle : null}
+                cuentaResumen={cuentaResumen}
+                cuentas={cuentasEncontradas}
+                pagosCliente={pagosClienteCuentas}
+                onSelectCuenta={(cuenta) => seleccionarCuentaVentas(cuenta)}
+              />
+            </div>
+            <div className="modal-footer modal-footer-wrap">
+              <button
+                type="button"
+                className="btn-agregar-equipo modal-btn-compact"
+                onClick={() => void nuevaCuentaVentasCliente()}
+              >
+                Nueva Cuenta
+              </button>
+              <button type="button" className="secondary" onClick={() => setModalCuentasVentas(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalRepActivas && clienteAccion && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalRepActivas(false)}>

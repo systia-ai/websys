@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { confirmarDatosAntesDeGuardar } from './confirmarDatosUtils.js'
+import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
@@ -109,6 +109,9 @@ export default function ServiciosEquipos({
   const [busqCliente, setBusqCliente] = useState('')
   const [clientesLoading, setClientesLoading] = useState(false)
   const [dialogoNuevoCliente, setDialogoNuevoCliente] = useState(false)
+  /** @type {[{ tituloGrupo: string, lineas: { label: string, value: string }[], run: () => void | Promise<void> } | null]} */
+  const [confirmDatos, setConfirmDatos] = useState(null)
+  const [confirmandoDatos, setConfirmandoDatos] = useState(false)
   const [ncNombre, setNcNombre] = useState('')
   const [ncTel, setNcTel] = useState('')
   const [ncDom, setNcDom] = useState('')
@@ -352,6 +355,20 @@ export default function ServiciosEquipos({
     }
   }
 
+  function lineasConfirmacionEquipo() {
+    const lineas = [
+      { label: 'Serie', value: String(serie).trim().toUpperCase() },
+      { label: 'Tipo', value: String(tipoEquipo).trim().toUpperCase() },
+    ]
+    if (descripcion.trim()) {
+      lineas.push({ label: 'Descripción', value: String(descripcion).trim().toUpperCase() })
+    }
+    if (tipoReparacionEq.trim()) {
+      lineas.push({ label: 'Tipo reparación', value: String(tipoReparacionEq).trim().toUpperCase() })
+    }
+    return lineas
+  }
+
   function guardarEquipo() {
     if (!String(serie).trim()) {
       onError('La serie es requerida')
@@ -361,22 +378,24 @@ export default function ServiciosEquipos({
       onError('El tipo de equipo es requerido')
       return
     }
-    if (!confirmarDatosAntesDeGuardar(`Serie: ${String(serie).trim().toUpperCase()}\nTipo: ${tipoEquipo}`)) {
-      return
-    }
+    setConfirmDatos({
+      tituloGrupo: editandoId ? 'Equipo (actualizar)' : 'Equipo nuevo',
+      lineas: lineasConfirmacionEquipo(),
+      run: ejecutarGuardarEquipo,
+    })
+  }
+
+  async function ejecutarGuardarEquipo() {
     if (editandoId) {
-      persistEquipo({
+      await persistEquipo({
         serie: String(serie).trim().toUpperCase(),
         tipo_equipo: String(tipoEquipo).trim().toUpperCase(),
         descripcion: descripcion.trim() ? String(descripcion).trim().toUpperCase() : null,
         tipo_reparacion: tipoReparacionEq.trim() ? String(tipoReparacionEq).trim().toUpperCase() : null,
       })
-        .then(async () => {
-          setDialogoEquipo(false)
-          await cargarEquipos()
-          onNotice('Equipo actualizado')
-        })
-        .catch((e) => onError(`Error al guardar: ${e.message}`))
+      setDialogoEquipo(false)
+      await cargarEquipos()
+      onNotice('Equipo actualizado')
       return
     }
     if (clienteDesdeModuloClientes?.id != null) {
@@ -388,20 +407,14 @@ export default function ServiciosEquipos({
         tipo_reparacion: tipoReparacionEq.trim() ? String(tipoReparacionEq).trim().toUpperCase() : null,
         cliente_id: cli.id,
       }
-      void (async () => {
-        try {
-          const eqId = await persistEquipo(base)
-          setDialogoEquipo(false)
-          await cargarEquipos()
-          onNotice('Equipo agregado')
-          if (eqId != null) {
-            onOpenReparaciones(payloadReparacionesSesion(cli, base, eqId))
-          }
-          onConsumeClienteVinculo?.()
-        } catch (e) {
-          onError(`Error al guardar equipo: ${e.message}`)
-        }
-      })()
+      const eqId = await persistEquipo(base)
+      setDialogoEquipo(false)
+      await cargarEquipos()
+      onNotice('Equipo agregado')
+      if (eqId != null) {
+        onOpenReparaciones(payloadReparacionesSesion(cli, base, eqId))
+      }
+      onConsumeClienteVinculo?.()
       return
     }
     setEquipoPendiente({
@@ -414,6 +427,19 @@ export default function ServiciosEquipos({
     setBusqCliente('')
     setDialogoCliente(true)
     cargarClientesLista()
+  }
+
+  async function ejecutarConfirmacionDatos() {
+    if (!confirmDatos?.run) return
+    setConfirmandoDatos(true)
+    try {
+      await confirmDatos.run()
+      setConfirmDatos(null)
+    } catch (e) {
+      onError(e?.message ? String(e.message) : 'Error al guardar')
+    } finally {
+      setConfirmandoDatos(false)
+    }
   }
 
   async function eliminarConfirmado() {
@@ -553,7 +579,7 @@ export default function ServiciosEquipos({
     }
   }
 
-  async function agregarClienteNuevo() {
+  function solicitarAgregarClienteNuevo() {
     if (!ncNombre.trim()) {
       onError('El nombre del cliente es requerido')
       return
@@ -562,9 +588,19 @@ export default function ServiciosEquipos({
       onError('El teléfono del cliente es requerido')
       return
     }
-    if (!confirmarDatosAntesDeGuardar(`Nombre: ${ncNombre.trim()}\nTeléfono: ${ncTel.trim()}`)) {
-      return
-    }
+    setConfirmDatos({
+      tituloGrupo: 'Cliente nuevo',
+      lineas: [
+        { label: 'Nombre', value: ncNombre.trim().toUpperCase() },
+        { label: 'Teléfono', value: ncTel.trim() },
+        { label: 'Domicilio', value: ncDom.trim().toUpperCase() },
+        { label: 'Correo', value: ncCorreo.trim().toLowerCase() },
+      ],
+      run: ejecutarAgregarClienteNuevo,
+    })
+  }
+
+  async function ejecutarAgregarClienteNuevo() {
     const row = {
       nombre: ncNombre.trim().toUpperCase(),
       telefono: ncTel.trim(),
@@ -956,7 +992,7 @@ export default function ServiciosEquipos({
               <button type="button" className="secondary" onClick={() => setDialogoNuevoCliente(false)}>
                 Cancelar
               </button>
-              <button type="button" onClick={agregarClienteNuevo}>
+              <button type="button" onClick={solicitarAgregarClienteNuevo}>
                 Guardar
               </button>
             </div>
@@ -1032,6 +1068,15 @@ export default function ServiciosEquipos({
           </div>
         </div>
       )}
+
+      <ConfirmarDatosModal
+        open={confirmDatos != null}
+        onClose={() => !confirmandoDatos && setConfirmDatos(null)}
+        onConfirm={ejecutarConfirmacionDatos}
+        tituloGrupo={confirmDatos?.tituloGrupo ?? 'Resumen'}
+        lineas={confirmDatos?.lineas ?? []}
+        confirmando={confirmandoDatos}
+      />
 
       {eliminarEquipo && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEliminarEquipo(null)}>

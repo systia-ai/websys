@@ -1,11 +1,20 @@
 /** Mensaje estándar antes de persistir cliente, equipo u orden nueva. */
 export const TEXTO_VERIFICAR_DATOS =
-  'Verifique que sus datos son correctos antes de continuar.'
+  'Revise la información en el recuadro. No es un error: solo confirma antes de guardar.'
 
 /**
- * Diálogo de confirmación (navegador). Devuelve true si el usuario acepta guardar.
+ * Convierte texto "Etiqueta: valor" (líneas) en filas para ConfirmarDatosModal.
  */
-export function confirmarDatosAntesDeGuardar(detalle = '') {
-  const extra = detalle ? `\n\n${detalle}` : ''
-  return window.confirm(`${TEXTO_VERIFICAR_DATOS}${extra}\n\n¿Desea guardar?`)
+export function parseDetalleConfirmacion(detalle = '') {
+  if (!detalle) return []
+  return detalle
+    .split('\n')
+    .map((line) => {
+      const t = line.trim()
+      if (!t) return null
+      const i = t.indexOf(':')
+      if (i < 0) return { label: t, value: '' }
+      return { label: t.slice(0, i).trim(), value: t.slice(i + 1).trim() }
+    })
+    .filter(Boolean)
 }

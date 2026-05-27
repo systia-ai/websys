@@ -29,6 +29,15 @@ const LS_REPARAMOV = 'sistefix_local_reparamov'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
 const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_CAT = 'sistefix_local_catalogopagos'
+const LS_VISTA_SELECTOR_PRODUCTOS = 'sistefix_ventas_selector_productos_vista'
+
+function leerVistaSelectorProductos() {
+  try {
+    return localStorage.getItem(LS_VISTA_SELECTOR_PRODUCTOS) === 'tabla' ? 'tabla' : 'tarjetas'
+  } catch {
+    return 'tarjetas'
+  }
+}
 
 let __seq = 1
 function nextLocalId() {
@@ -220,6 +229,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
   const [mostrarCamposProducto, setMostrarCamposProducto] = useState(false)
   const [modalPago, setModalPago] = useState(false)
   const [modalProductos, setModalProductos] = useState(false)
+  const [vistaSelectorProductos, setVistaSelectorProductos] = useState(leerVistaSelectorProductos)
   const [catalogo, setCatalogo] = useState([])
   const [busqCat, setBusqCat] = useState('')
   const [selCat, setSelCat] = useState(null)
@@ -271,6 +281,11 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     if (Number.isFinite(c) && Number.isFinite(p) && c > 0 && p > 0) return (c * p).toFixed(2)
     return ''
   }, [cantProd, precioProd])
+
+  const productoCatalogoSel = useMemo(() => {
+    if (!productoIdSel) return null
+    return todosProductos.find((p) => sameId(p.id, productoIdSel)) ?? null
+  }, [todosProductos, productoIdSel])
 
   const productosFiltrados = useMemo(() => {
     const t = busqProd.trim().toLowerCase()
@@ -674,6 +689,30 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
     return fallbackContable
   }
 
+  function cambiarVistaSelectorProductos(modo) {
+    setVistaSelectorProductos(modo)
+    try {
+      localStorage.setItem(LS_VISTA_SELECTOR_PRODUCTOS, modo)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function limpiarFormularioProducto() {
+    setSerieProd('')
+    setDescProd('')
+    setExistencia('')
+    setCantProd('')
+    setPrecioProd('')
+    setProductoIdSel(0)
+    setProductoContableSel(true)
+  }
+
+  function cerrarCapturaProducto() {
+    setMostrarCamposProducto(false)
+    limpiarFormularioProducto()
+  }
+
   function seleccionarProducto(p) {
     setRecientesProductosIds(registrarProductoRecienteVentas(p.id))
     const esContable = esProductoContable(p)
@@ -749,14 +788,7 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
         },
       ])
       setRecientesProductosIds(registrarProductoRecienteVentas(productoIdSel))
-      setSerieProd('')
-      setDescProd('')
-      setExistencia('')
-      setCantProd('')
-      setPrecioProd('')
-      setProductoIdSel(0)
-      setProductoContableSel(true)
-      setMostrarCamposProducto(false)
+      cerrarCapturaProducto()
       onNotice?.(
         esContableVenta ? 'Producto agregado · inventario actualizado' : 'Servicio agregado a la cuenta',
       )
@@ -1034,77 +1066,13 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
 
         <button
           type="button"
-          className={mostrarCamposProducto ? 'btn-agregar-prod-ventas abierto' : 'btn-agregar-prod-ventas'}
-          onClick={() => {
-            if (mostrarCamposProducto) setMostrarCamposProducto(false)
-            else void abrirSelectorProductos()
-          }}
+          className={
+            mostrarCamposProducto || modalProductos ? 'btn-agregar-prod-ventas abierto' : 'btn-agregar-prod-ventas'
+          }
+          onClick={() => void abrirSelectorProductos()}
         >
           Agregar Producto/Servicio
         </button>
-
-        {mostrarCamposProducto ? (
-          <div className="ventas-form-producto form-stack card-pad">
-            <label>
-              Serie
-              <input
-                value={serieProd}
-                onChange={(e) => {
-                  const serie = e.target.value.toUpperCase()
-                  setSerieProd(serie)
-                  const esC = esProductoContable({ serie, descripcion: descProd, contable: productoContableSel })
-                  setProductoContableSel(esC)
-                  setExistencia(
-                    esC
-                      ? String(todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ?? existencia)
-                      : etiquetaExistencia({ serie, descripcion: descProd }),
-                  )
-                }}
-              />
-            </label>
-            <label>
-              Descripcion
-              <input
-                value={descProd}
-                onChange={(e) => {
-                  const descripcion = e.target.value.toUpperCase()
-                  setDescProd(descripcion)
-                  const esC = esProductoContable({ serie: serieProd, descripcion, contable: productoContableSel })
-                  setProductoContableSel(esC)
-                  setExistencia(
-                    esC
-                      ? String(todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ?? existencia)
-                      : etiquetaExistencia({ serie: serieProd, descripcion }),
-                  )
-                }}
-              />
-            </label>
-            <label>
-              {productoContableSel ? 'Existencia' : 'Stock'}
-              <input value={existencia} onChange={(e) => setExistencia(e.target.value)} readOnly />
-            </label>
-            {!productoContableSel ? (
-              <p className="ventas-servicio-aviso muted small">
-                Servicio: no requiere existencia en inventario.
-              </p>
-            ) : null}
-            <label>
-              Cantidad
-              <input value={cantProd} onChange={(e) => setCantProd(e.target.value)} />
-            </label>
-            <label>
-              Precio Unitario
-              <input value={precioProd} onChange={(e) => setPrecioProd(e.target.value)} />
-            </label>
-            <label>
-              Subtotal
-              <input value={subtotalProdV} readOnly />
-            </label>
-            <button type="button" className="btn-primary-ventas" onClick={() => void agregarProductoLinea()}>
-              {productoContableSel ? '➕ AGREGAR PRODUCTO' : '➕ AGREGAR SERVICIO'}
-            </button>
-          </div>
-        ) : null}
 
         <div className="ventas-cuenta-resumen" role="group" aria-label="Total y saldo de la cuenta">
           <div className="ventas-cuenta-recuadro ventas-cuenta-recuadro--total">
@@ -1287,32 +1255,123 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
 
       {modalProductos && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalProductos(false)}>
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-wide modal-selector-productos" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Seleccionar Producto</h3>
             </div>
-            <div className="modal-body">
+            <div className="modal-body modal-body--ordenes-cliente">
               <input
                 className="full"
                 placeholder="Buscar por serie o descripción…"
                 value={busqProd}
                 onChange={(e) => setBusqProd(e.target.value)}
               />
-              <ul className="orden-resultados-list">
-                {productosFiltrados.map((p) => (
-                  <li key={p.id}>
-                    <button type="button" className="orden-resultado-card" onClick={() => seleccionarProducto(p)}>
-                      <span className="inventario-producto-emoji inline" aria-hidden="true">
-                        {emojiParaProducto(p, readIconosMap())}
-                      </span>
-                      <strong>{p.serie}</strong>
-                      <span className="muted small">{p.descripcion}</span>
-                      <span className="muted small">Existencia: {etiquetaExistencia(p)}</span>
-                      <span className="muted small">${Number(p.precio_venta ?? 0).toFixed(2)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div
+                className="cuentas-cliente-vista-bar ventas-selector-productos-vista-bar"
+                role="group"
+                aria-label="Forma de ver los productos"
+              >
+                <button
+                  type="button"
+                  className={`cuentas-cliente-vista-btn${vistaSelectorProductos === 'tarjetas' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                  onClick={() => cambiarVistaSelectorProductos('tarjetas')}
+                  aria-pressed={vistaSelectorProductos === 'tarjetas'}
+                >
+                  🗂️ Tarjetas
+                </button>
+                <button
+                  type="button"
+                  className={`cuentas-cliente-vista-btn${vistaSelectorProductos === 'tabla' ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                  onClick={() => cambiarVistaSelectorProductos('tabla')}
+                  aria-pressed={vistaSelectorProductos === 'tabla'}
+                >
+                  📊 Tabla
+                </button>
+              </div>
+              {productosFiltrados.length === 0 ? (
+                <div className="empty-card ventas-selector-productos-empty">
+                  <p>{busqProd.trim() ? 'No se encontraron productos' : 'No hay productos en inventario'}</p>
+                </div>
+              ) : vistaSelectorProductos === 'tabla' ? (
+                <TablaScrollSuperior
+                  ariaLabel="Productos en tabla"
+                  classNameWrap="orden-resultados-tabla-wrap cuentas-cliente-tabla-wrap ventas-selector-productos-tabla-wrap"
+                  syncDeps={[vistaSelectorProductos, productosFiltrados, busqProd]}
+                >
+                  <table className="cuentas-cliente-tabla orden-resultados-tabla ventas-selector-productos-tabla">
+                    <thead>
+                      <tr>
+                        <th className="ventas-selector-productos-col-emoji" aria-hidden="true">
+                          ·
+                        </th>
+                        <th>Serie</th>
+                        <th>Descripción</th>
+                        <th>Existencia</th>
+                        <th>P. venta</th>
+                        <th aria-label="Seleccionar producto">Elegir</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productosFiltrados.map((p) => (
+                        <tr
+                          key={p.id}
+                          className="orden-resultados-fila orden-resultados-fila--clic ventas-selector-productos-fila"
+                          role="button"
+                          tabIndex={0}
+                          title={`Seleccionar ${p.serie || 'producto'}`}
+                          onClick={() => seleccionarProducto(p)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              seleccionarProducto(p)
+                            }
+                          }}
+                        >
+                          <td className="ventas-selector-productos-col-emoji">
+                            <span className="inventario-producto-emoji inline" aria-hidden="true">
+                              {emojiParaProducto(p, readIconosMap())}
+                            </span>
+                          </td>
+                          <td className="orden-resultados-serie">
+                            <strong>{p.serie || '—'}</strong>
+                          </td>
+                          <td className="ventas-selector-productos-col-desc">{p.descripcion || '—'}</td>
+                          <td className="ventas-selector-productos-col-stock">{etiquetaExistencia(p)}</td>
+                          <td className="inventarios-lista-col-precio">${Number(p.precio_venta ?? 0).toFixed(2)}</td>
+                          <td className="cuentas-cliente-tabla-acciones">
+                            <button
+                              type="button"
+                              className="cuentas-cliente-btn-abrir"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                seleccionarProducto(p)
+                              }}
+                            >
+                              Elegir →
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TablaScrollSuperior>
+              ) : (
+                <ul className="orden-resultados-list ventas-selector-productos-lista">
+                  {productosFiltrados.map((p) => (
+                    <li key={p.id}>
+                      <button type="button" className="orden-resultado-card" onClick={() => seleccionarProducto(p)}>
+                        <span className="inventario-producto-emoji inline" aria-hidden="true">
+                          {emojiParaProducto(p, readIconosMap())}
+                        </span>
+                        <strong>{p.serie}</strong>
+                        <span className="muted small">{p.descripcion}</span>
+                        <span className="muted small">Existencia: {etiquetaExistencia(p)}</span>
+                        <span className="muted small">${Number(p.precio_venta ?? 0).toFixed(2)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="modal-footer">
               <button type="button" className="secondary" onClick={() => setModalProductos(false)}>
@@ -1322,6 +1381,158 @@ export default function VentasCuentaScreen({ supabase, context, onSalir, onError
           </div>
         </div>
       )}
+
+      {mostrarCamposProducto ? (
+        <div
+          className="modal-backdrop ventas-producto-modal-backdrop"
+          role="presentation"
+          onClick={cerrarCapturaProducto}
+        >
+          <div
+            className="modal ventas-producto-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ventas-producto-modal-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <section className="ventas-producto-panel ventas-producto-panel--flotante">
+              <header className="ventas-producto-panel-header">
+                <span className="ventas-producto-panel-ico" aria-hidden="true">
+                  {productoCatalogoSel
+                    ? emojiParaProducto(productoCatalogoSel, readIconosMap())
+                    : productoContableSel
+                      ? '📦'
+                      : '🛠️'}
+                </span>
+                <div>
+                  <h3 id="ventas-producto-modal-titulo" className="ventas-producto-panel-titulo">
+                    {productoContableSel ? 'Agregar producto' : 'Agregar servicio'}
+                  </h3>
+                  <p className="ventas-producto-panel-sub">
+                    Complete cantidad y precio. Al confirmar se agrega a la cuenta y cierra esta ventana.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="ventas-producto-modal-cerrar"
+                  onClick={cerrarCapturaProducto}
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="ventas-producto-modal-body">
+                <div className="ventas-producto-recuadro ventas-producto-recuadro--articulo">
+                  <h4 className="ventas-producto-recuadro-titulo">Datos del artículo</h4>
+                  <div className="ventas-producto-campos ventas-producto-campos--articulo">
+                    <label className="ventas-producto-campo">
+                      <span className="ventas-producto-campo-etiqueta">Serie</span>
+                      <input
+                        value={serieProd}
+                        onChange={(e) => {
+                          const serie = e.target.value.toUpperCase()
+                          setSerieProd(serie)
+                          const esC = esProductoContable({
+                            serie,
+                            descripcion: descProd,
+                            contable: productoContableSel,
+                          })
+                          setProductoContableSel(esC)
+                          setExistencia(
+                            esC
+                              ? String(
+                                  todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ??
+                                    existencia,
+                                )
+                              : etiquetaExistencia({ serie, descripcion: descProd }),
+                          )
+                        }}
+                      />
+                    </label>
+                    <label className="ventas-producto-campo ventas-producto-campo--ancho">
+                      <span className="ventas-producto-campo-etiqueta">Descripción</span>
+                      <input
+                        value={descProd}
+                        onChange={(e) => {
+                          const descripcion = e.target.value.toUpperCase()
+                          setDescProd(descripcion)
+                          const esC = esProductoContable({
+                            serie: serieProd,
+                            descripcion,
+                            contable: productoContableSel,
+                          })
+                          setProductoContableSel(esC)
+                          setExistencia(
+                            esC
+                              ? String(
+                                  todosProductos.find((x) => sameId(x.id, productoIdSel))?.existencia ??
+                                    existencia,
+                                )
+                              : etiquetaExistencia({ serie: serieProd, descripcion }),
+                          )
+                        }}
+                      />
+                    </label>
+                    <label className="ventas-producto-campo">
+                      <span className="ventas-producto-campo-etiqueta">
+                        {productoContableSel ? 'Existencia' : 'Stock'}
+                      </span>
+                      <input
+                        className="ventas-producto-input--solo-lectura"
+                        value={existencia}
+                        onChange={(e) => setExistencia(e.target.value)}
+                        readOnly
+                      />
+                    </label>
+                  </div>
+                  {!productoContableSel ? (
+                    <p className="ventas-servicio-aviso">
+                      <span aria-hidden="true">ℹ️</span> Servicio: no requiere existencia en inventario.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="ventas-producto-recuadro ventas-producto-recuadro--venta">
+                  <h4 className="ventas-producto-recuadro-titulo">Cantidad y precio</h4>
+                  <div className="ventas-producto-campos ventas-producto-campos--venta">
+                    <label className="ventas-producto-campo">
+                      <span className="ventas-producto-campo-etiqueta">Cantidad</span>
+                      <input
+                        value={cantProd}
+                        onChange={(e) => setCantProd(e.target.value)}
+                        inputMode="decimal"
+                        autoFocus
+                      />
+                    </label>
+                    <label className="ventas-producto-campo">
+                      <span className="ventas-producto-campo-etiqueta">Precio unitario</span>
+                      <input
+                        value={precioProd}
+                        onChange={(e) => setPrecioProd(e.target.value)}
+                        inputMode="decimal"
+                      />
+                    </label>
+                    <label className="ventas-producto-campo ventas-producto-campo--subtotal">
+                      <span className="ventas-producto-campo-etiqueta">Subtotal</span>
+                      <input className="ventas-producto-input--solo-lectura" value={subtotalProdV} readOnly />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <footer className="ventas-producto-panel-footer ventas-producto-panel-footer--flotante">
+                <button type="button" className="secondary" onClick={cerrarCapturaProducto}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn-primary-ventas" onClick={() => void agregarProductoLinea()}>
+                  {productoContableSel ? '✅ Agregar a la cuenta' : '✅ Agregar servicio'}
+                </button>
+              </footer>
+            </section>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

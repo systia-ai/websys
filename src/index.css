@@ -2763,6 +2763,102 @@ td {
   background: #1b5e20;
 }
 
+.modal-confirmar-datos {
+  max-width: 440px;
+}
+
+.confirmar-datos-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(180deg, #e8f5e9 0%, #f1f8e9 100%);
+  border-bottom: 1px solid #c8e6c9;
+}
+
+.confirmar-datos-header h3 {
+  margin: 0;
+  color: #2e7d32;
+  font-size: 1.1rem;
+}
+
+.confirmar-datos-header-ico {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #43a047;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.confirmar-datos-lead {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: #558b2f;
+  line-height: 1.4;
+}
+
+.confirmar-datos-recuadro {
+  background: #fafcff;
+  border: 1px solid #b3e5fc;
+  border-left: 4px solid #1e88e5;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.9) inset,
+    0 2px 8px rgba(33, 150, 243, 0.08);
+}
+
+.confirmar-datos-recuadro-titulo {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1565c0;
+}
+
+.confirmar-datos-lista {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.confirmar-datos-fila {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 34%) 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.confirmar-datos-fila dt {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #546e7a;
+}
+
+.confirmar-datos-fila dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #263238;
+  word-break: break-word;
+}
+
+.confirmar-datos-pregunta {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #455a64;
+}
+
 .resumen-orden {
   display: flex;
   flex-direction: column;
@@ -4741,6 +4837,45 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   gap: 10px;
 }
 
+.ventas-selector-productos-vista-bar {
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+.ventas-selector-productos-tabla-wrap {
+  margin-top: 4px;
+}
+
+.ventas-selector-productos-tabla {
+  min-width: 560px;
+}
+
+.ventas-selector-productos-col-emoji {
+  width: 2.75rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ventas-selector-productos-col-desc {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ventas-selector-productos-col-stock {
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.ventas-selector-productos-empty {
+  margin-top: 12px;
+}
+
+.ventas-selector-productos-lista {
+  max-height: min(52vh, 480px);
+}
+
 .orden-resultado-card {
   width: 100%;
   text-align: left;
@@ -5626,17 +5761,257 @@ input.full {
   background: #4527a0;
 }
 
-.ventas-form-producto label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
+.ventas-producto-modal-backdrop {
+  z-index: 1200;
 }
 
-.ventas-form-producto input {
+.ventas-producto-modal-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-width: 520px;
+  max-height: min(92vh, 720px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ventas-producto-panel--flotante {
+  margin-top: 0;
+  max-height: min(92vh, 720px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(49, 27, 94, 0.35);
+}
+
+.ventas-producto-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 4px;
+}
+
+.ventas-producto-modal-cerrar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ventas-producto-modal-cerrar:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ventas-producto-panel-footer--flotante {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  border-top: 1px solid #e1bee7;
+  background: #faf8fc;
+}
+
+.ventas-producto-panel-footer--flotante .btn-primary-ventas,
+.ventas-producto-panel-footer--flotante .secondary {
+  flex: 1 1 140px;
+  margin-top: 0;
+}
+
+.ventas-producto-panel {
+  margin-top: 14px;
+  border: 2px solid #7e57c2;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f3e5f5 0%, #ffffff 28%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.85) inset,
+    0 6px 20px rgba(94, 53, 177, 0.18);
+  overflow: hidden;
+  animation: ventas-producto-panel-in 0.28s ease-out;
+}
+
+@keyframes ventas-producto-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ventas-producto-panel-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 44px 14px 16px;
+  background: linear-gradient(135deg, #5e35b1 0%, #7b1fa2 55%, #8e24aa 100%);
+  color: #fff;
+}
+
+.ventas-producto-panel-ico {
+  flex-shrink: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.ventas-producto-panel-titulo {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.ventas-producto-panel-sub {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  opacity: 0.92;
+  line-height: 1.35;
+}
+
+.ventas-producto-recuadro {
+  margin: 12px 14px 0;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e1bee7;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(123, 31, 162, 0.08);
+}
+
+.ventas-producto-recuadro--articulo {
+  border-left: 4px solid #7b1fa2;
+}
+
+.ventas-producto-recuadro--venta {
+  border-left: 4px solid #1976d2;
+  margin-top: 10px;
+}
+
+.ventas-producto-recuadro-titulo {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6a1b9a;
+}
+
+.ventas-producto-recuadro--venta .ventas-producto-recuadro-titulo {
+  color: #1565c0;
+}
+
+.ventas-producto-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 14px;
+}
+
+.ventas-producto-campos--articulo .ventas-producto-campo--ancho {
+  grid-column: 1 / -1;
+}
+
+.ventas-producto-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.ventas-producto-campo-etiqueta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5e35b1;
+}
+
+.ventas-producto-recuadro--venta .ventas-producto-campo-etiqueta {
+  color: #1565c0;
+}
+
+.ventas-producto-campo input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ce93d8;
+  background: #faf8fc;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #263238;
+}
+
+.ventas-producto-recuadro--venta .ventas-producto-campo input {
+  border-color: #90caf9;
+  background: #f8fbff;
+}
+
+.ventas-producto-campo input:focus {
+  outline: 2px solid #7b1fa2;
+  outline-offset: 1px;
+  border-color: #7b1fa2;
+}
+
+.ventas-producto-recuadro--venta .ventas-producto-campo input:focus {
+  outline-color: #1976d2;
+  border-color: #1976d2;
+}
+
+.ventas-producto-input--solo-lectura {
+  background: #ede7f6 !important;
+  color: #4527a0;
+  cursor: default;
+}
+
+.ventas-producto-recuadro--venta .ventas-producto-input--solo-lectura {
+  background: #e3f2fd !important;
+  color: #0d47a1;
+}
+
+.ventas-producto-campo--subtotal input {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.ventas-servicio-aviso {
+  margin: 12px 0 0;
   padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  font-size: 0.85rem;
+  color: #6d4c41;
+}
+
+.ventas-producto-panel-footer {
+  padding: 14px 16px 16px;
+}
+
+.ventas-producto-panel-footer .btn-primary-ventas {
+  width: 100%;
+  margin-top: 0;
+}
+
+@media (max-width: 520px) {
+  .ventas-producto-campos {
+    grid-template-columns: 1fr;
+  }
+
+  .ventas-producto-campos--articulo .ventas-producto-campo--ancho {
+    grid-column: auto;
+  }
 }
 
 .btn-primary-ventas {

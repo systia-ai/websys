@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
-import { confirmarDatosAntesDeGuardar, TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
+import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { insertPagoCliente } from './pagosClientesUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
