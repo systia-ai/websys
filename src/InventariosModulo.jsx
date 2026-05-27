@@ -134,8 +134,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
   const [dialogoSurtido, setDialogoSurtido] = useState(false)
   const [productoSurtidoId, setProductoSurtidoId] = useState('')
   const [busquedaSurtido, setBusquedaSurtido] = useState('')
+  const [surtidoOpcionesAbiertas, setSurtidoOpcionesAbiertas] = useState(false)
   const [cantidadSurtido, setCantidadSurtido] = useState('')
   const [costoCompraSurtido, setCostoCompraSurtido] = useState('')
+  const [precioVentaSurtido, setPrecioVentaSurtido] = useState('')
 
   const [eliminar, setEliminar] = useState(null)
 
@@ -195,13 +197,23 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
 
   const productosSurtidoFiltrados = useMemo(() => {
     const t = busquedaSurtido.trim().toLowerCase()
-    if (!t) return productosContables
+    if (!t) return []
     return productosContables.filter((p) => {
       const serieP = String(p.serie ?? '').toLowerCase()
       const descP = String(p.descripcion ?? '').toLowerCase()
       return serieP.includes(t) || descP.includes(t)
     })
   }, [productosContables, busquedaSurtido])
+
+  useEffect(() => {
+    if (!dialogoSurtido) return
+    if (productosSurtidoFiltrados.length === 0) {
+      setProductoSurtidoId('')
+      return
+    }
+    const existeSeleccion = productosSurtidoFiltrados.some((p) => sameId(p.id, productoSurtidoId))
+    if (!existeSeleccion) setProductoSurtidoId('')
+  }, [dialogoSurtido, productosSurtidoFiltrados, productoSurtidoId])
 
   function abrirNuevo() {
     setEditando(null)
@@ -220,10 +232,12 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       onError?.('No hay productos contables para surtir. Agregue uno primero.')
       return
     }
-    setProductoSurtidoId(String(productosContables[0].id))
+    setProductoSurtidoId('')
     setBusquedaSurtido('')
+    setSurtidoOpcionesAbiertas(false)
     setCantidadSurtido('')
     setCostoCompraSurtido('')
+    setPrecioVentaSurtido('')
     setDialogoSurtido(true)
   }
 
@@ -331,6 +345,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       onError?.('Ingrese un costo de compra válido')
       return
     }
+    const precioVentaNuevo = precioVentaSurtido.trim() ? toNum(precioVentaSurtido) : null
+    if (precioVentaSurtido.trim() && (precioVentaNuevo == null || precioVentaNuevo <= 0)) {
+      onError?.('Ingrese un precio de venta válido')
+      return
+    }
 
     const exActual = toIntOrNull(prod.existencia) ?? 0
     const cantActual = toIntOrNull(prod.cantidad) ?? 0
@@ -339,6 +358,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
       cantidad: cantActual + entrada,
     }
     if (costoCompra != null) payload.precio_compra = costoCompra
+    if (precioVentaNuevo != null) payload.precio_venta = precioVentaNuevo
 
     try {
       if (supabase) {
@@ -725,33 +745,79 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                 Buscar producto
                 <input
                   value={busquedaSurtido}
-                  onChange={(e) => setBusquedaSurtido(e.target.value)}
+                  onFocus={() => setSurtidoOpcionesAbiertas(true)}
+                  onChange={(e) => {
+                    setBusquedaSurtido(e.target.value)
+                    setSurtidoOpcionesAbiertas(true)
+                  }}
                   placeholder="Escriba serie o descripción..."
                 />
               </label>
-              <ul className="inventario-clientes-lista inventarios-surtido-lista">
-                {productosSurtidoFiltrados.length > 0 ? (
+              {productoSurtidoSel ? (
+                <div className="inventarios-surtido-seleccion-actual" role="status">
+                  <span className="inventarios-surtido-seleccion-label">Seleccionado:</span>{' '}
+                  <strong>
+                    {productoSurtidoSel.serie || 'SIN SERIE'} · {productoSurtidoSel.descripcion || 'SIN DESCRIPCIÓN'}
+                  </strong>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="inventarios-surtido-toggle-opciones"
+                onClick={() => setSurtidoOpcionesAbiertas((v) => !v)}
+                aria-expanded={surtidoOpcionesAbiertas}
+              >
+                {surtidoOpcionesAbiertas ? 'Ocultar opciones ▲' : 'Mostrar opciones ▼'}
+              </button>
+              {surtidoOpcionesAbiertas ? (
+                <ul className="inventario-clientes-lista inventarios-surtido-lista">
+                  {busquedaSurtido.trim() && productosSurtidoFiltrados.length > 0 ? (
                   productosSurtidoFiltrados.map((p) => {
                     const activo = sameId(p.id, productoSurtidoId)
                     return (
-                      <li key={p.id}>
+                      <li
+                        key={p.id}
+                        onClick={() => {
+                          setProductoSurtidoId(String(p.id))
+                          setSurtidoOpcionesAbiertas(false)
+                        }}
+                      >
                         <button
                           type="button"
                           className={`inventario-cliente-opcion inventarios-surtido-opcion${activo ? ' inventarios-surtido-opcion--active' : ''}`}
-                          onClick={() => setProductoSurtidoId(String(p.id))}
+                          aria-pressed={activo}
+                          onMouseDown={(e) => {
+                            // Evita pérdida de clic al arrastrar en el contenedor con scroll.
+                            e.preventDefault()
+                          }}
+                          onClick={() => {
+                            setProductoSurtidoId(String(p.id))
+                            setSurtidoOpcionesAbiertas(false)
+                          }}
                         >
                           <strong>{p.serie || 'SIN SERIE'}</strong> · {p.descripcion || 'SIN DESCRIPCIÓN'}
                         </button>
                       </li>
                     )
                   })
-                ) : (
-                  <li>
-                    <p className="muted small inventarios-surtido-empty">Sin resultados para esa búsqueda.</p>
-                  </li>
-                )}
-              </ul>
+                  ) : busquedaSurtido.trim() ? (
+                    <li>
+                      <p className="muted small inventarios-surtido-empty">Sin resultados para esa búsqueda.</p>
+                    </li>
+                  ) : (
+                    <li>
+                      <p className="muted small inventarios-surtido-empty">
+                        Escriba en el buscador para ver opciones.
+                      </p>
+                    </li>
+                  )}
+                </ul>
+              ) : null}
               <div className="inventarios-surtido-resumen">
+                <p>
+                  <strong>Producto seleccionado:</strong>{' '}
+                  {productoSurtidoSel ? `${productoSurtidoSel.serie || 'SIN SERIE'} · ${productoSurtidoSel.descripcion || 'SIN DESCRIPCIÓN'}` : '—'}
+                </p>
                 <p>
                   <strong>Existencia actual:</strong> {toIntOrNull(productoSurtidoSel?.existencia) ?? 0}
                 </p>
@@ -776,6 +842,15 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice 
                   value={costoCompraSurtido}
                   onChange={(e) => setCostoCompraSurtido(e.target.value)}
                   placeholder="Ej. 85.50"
+                />
+              </label>
+              <label>
+                Precio de venta unitario (opcional)
+                <input
+                  inputMode="decimal"
+                  value={precioVentaSurtido}
+                  onChange={(e) => setPrecioVentaSurtido(e.target.value)}
+                  placeholder="Ej. 140.00"
                 />
               </label>
             </div>

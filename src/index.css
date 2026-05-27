@@ -597,17 +597,52 @@ td {
 }
 
 .inventarios-surtido-lista {
-  max-height: 180px;
+  max-height: 320px;
+  min-height: 120px;
 }
 
 .inventarios-surtido-opcion--active {
-  background: #e3f2fd;
-  border-left: 4px solid #1e88e5;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border-left: 4px solid #fb8c00;
+  color: #e65100;
+  font-weight: 700;
   padding-left: 8px;
 }
 
 .inventarios-surtido-empty {
   margin: 8px 12px;
+}
+
+.inventarios-surtido-seleccion-actual {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #ffb74d;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  color: #e65100;
+  font-size: 0.9rem;
+}
+
+.inventarios-surtido-seleccion-label {
+  color: #bf360c;
+  font-weight: 700;
+}
+
+.inventarios-surtido-toggle-opciones {
+  margin-top: 6px;
+  align-self: flex-start;
+  border: 1px solid #90caf9;
+  background: #e3f2fd;
+  color: #0d47a1;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inventarios-surtido-toggle-opciones:hover {
+  background: #d6ecfb;
 }
 
 .inventario-clientes-lista {
