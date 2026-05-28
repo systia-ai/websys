@@ -4,7 +4,7 @@ import { TIPOS_EQUIPO_SERVICIOS, TIPOS_REPARACION } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
-import { buscarClientesSimilares, buscarEquiposPorSerieExacta, buscarEquiposSimilares } from './duplicadosUtils.js'
+import { buscarClientesSimilares, buscarEquiposPorSerieExacta } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 
@@ -402,28 +402,6 @@ export default function ServiciosEquipos({
       return
     }
 
-    const similares = buscarEquiposSimilares(equipos, {
-      serie: serie,
-      tipoEquipo: tipoEquipo,
-      descripcion: descripcion,
-      excludeId: editandoId ?? null,
-    }).slice(0, 4)
-    if (similares.length > 0) {
-      setConfirmDatos({
-        tituloGrupo: 'Posibles equipos duplicados',
-        lineas: [
-          { label: 'Pregunta', value: 'Es el mismo equipo?' },
-          { label: 'Nuevo', value: `${String(serie).trim().toUpperCase()} · ${String(tipoEquipo).trim().toUpperCase()}` },
-          ...similares.map((e, i) => ({
-            label: `Similar ${i + 1}`,
-            value: `${String(e.serie ?? '').toUpperCase()} · ${String(e.tipo_equipo ?? '').toUpperCase()}${e.descripcion ? ` · ${String(e.descripcion).toUpperCase()}` : ''}`,
-          })),
-        ],
-        run: ejecutarGuardarEquipo,
-        textoConfirmar: 'No, es diferente. Guardar',
-      })
-      return
-    }
     setConfirmDatos({
       tituloGrupo: editandoId ? 'Equipo (actualizar)' : 'Equipo nuevo',
       lineas: lineasConfirmacionEquipo(),
