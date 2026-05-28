@@ -76,14 +76,18 @@ function pagosDesdeLineas(lineas) {
     .map((l) => ({ pago: Math.abs(Number(l.subtotal ?? l.precioUnitario ?? 0)) }))
 }
 
-/** Saldo neto (cargos − pagos); si no hay líneas, usa total de cuenta. */
-function calcularSaldoPendiente(lineas, cuentaTotal) {
+/** Balance neto (cargos − pagos); negativo = anticipo / saldo a favor. */
+function calcularBalanceNeto(lineas, cuentaTotal) {
   const tieneLineas = lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
   if (tieneLineas) {
-    return Math.max(0, sumSubtotales(lineas))
+    return sumSubtotales(lineas)
   }
-  const ct = Number(cuentaTotal ?? 0)
-  return ct > 0.0001 ? ct : 0
+  return Number(cuentaTotal ?? 0)
+}
+
+/** Adeudo pendiente (mínimo 0) para cobrar o liquidar. */
+function calcularSaldoPendiente(lineas, cuentaTotal) {
+  return Math.max(0, calcularBalanceNeto(lineas, cuentaTotal))
 }
 
 function totalVentaParaSync(cuentaTotal, lineas) {
@@ -274,20 +278,14 @@ export default function VentasCuentaScreen({
     const ct = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
     return ct > 0.0001 ? ct : cargos
   }, [lineas, cuentaInfo?.total, cuentaInicial?.total])
-  const saldoPendiente = useMemo(() => {
-    const tieneLineas =
-      lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
-    if (tieneLineas) {
-      return calcularSaldoPendiente(lineas, totalCargos)
-    }
-    const base = cuentaInfo ?? cuentaInicial
-    if (base?.saldo != null && base.saldo !== '' && !Number.isNaN(Number(base.saldo))) {
-      return Math.max(0, Number(base.saldo))
-    }
-    return calcularSaldoPendiente(lineas, totalCargos)
-  }, [lineas, cuentaInfo, cuentaInicial, totalCargos])
-  const totalStr = totalCargos.toFixed(2)
+  const balanceNeto = useMemo(
+    () => calcularBalanceNeto(lineas, totalCargos),
+    [lineas, totalCargos],
+  )
+  const saldoPendiente = useMemo(() => Math.max(0, balanceNeto), [balanceNeto])
+  const totalStr = balanceNeto.toFixed(2)
   const saldoStr = saldoPendiente.toFixed(2)
+  const saldoAFavor = balanceNeto < -0.0001
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
@@ -1171,8 +1169,10 @@ export default function VentasCuentaScreen({
         </button>
 
         <div className="ventas-cuenta-resumen" role="group" aria-label="Total y saldo de la cuenta">
-          <div className="ventas-cuenta-recuadro ventas-cuenta-recuadro--total">
-            <span className="ventas-cuenta-recuadro-etiqueta">Total</span>
+          <div
+            className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--total${saldoAFavor ? ' ventas-cuenta-recuadro--saldo-favor' : ''}`}
+          >
+            <span className="ventas-cuenta-recuadro-etiqueta">{saldoAFavor ? 'Total (a favor)' : 'Total'}</span>
             <span className="ventas-cuenta-recuadro-monto">${totalStr}</span>
           </div>
           <div

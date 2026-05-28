@@ -371,6 +371,12 @@ export function sumPagosCuenta(pagosCuenta = []) {
   return (pagosCuenta ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
 }
 
+/** Balance neto (cargos − pagos). Negativo = saldo a favor (anticipo sin consumir). */
+export function balanceNetoCuenta(cuenta, pagosCuenta = []) {
+  const cargos = Number(cuenta?.total ?? 0)
+  return cargos - sumPagosCuenta(pagosCuenta)
+}
+
 /** Adeudo = total de la venta menos lo pagado (mínimo 0). */
 export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
   const total = Number(totalVenta ?? 0)

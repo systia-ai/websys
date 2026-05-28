@@ -3623,6 +3623,21 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-weight: 700;
 }
 
+.cuenta-tarjeta-saldo-favor {
+  color: #1565c0;
+  font-weight: 700;
+}
+
+.cuenta-tarjeta-total-principal--favor {
+  color: #1565c0;
+}
+
+.cuenta-tarjeta-favor-hint {
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
 .cuenta-tarjeta-totales {
   display: flex;
   flex-direction: column;
@@ -6291,6 +6306,15 @@ input.full {
 
 .ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto {
   color: #1565c0;
+}
+
+.ventas-cuenta-recuadro--saldo-favor {
+  border-color: #64b5f6;
+  background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%);
+}
+
+.ventas-cuenta-recuadro--saldo-favor .ventas-cuenta-recuadro-monto {
+  color: #0d47a1;
 }
 
 .ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto {
