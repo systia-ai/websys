@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-whatsapp-anticipo]
 verify_jwt = false
+
+[functions.send-whatsapp-liquidacion]
+verify_jwt = false

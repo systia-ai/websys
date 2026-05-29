@@ -11,12 +11,15 @@ import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatal
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   abrirWhatsAppAnticipo,
+  abrirWhatsAppLiquidacion,
   abrirWhatsAppOrden,
   enviarAnticipoWhatsAppCloudApi,
+  enviarLiquidacionWhatsAppCloudApi,
   enviarOrdenWhatsAppCloudApi,
   formatFechaOrdenMensaje,
   formatMontoAnticipoWa,
   normalizarTelefonoWa,
+  resumenFormasPagoWa,
 } from './whatsappUtils.js'
 import {
   aYmdLocalDesdeRaw,
@@ -71,6 +74,14 @@ function resolveReparacionId(idReparacion, numeroOrden, repIdStr) {
     if (Number.isFinite(n) && n > 0) return n
   }
   return null
+}
+
+/** Pago total por WhatsApp: cuenta liquidada o orden ya entregada al cliente. */
+function puedeEnviarPagoTotalWhatsApp(cuenta, estatusOrden) {
+  const estCuenta = String(cuenta?.estatus ?? '').trim().toUpperCase()
+  if (estCuenta === 'LIQUIDADA') return true
+  if (estatusEsEntregado(estatusOrden)) return true
+  return false
 }
 
 function combineNiveles(b, y, c, m, cLight, mLight) {
@@ -209,6 +220,7 @@ export default function ReparacionesOrden({
   const [cuentaIdPago, setCuentaIdPago] = useState(null)
   const [waMenuAbierto, setWaMenuAbierto] = useState(false)
   const [enviandoWa, setEnviandoWa] = useState(false)
+  const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
   /** Datos de cliente cargados por `cliente_id` cuando la sesión no trae nombre/teléfono. */
   const [clienteDesdeBd, setClienteDesdeBd] = useState(null)
   /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
@@ -219,6 +231,8 @@ export default function ReparacionesOrden({
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
+
+  const puedeEnviarPagoTotalWa = puedeEnviarPagoTotalWhatsApp(cuentaOrden, estatus)
 
   const fechasEntregaBanner = useMemo(() => {
     if (!estatusEsEntregado(estatus)) return null
@@ -1104,6 +1118,37 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function obtenerCuentaOrdenConPagos() {
+    const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!rid) return { cuenta: null, pagos: [] }
+    if (supabase) {
+      const { data: cuentas, error: eC } = await supabase
+        .from('cuentas')
+        .select('*')
+        .eq('repara_id', rid)
+        .order('id', { ascending: false })
+        .limit(1)
+      if (eC) throw eC
+      const cuenta = cuentas?.[0] ?? null
+      if (!cuenta?.id) return { cuenta: null, pagos: [] }
+      const { data: pagos, error: eP } = await supabase
+        .from('pagosclientes')
+        .select('*')
+        .eq('cuenta_id', cuenta.id)
+        .order('id', { ascending: false })
+      if (eP) throw eP
+      return { cuenta, pagos: pagos ?? [] }
+    }
+    const matches = readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) === Number(rid))
+    const cuenta =
+      matches.length === 0
+        ? null
+        : [...matches].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+    if (!cuenta?.id) return { cuenta: null, pagos: [] }
+    const pagos = readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) === Number(cuenta.id))
+    return { cuenta, pagos }
+  }
+
   async function obtenerUltimoAnticipo() {
     const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!rid) return null
@@ -1242,14 +1287,101 @@ export default function ReparacionesOrden({
     reportarErrorTelefonoWa(wa)
   }
 
+  async function abrirMenuWhatsApp() {
+    setWaMenuAbierto(true)
+    setConsultandoCuentaWa(true)
+    try {
+      const { cuenta } = await obtenerCuentaOrdenConPagos()
+      setCuentaOrden(cuenta ?? null)
+    } catch {
+      /* conservar cuentaOrden previa si falla la consulta */
+    } finally {
+      setConsultandoCuentaWa(false)
+    }
+  }
+
+  async function enviarWhatsAppLiquidacionCliente() {
+    const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
+    if (!ord) {
+      onError('Primero registra la orden de servicio.')
+      return
+    }
+    let cuenta
+    let pagos
+    try {
+      ;({ cuenta, pagos } = await obtenerCuentaOrdenConPagos())
+    } catch (e) {
+      onError(`No se pudo consultar la cuenta: ${e.message}`)
+      return
+    }
+    if (!cuenta) {
+      onError('No hay cuenta vinculada a esta orden.')
+      return
+    }
+    if (!puedeEnviarPagoTotalWhatsApp(cuenta, estatus)) {
+      onError('Liquide la cuenta en Ventas o marque la orden como entregada antes de enviar este mensaje.')
+      return
+    }
+    const totalNum = Number(cuenta.total ?? 0)
+    const pagado = (pagos ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
+    const montoBase = totalNum > 0.0001 ? totalNum : pagado
+    if (montoBase <= 0.0001 && !estatusEsEntregado(estatus)) {
+      onError('No hay monto de liquidación registrado en la cuenta.')
+      return
+    }
+    const monto = formatMontoAnticipoWa(montoBase > 0.0001 ? montoBase : pagado)
+    const forma = resumenFormasPagoWa(pagos)
+    const fechaLiq = formatFechaOrdenMensaje(
+      cuenta.fecha_liquidada ??
+        cuenta.fechaLiquidada ??
+        fechaEntregaOrden ??
+        new Date(),
+    )
+
+    if (supabase) {
+      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const res = await enviarLiquidacionWhatsAppCloudApi(supabase, {
+        orden: ord,
+        nombreCliente: nombreClienteUi,
+        monto,
+        formaPago: forma,
+        fecha: fechaLiq,
+        ...(toDigits ? { to: toDigits } : {}),
+      })
+      if (res.ok) {
+        onNotice(`Pago total (${monto}) enviado por WhatsApp.`)
+        return
+      }
+      onError(res.errorMsg || 'No se pudo enviar la liquidación por WhatsApp.')
+      return
+    }
+    const wa = abrirWhatsAppLiquidacion({
+      telefono: telClienteUi,
+      numeroOrden: ord,
+      negocio: 'SISTEBIT',
+      nombreCliente: nombreClienteUi,
+      monto,
+      formaPago: forma,
+      fecha: fechaLiq,
+    })
+    if (wa.ok) {
+      onNotice('Mensaje de liquidación listo en WhatsApp. Pulsa enviar en la app.')
+      return
+    }
+    reportarErrorTelefonoWa(wa)
+  }
+
   async function elegirEnvioWhatsApp(tipo) {
     if (enviandoWa) return
+    if (tipo === 'liquidacion' && !puedeEnviarPagoTotalWa) return
     setEnviandoWa(true)
     try {
       if (tipo === 'orden') {
         await enviarWhatsAppOrdenCliente()
-      } else {
+      } else if (tipo === 'anticipo') {
         await enviarWhatsAppAnticipoCliente()
+      } else {
+        await enviarWhatsAppLiquidacionCliente()
       }
       setWaMenuAbierto(false)
     } finally {
@@ -1543,11 +1675,11 @@ export default function ReparacionesOrden({
             type="button"
             className="btn-success wide"
             disabled={!puedeAccionesPdf || !telClienteUi}
-            onClick={() => setWaMenuAbierto(true)}
+            onClick={() => void abrirMenuWhatsApp()}
             title={
               !telClienteUi
                 ? 'El cliente no tiene teléfono registrado'
-                : 'Enviar orden o anticipo por WhatsApp al cliente'
+                : 'Enviar orden, anticipo o pago total por WhatsApp al cliente'
             }
           >
             📲 Enviar por WhatsApp
@@ -1601,6 +1733,23 @@ export default function ReparacionesOrden({
                 onClick={() => void elegirEnvioWhatsApp('anticipo')}
               >
                 {enviandoWa ? 'Enviando…' : 'Enviar anticipo de cliente'}
+              </button>
+              <button
+                type="button"
+                className={`wa-menu-option btn-liquidacion wide${puedeEnviarPagoTotalWa ? ' btn-liquidacion--activo' : ' btn-liquidacion--inactivo'}`}
+                disabled={enviandoWa || consultandoCuentaWa || !puedeEnviarPagoTotalWa}
+                title={
+                  puedeEnviarPagoTotalWa
+                    ? 'Enviar confirmación de pago total (cuenta liquidada o orden entregada)'
+                    : 'Disponible cuando liquide la cuenta en Ventas o marque la orden entregada'
+                }
+                onClick={() => void elegirEnvioWhatsApp('liquidacion')}
+              >
+                {enviandoWa
+                  ? 'Enviando…'
+                  : consultandoCuentaWa
+                    ? 'Verificando cuenta…'
+                    : 'Pago total (cuenta liquidada)'}
               </button>
             </div>
             <div className="modal-footer">

@@ -253,6 +253,107 @@ export async function enviarAnticipoWhatsAppCloudApi(supabase, p) {
   return { ok: true, data }
 }
 
+/**
+ * Resumen de formas de pago para liquidación (una o varias).
+ * @param {Array<{ forma_pago?: string }>} pagos
+ */
+export function resumenFormasPagoWa(pagos = []) {
+  const formas = [
+    ...new Set(
+      (pagos ?? [])
+        .map((p) => String(p?.forma_pago ?? '').trim())
+        .filter(Boolean),
+    ),
+  ]
+  if (formas.length === 0) return '—'
+  if (formas.length === 1) return formas[0]
+  return formas.join(', ')
+}
+
+/**
+ * Confirmación de pago total / liquidación vía Edge Function `send-whatsapp-liquidacion`.
+ * Plantilla Meta: {{1}} cliente, {{2}} orden, {{3}} monto, {{4}} forma pago, {{5}} fecha.
+ *
+ * @param {object} supabase
+ * @param {{
+ *   nombreCliente?: string,
+ *   orden: string|number,
+ *   monto: string,
+ *   formaPago?: string,
+ *   fecha?: string,
+ *   to?: string,
+ * }} p
+ */
+export async function enviarLiquidacionWhatsAppCloudApi(supabase, p) {
+  if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  const { orden, nombreCliente = '', monto, formaPago = '', fecha, to } = p
+  const { data, error } = await supabase.functions.invoke('send-whatsapp-liquidacion', {
+    body: {
+      orden: String(orden),
+      nombreCliente: truncarMetaTexto(nombreCliente),
+      monto: truncarMetaTexto(monto, 80),
+      formaPago: truncarMetaTexto(formaPago, 80),
+      ...(fecha != null && String(fecha).trim() ? { fecha: truncarMetaTexto(String(fecha).trim(), 120) } : {}),
+      ...(to ? { to } : {}),
+    },
+  })
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
+  }
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
+  }
+  return { ok: true, data }
+}
+
+/**
+ * Mensaje de liquidación / pago total para wa.me (modo sin API).
+ */
+export function buildMensajeLiquidacionClienteDetalle(p) {
+  const neg = String(p?.negocio ?? NEGOCIO_DEFAULT).trim() || NEGOCIO_DEFAULT
+  const ord = String(p?.numeroOrden ?? '').trim() || '—'
+  const nom = String(p?.nombreCliente ?? '').trim() || '—'
+  const monto = String(p?.monto ?? '—').trim() || '—'
+  const forma = String(p?.formaPago ?? '').trim() || '—'
+  const fecha = formatFechaOrdenMensaje(p?.fecha)
+  return (
+    `Hola buen día, de parte de ${neg} confirmamos el pago total de su orden:\n\n` +
+    `• ${nom}\n\n` +
+    `• Número de orden: ${ord}\n` +
+    `• Total pagado: ${monto}\n` +
+    `• Forma de pago: ${forma}\n` +
+    `• Fecha: ${fecha}\n\n` +
+    `Gracias por su preferencia.`
+  )
+}
+
+/**
+ * Abre WhatsApp con mensaje de liquidación (wa.me).
+ */
+export function abrirWhatsAppLiquidacion(p) {
+  const { telefono, mensaje: mensajePre, numeroOrden, negocio, nombreCliente, monto, formaPago, fecha } = p
+  if (!telefono || !String(telefono).trim()) {
+    return { ok: false, motivo: 'sin-telefono' }
+  }
+  const mensaje =
+    mensajePre != null && String(mensajePre).trim()
+      ? String(mensajePre).trim()
+      : buildMensajeLiquidacionClienteDetalle({
+          negocio,
+          numeroOrden,
+          nombreCliente,
+          monto,
+          formaPago,
+          fecha,
+        })
+  const url = buildWhatsAppUrl({ telefono, mensaje })
+  if (!url) return { ok: false, motivo: 'telefono-invalido' }
+  const win = window.open(url, '_blank', 'noopener')
+  if (!win) return { ok: false, motivo: 'popup-bloqueado' }
+  return { ok: true, url }
+}
+
 /** Monto legible para plantilla WhatsApp (anticipo). */
 export function formatMontoAnticipoWa(monto) {
   const n = Number(monto)
