@@ -68,9 +68,9 @@ Deno.serve(async (req) => {
   const descEq = truncar(String(body.descripcionEquipo ?? '').trim(), 200)
   const prob = truncar(String(body.problemasReportados ?? '').trim(), 200)
   const partes = [nombreBase]
-  if (descEq) partes.push(`Equipo: ${descEq}`)
-  if (prob) partes.push(`Problema: ${prob}`)
-  const detalleCliente = truncar(partes.join(' · '), 512)
+  if (descEq) partes.push(`• Equipo: ${descEq}`)
+  if (prob) partes.push(`• Problema: ${prob}`)
+  const detalleCliente = truncar(partes.join('\n'), 512)
   const fecha =
     body.fecha != null && String(body.fecha).trim()
       ? truncar(String(body.fecha).trim(), 120)
