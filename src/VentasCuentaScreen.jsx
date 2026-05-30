@@ -24,14 +24,6 @@ import {
   sincronizarEstatusCuentaPorSaldo,
   sumPagosCuenta,
 } from './reparacionUtils.js'
-import {
-  abrirWhatsAppLiquidacion,
-  enviarLiquidacionWhatsAppCloudApi,
-  formatFechaOrdenMensaje,
-  formatMontoAnticipoWa,
-  normalizarTelefonoWa,
-  resumenFormasPagoWa,
-} from './whatsappUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -273,8 +265,6 @@ export default function VentasCuentaScreen({
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
-  const [modalWaLiquidacion, setModalWaLiquidacion] = useState(false)
-  const [enviandoWaLiquidacion, setEnviandoWaLiquidacion] = useState(false)
   const pagandoAdeudoRef = useRef(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
@@ -682,7 +672,6 @@ export default function VentasCuentaScreen({
         ? 'Cuenta liquidada. La orden sigue activa hasta marcarla entregada en servicio.'
         : 'No se pudo liquidar la cuenta.',
     )
-    if (ok) ofrecerWhatsAppTrasLiquidacion()
   }
 
   async function elegirCuentaActivaPagadaTrasPago() {
@@ -1040,95 +1029,10 @@ export default function VentasCuentaScreen({
     return true
   }
 
-  function datosLiquidacionParaWhatsApp(pagosRows = []) {
-    const totalNum = Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
-    const pagado = sumMontoPagos(pagosRows)
-    const montoBase = totalNum > 0.0001 ? totalNum : pagado
-    const monto = formatMontoAnticipoWa(montoBase)
-    const forma = resumenFormasPagoWa(pagosRows)
-    const fecha = formatFechaOrdenMensaje(cuentaInfo?.fecha_liquidada ?? new Date())
-    const ord = reparaIdCuenta != null ? String(reparaIdCuenta) : cuentaId != null ? String(cuentaId) : '—'
-    return { monto, forma, fecha, ord, montoBase }
-  }
-
-  async function enviarWhatsAppLiquidacionDesdeVentas() {
-    if (!cliente.telefono?.trim()) {
-      onError?.('El cliente no tiene teléfono registrado.')
-      return
-    }
-    const est = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '').toUpperCase()
-    if (est !== 'LIQUIDADA') {
-      onError?.('La cuenta debe estar liquidada para enviar este mensaje.')
-      return
-    }
-    let pagosRows = pagosDesdeLineas(lineas)
-    if (supabase && cuentaId) {
-      const { data: pagosDb, error: ePag } = await supabase
-        .from('pagosclientes')
-        .select('*')
-        .eq('cuenta_id', cuentaId)
-      if (!ePag && (pagosDb ?? []).length) pagosRows = pagosDb
-    }
-    const { monto, forma, fecha, ord, montoBase } = datosLiquidacionParaWhatsApp(pagosRows)
-    if (montoBase <= 0.0001) {
-      onError?.('No hay monto de liquidación para notificar.')
-      return
-    }
-    setEnviandoWaLiquidacion(true)
-    try {
-      if (supabase) {
-        const toDigits = normalizarTelefonoWa(cliente.telefono)
-        const res = await enviarLiquidacionWhatsAppCloudApi(supabase, {
-          orden: ord,
-          nombreCliente: cliente.nombre ?? '',
-          monto,
-          formaPago: forma,
-          fecha,
-          ...(toDigits ? { to: toDigits } : {}),
-        })
-        if (res.ok) {
-          onNotice?.(`Pago total (${monto}) enviado por WhatsApp.`)
-          setModalWaLiquidacion(false)
-          return
-        }
-        onError?.(res.errorMsg || 'No se pudo enviar la liquidación por WhatsApp.')
-        return
-      }
-      const wa = abrirWhatsAppLiquidacion({
-        telefono: cliente.telefono,
-        numeroOrden: ord,
-        negocio: 'SISTEBIT',
-        nombreCliente: cliente.nombre ?? '',
-        monto,
-        formaPago: forma,
-        fecha,
-      })
-      if (wa.ok) {
-        onNotice?.('Mensaje de liquidación listo en WhatsApp. Pulsa enviar en la app.')
-        setModalWaLiquidacion(false)
-        return
-      }
-      if (wa.motivo === 'sin-telefono') onError?.('El cliente no tiene teléfono registrado.')
-      else if (wa.motivo === 'telefono-invalido') onError?.('Teléfono no válido para WhatsApp.')
-      else onError?.('Permita ventanas emergentes para abrir WhatsApp.')
-    } finally {
-      setEnviandoWaLiquidacion(false)
-    }
-  }
-
-  function ofrecerWhatsAppTrasLiquidacion() {
-    if (cliente.telefono?.trim()) {
-      setModalWaLiquidacion(true)
-    }
-  }
-
   async function liquidarCuenta() {
     try {
       const ok = await aplicarLiquidacionCuenta({ avisar: true })
-      if (ok) {
-        onNotice?.('Cuenta liquidada')
-        ofrecerWhatsAppTrasLiquidacion()
-      }
+      if (ok) onNotice?.('Cuenta liquidada')
     } catch (e) {
       onError?.(`Error al liquidar: ${e.message}`)
     }
@@ -1290,16 +1194,6 @@ export default function VentasCuentaScreen({
               ✅ LIQUIDAR CUENTA
             </button>
           ) : null}
-          {esCuentaExistente && cuentaEstatus.toUpperCase() === 'LIQUIDADA' ? (
-            <button
-              type="button"
-              className="btn-wa-liquidacion-ventas"
-              onClick={() => void enviarWhatsAppLiquidacionDesdeVentas()}
-              disabled={enviandoWaLiquidacion}
-            >
-              {enviandoWaLiquidacion ? 'Enviando…' : '📲 ENVIAR PAGO TOTAL POR WHATSAPP'}
-            </button>
-          ) : null}
           <button type="button" className="btn-comprobante-ventas" onClick={enviarComprobante}>
             📧 ENVIAR COMPROBANTE
           </button>
@@ -1430,46 +1324,6 @@ export default function VentasCuentaScreen({
               </button>
               <button type="button" className="btn-liquidar-cuenta" onClick={() => void elegirLiquidarCuentaTrasPago()}>
                 Liquidar cuenta
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {modalWaLiquidacion && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => !enviandoWaLiquidacion && setModalWaLiquidacion(false)}
-        >
-          <div className="modal modal-confirmar-datos" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header confirmar-datos-header">
-              <span className="confirmar-datos-header-ico" aria-hidden="true">
-                📲
-              </span>
-              <div>
-                <h3>¿Enviar confirmación por WhatsApp?</h3>
-                <p className="confirmar-datos-lead">
-                  La cuenta quedó liquidada. Puede notificar al cliente el pago total por WhatsApp.
-                </p>
-              </div>
-            </div>
-            <div className="modal-footer modal-footer-wrap">
-              <button
-                type="button"
-                className="secondary"
-                disabled={enviandoWaLiquidacion}
-                onClick={() => setModalWaLiquidacion(false)}
-              >
-                Ahora no
-              </button>
-              <button
-                type="button"
-                className="btn-wa-liquidacion-ventas"
-                disabled={enviandoWaLiquidacion}
-                onClick={() => void enviarWhatsAppLiquidacionDesdeVentas()}
-              >
-                {enviandoWaLiquidacion ? 'Enviando…' : 'Enviar pago total'}
               </button>
             </div>
           </div>
