@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { balanceNetoCuenta, saldoDesdeCuenta } from './reparacionUtils.js'
+import { saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_CUENTAS_CLIENTE = 'sistefix_clientes_cuentas_vista'
@@ -82,8 +82,8 @@ export default function ClientesCuentasVentasPanel({
   const filas = useMemo(() => {
     return cuentas.map((cuenta) => {
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
-      const total = balanceNetoCuenta(cuenta, pagosC)
-      const saldo = saldoDesdeCuenta(cuenta, pagosC)
+      const total = totalCargosCuenta(cuenta)
+      const saldo = saldoPendienteCuenta(total, pagosC)
       const estatus = String(cuenta.estatus ?? '—').trim() || '—'
       const estatusUpper = estatus.toUpperCase()
       const liquidada = estatusUpper === 'LIQUIDADA'
@@ -105,7 +105,6 @@ export default function ClientesCuentasVentasPanel({
         pagadaActiva,
         tipoPago: tipoPagoVisible(cuenta, pagosC),
         ordenRef,
-        totalAFavor: total < -0.0001,
       }
     })
   }, [cuentas, pagosPorCuenta])
@@ -217,11 +216,7 @@ export default function ClientesCuentasVentasPanel({
                     >
                       <td className="cuentas-cliente-tabla-orden">{f.idCuenta}</td>
                       <td className="cuentas-cliente-tabla-fecha">{f.fechaCreacion}</td>
-                      <td
-                        className={`cuentas-cliente-tabla-total${f.totalAFavor ? ' cuenta-tarjeta-saldo-favor' : ''}`}
-                      >
-                        ${f.total.toFixed(2)}
-                      </td>
+                      <td className="cuentas-cliente-tabla-total">${f.total.toFixed(2)}</td>
                       <td
                         className={`cuentas-cliente-tabla-total${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-pend' : ''}`}
                       >
@@ -278,11 +273,8 @@ export default function ClientesCuentasVentasPanel({
                       <span className="rep-activa-etiqueta">Creación:</span> {f.fechaCreacion}
                     </span>
                     <span className="cuenta-tarjeta-totales">
-                      <span
-                        className={`cuenta-tarjeta-total-principal${f.totalAFavor ? ' cuenta-tarjeta-total-principal--favor' : ''}`}
-                      >
+                      <span className="cuenta-tarjeta-total-principal">
                         Total: <strong>${f.total.toFixed(2)}</strong>
-                        {f.totalAFavor ? <span className="cuenta-tarjeta-favor-hint"> (a favor)</span> : null}
                       </span>
                       <span
                         className={`cuenta-tarjeta-saldo-linea${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-linea--pend' : ''}`}

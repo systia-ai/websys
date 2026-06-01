@@ -377,6 +377,16 @@ export function balanceNetoCuenta(cuenta, pagosCuenta = []) {
   return cargos - sumPagosCuenta(pagosCuenta)
 }
 
+/** Total de cargos positivos (productos/servicios), sin restar anticipos. */
+export function totalCargosCuenta(cuenta, movsCuenta = []) {
+  const cargosMovs = (movsCuenta ?? []).reduce((s, m) => {
+    const line = Number(m.cantidad ?? 0) * Number(m.costo ?? 0)
+    return line > 0.0001 ? s + line : s
+  }, 0)
+  const ct = Math.max(0, Number(cuenta?.total ?? 0))
+  return Math.max(ct, cargosMovs)
+}
+
 /** Adeudo = total de la venta menos lo pagado (mínimo 0). */
 export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
   const total = Number(totalVenta ?? 0)

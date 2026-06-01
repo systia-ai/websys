@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { balanceNetoCuenta, saldoDesdeCuenta } from './reparacionUtils.js'
+import { saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 function fmtFechaCuenta(v) {
@@ -66,15 +66,14 @@ export default function CuentasClientePanel({
   const filas = useMemo(() => {
     return cuentas.map((cuenta) => {
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
-      const total = balanceNetoCuenta(cuenta, pagosC)
-      const saldo = saldoDesdeCuenta(cuenta, pagosC)
+      const total = totalCargosCuenta(cuenta)
+      const saldo = saldoPendienteCuenta(total, pagosC)
       return {
         cuenta,
         idCuenta: cuenta.id != null ? String(cuenta.id) : '—',
         fechaCreacion: fmtFechaCuenta(cuenta.created_at ?? cuenta.createdAt),
         total,
         saldo,
-        totalAFavor: total < -0.0001,
         estatus: String(cuenta.estatus ?? '—').trim() || '—',
         tipoPago: tipoPagoVisible(cuenta, pagosC),
         ordenRef:
@@ -184,11 +183,7 @@ export default function CuentasClientePanel({
                     >
                       <td className="cuentas-cliente-tabla-orden">{f.idCuenta}</td>
                       <td className="cuentas-cliente-tabla-fecha">{f.fechaCreacion}</td>
-                      <td
-                        className={`cuentas-cliente-tabla-total${f.totalAFavor ? ' cuenta-tarjeta-saldo-favor' : ''}`}
-                      >
-                        ${f.total.toFixed(2)}
-                      </td>
+                      <td className="cuentas-cliente-tabla-total">${f.total.toFixed(2)}</td>
                       <td
                         className={`cuentas-cliente-tabla-total${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-pend' : ''}`}
                       >
@@ -232,11 +227,8 @@ export default function CuentasClientePanel({
                     {lineaTarjeta('ID cuenta', f.idCuenta)}
                     {lineaTarjeta('Fecha creación', f.fechaCreacion)}
                     <span className="cuenta-tarjeta-totales">
-                      <span
-                        className={`cuenta-tarjeta-total-principal${f.totalAFavor ? ' cuenta-tarjeta-total-principal--favor' : ''}`}
-                      >
+                      <span className="cuenta-tarjeta-total-principal">
                         Total: <strong>${f.total.toFixed(2)}</strong>
-                        {f.totalAFavor ? <span className="cuenta-tarjeta-favor-hint"> (a favor)</span> : null}
                       </span>
                       <span
                         className={`cuenta-tarjeta-saldo-linea${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-linea--pend' : ''}`}
