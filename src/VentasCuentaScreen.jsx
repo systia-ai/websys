@@ -76,11 +76,15 @@ function pagosDesdeLineas(lineas) {
     .map((l) => ({ pago: Math.abs(Number(l.subtotal ?? l.precioUnitario ?? 0)) }))
 }
 
+function sumPagosDesdeLineas(lineas) {
+  return pagosDesdeLineas(lineas).reduce((s, p) => s + Number(p.pago ?? 0), 0)
+}
+
 /** Balance neto (cargos − pagos); negativo = anticipo / saldo a favor. */
 function calcularBalanceNeto(lineas, cuentaTotal) {
   const tieneLineas = lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
   if (tieneLineas) {
-    return sumSubtotales(lineas)
+    return totalCargosDesdeLineas(lineas) - sumPagosDesdeLineas(lineas)
   }
   return Number(cuentaTotal ?? 0)
 }
@@ -93,7 +97,7 @@ function calcularSaldoPendiente(lineas, cuentaTotal) {
 function totalVentaParaSync(cuentaTotal, lineas) {
   const cargos = totalCargosDesdeLineas(lineas)
   const ct = Number(cuentaTotal ?? 0)
-  return Math.max(ct, cargos, Math.max(0, sumSubtotales(lineas)))
+  return Math.max(ct, cargos)
 }
 
 /** Si el costo de reparación en la orden no está en reparamov, lo muestra como cargo virtual. */
@@ -283,7 +287,7 @@ export default function VentasCuentaScreen({
     [lineas, totalCargos],
   )
   const saldoPendiente = useMemo(() => Math.max(0, balanceNeto), [balanceNeto])
-  const totalStr = balanceNeto.toFixed(2)
+  const totalStr = totalCargos.toFixed(2)
   const saldoStr = saldoPendiente.toFixed(2)
   const saldoAFavor = balanceNeto < -0.0001
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
