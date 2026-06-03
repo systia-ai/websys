@@ -52,6 +52,8 @@ function App() {
   const [clientesRetornoVentas, setClientesRetornoVentas] = useState(null)
   /** Al volver de Orden de servicio → Clientes, reabrir la lista de órdenes del mismo cliente. */
   const [clientesRetornoOrdenes, setClientesRetornoOrdenes] = useState(null)
+  /** Al volver de Orden de servicio → Equipos, reabrir modal Reparaciones del equipo. */
+  const [serviciosRetornoReparaciones, setServiciosRetornoReparaciones] = useState(null)
   const [rolUsuario, setRolUsuario] = useState('ADMIN')
   const [rolesReady, setRolesReady] = useState(false)
 
@@ -61,6 +63,10 @@ function App() {
 
   const limpiarRetornoOrdenesClientes = useCallback(() => {
     setClientesRetornoOrdenes(null)
+  }, [])
+
+  const limpiarRetornoServiciosReparaciones = useCallback(() => {
+    setServiciosRetornoReparaciones(null)
   }, [])
   const activeModuleRef = useRef(activeModule)
   /** Historial de pantallas para «atrás» / salir (no siempre inicio). */
@@ -122,6 +128,7 @@ function App() {
       setClienteVinculoServicios(null)
       setClientesRetornoVentas(null)
       setClientesRetornoOrdenes(null)
+      setServiciosRetornoReparaciones(null)
       setActiveModule('home')
       setNotice('')
       return
@@ -182,6 +189,14 @@ function App() {
       setClientesRetornoVentas({
         openAccionesModal: true,
         cliente: normalizeClienteRow(returnToClientesOrdenes),
+      })
+      session = rest
+    }
+    if (raw && typeof raw === 'object' && raw.returnToServiciosEquipo != null) {
+      const { returnToServiciosEquipo, ...rest } = session
+      setServiciosRetornoReparaciones({
+        openModalReparaciones: true,
+        equipo: returnToServiciosEquipo,
       })
       session = rest
     }
@@ -554,6 +569,8 @@ function App() {
         puedeEliminar={puedeEliminar}
         clienteDesdeClientes={clienteVinculoServicios}
         onConsumeClienteVinculo={() => setClienteVinculoServicios(null)}
+        retornoReparaciones={serviciosRetornoReparaciones}
+        onRetornoReparacionesConsumido={limpiarRetornoServiciosReparaciones}
         onHome={goBack}
         onIrAClientes={() => navigateTo('clientes')}
         onIrAOrdenServicio={() => {

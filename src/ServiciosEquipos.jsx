@@ -7,6 +7,7 @@ import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares, buscarEquiposPorSerieExacta } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { fechaEntregaYmd, fechaIngresoYmd, formatFechaLegibleEsMx } from './reparacionUtils.js'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -32,6 +33,33 @@ function readLs(key, fallback) {
 
 function writeLs(key, val) {
   localStorage.setItem(key, JSON.stringify(val))
+}
+
+function fechasReparacionEtiquetas(rep) {
+  const fmt = (ymd) =>
+    ymd ? formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+  return {
+    ingreso: fmt(fechaIngresoYmd(rep)),
+    entrega: fmt(fechaEntregaYmd(rep)),
+  }
+}
+
+function snapshotEquipoRetorno(eq) {
+  if (!eq?.id) return null
+  return {
+    id: eq.id,
+    serie: eq.serie,
+    tipo_equipo: eq.tipo_equipo,
+    descripcion: eq.descripcion,
+    tipo_reparacion: eq.tipo_reparacion,
+    cliente_id: eq.cliente_id,
+  }
+}
+
+function payloadConRetornoModalEquipo(eq, payload) {
+  const snap = snapshotEquipoRetorno(eq)
+  if (!snap) return payload
+  return { ...payload, returnToServiciosEquipo: snap }
 }
 
 let __localIdSeq = 1
@@ -85,6 +113,8 @@ export default function ServiciosEquipos({
   onNotice,
   clienteDesdeClientes = null,
   onConsumeClienteVinculo,
+  retornoReparaciones = null,
+  onRetornoReparacionesConsumido,
   puedeEliminar = true,
 }) {
   const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
@@ -153,6 +183,17 @@ export default function ServiciosEquipos({
   useEffect(() => {
     cargarEquipos()
   }, [cargarEquipos])
+
+  useEffect(() => {
+    const r = retornoReparaciones
+    if (!r?.openModalReparaciones || r?.equipo?.id == null) return
+    const encontrado = equipos.find((e) => sameId(e.id, r.equipo.id))
+    const eq = encontrado ?? r.equipo
+    setModalRep(eq)
+    if (eq.id != null) void cargarReparacionesDeEquipo(eq.id)
+    onRetornoReparacionesConsumido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al volver de orden de servicio
+  }, [retornoReparaciones])
 
   const clientePorId = useMemo(() => {
     const m = new Map()
@@ -305,7 +346,7 @@ export default function ServiciosEquipos({
     }
   }
 
-  async function vincularEquipoClienteYReparaciones(eq, cliente) {
+  async function vincularEquipoClienteYReparaciones(eq, cliente, { retornoModal = false } = {}) {
     const c = normalizeClienteRow(cliente)
     if (!eq?.id) {
       onError('Equipo inválido')
@@ -324,9 +365,17 @@ export default function ServiciosEquipos({
       }
       await cargarEquipos()
       onNotice('Cliente asociado al equipo')
-      onOpenReparaciones(
-        payloadReparacionesSesion(c, { serie: eq.serie, tipo_equipo: eq.tipo_equipo, descripcion: eq.descripcion, tipo_reparacion: eq.tipo_reparacion }, eq.id),
+      const payload = payloadReparacionesSesion(
+        c,
+        {
+          serie: eq.serie,
+          tipo_equipo: eq.tipo_equipo,
+          descripcion: eq.descripcion,
+          tipo_reparacion: eq.tipo_reparacion,
+        },
+        eq.id,
       )
+      onOpenReparaciones(retornoModal ? payloadConRetornoModalEquipo(eq, payload) : payload)
       return true
     } catch (e) {
       onError(`Error al asociar cliente: ${e.message}`)
@@ -527,21 +576,27 @@ export default function ServiciosEquipos({
     if (!cli && rep.cliente_id != null) cli = await fetchCliente(rep.cliente_id)
     const c = normalizeClienteRow(cli ?? {})
     setModalRep(null)
-    onOpenReparaciones({
-      ...payloadReparacionesSesion(c, {
-        serie: eq.serie,
-        tipo_equipo: eq.tipo_equipo,
-        descripcion: eq.descripcion,
-        tipo_reparacion: rep.tipo_reparacion ?? eq.tipo_reparacion,
-      }, eq.id),
-      reparacionId: rep.id != null ? String(rep.id) : '',
-    })
+    onOpenReparaciones(
+      payloadConRetornoModalEquipo(eq, {
+        ...payloadReparacionesSesion(
+          c,
+          {
+            serie: eq.serie,
+            tipo_equipo: eq.tipo_equipo,
+            descripcion: eq.descripcion,
+            tipo_reparacion: rep.tipo_reparacion ?? eq.tipo_reparacion,
+          },
+          eq.id,
+        ),
+        reparacionId: rep.id != null ? String(rep.id) : '',
+      }),
+    )
   }
 
   async function nuevaReparacionDesdeModal(eq) {
     if ((!eq.cliente_id || eq.cliente_id === '') && clienteDesdeModuloClientes?.id != null) {
       setModalRep(null)
-      const ok = await vincularEquipoClienteYReparaciones(eq, clienteDesdeModuloClientes)
+      const ok = await vincularEquipoClienteYReparaciones(eq, clienteDesdeModuloClientes, { retornoModal: true })
       if (ok) onConsumeClienteVinculo?.()
       return
     }
@@ -551,12 +606,14 @@ export default function ServiciosEquipos({
       if (!cli && eq.cliente_id) cli = await fetchCliente(eq.cliente_id)
       const c = normalizeClienteRow(cli ?? {})
       setModalRep(null)
-      onOpenReparaciones(payloadReparacionesSesion(c, {
-        serie: eq.serie,
-        tipo_equipo: eq.tipo_equipo,
-        descripcion: eq.descripcion,
-        tipo_reparacion: eq.tipo_reparacion,
-      }, eq.id))
+      onOpenReparaciones(
+        payloadConRetornoModalEquipo(eq, payloadReparacionesSesion(c, {
+          serie: eq.serie,
+          tipo_equipo: eq.tipo_equipo,
+          descripcion: eq.descripcion,
+          tipo_reparacion: eq.tipo_reparacion,
+        }, eq.id)),
+      )
       return
     }
     setModalRep(null)
@@ -586,7 +643,9 @@ export default function ServiciosEquipos({
       onError('Equipo inválido')
       return
     }
-    const ok = await vincularEquipoClienteYReparaciones(eq, cliente)
+    const ok = await vincularEquipoClienteYReparaciones(eq, cliente, {
+      retornoModal: clienteMotivo === 'asociar',
+    })
     if (ok) {
       setDialogoCliente(false)
       setEquipoPendiente(null)
@@ -1066,7 +1125,9 @@ export default function ServiciosEquipos({
             <div className="modal-body">
               {repsLoading ? <p>Cargando…</p> : null}
               {!repsLoading &&
-                repsEquipo.map((rep) => (
+                repsEquipo.map((rep) => {
+                  const fechas = fechasReparacionEtiquetas(rep)
+                  return (
                   <button
                     key={rep.id}
                     type="button"
@@ -1079,11 +1140,16 @@ export default function ServiciosEquipos({
                     {rep.tipo_reparacion ? <span>Tipo: {rep.tipo_reparacion}</span> : null}
                     {rep.descripcion_equipo ? <span>{rep.descripcion_equipo}</span> : null}
                     {rep.problemas_reportados ? <span>{rep.problemas_reportados}</span> : null}
+                    <span className="rep-card-fechas">
+                      <span>Ingreso: {fechas.ingreso}</span>
+                      <span>Entrega: {fechas.entrega}</span>
+                    </span>
                     <span className={`estatus estatus-${String(rep.estatus ?? '').replace(/\s+/g, '_')}`}>
                       Estado: {rep.estatus ?? 'Sin estado'}
                     </span>
                   </button>
-                ))}
+                  )
+                })}
               {!repsLoading && repsEquipo.length === 0 ? (
                 <p className="warn-inline">No hay reparaciones registradas para este equipo</p>
               ) : null}

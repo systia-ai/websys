@@ -518,6 +518,20 @@ td {
   color: #4b5563;
 }
 
+.rep-card-fechas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+
+.rep-card-fechas span {
+  display: inline;
+  font-size: 0.84rem;
+  color: #1e40af;
+  font-weight: 600;
+}
+
 .modal-footer {
   padding: 14px 18px;
   border-top: 1px solid #e5e7eb;

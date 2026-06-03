@@ -28,7 +28,7 @@ Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 | `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` |
 | `WHATSAPP_TEMPLATE_LIQUIDACION_NAME` | `liquidacion_orden_s` |
 | `WHATSAPP_API_VERSION` | `v25.0` |
-| `WHATSAPP_TEST_TO` | `524622647020` → **modo prueba:** todos los mensajes van a **462 264 7020** (quitar en producción) |
+| `WHATSAPP_TEST_TO` | `524622090526` → **modo prueba:** todos los mensajes van a **462 209 0526** (quitar en producción) |
 
 **No configurar** `WHATSAPP_TEST_TO` en producción final — si existe, todos los mensajes van a ese número y no al cliente.
 
