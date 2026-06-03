@@ -24,14 +24,6 @@ import {
   sincronizarEstatusCuentaPorSaldo,
   sumPagosCuenta,
 } from './reparacionUtils.js'
-import {
-  calcularAnticipoDisponible,
-  calcularSaldoPendienteDesdeLineas,
-  pagosDesdeLineasPago,
-  totalCargosDesdeLineas,
-  totalCargosReparacionDesdeLineas,
-  totalCargosVentaDesdeLineas,
-} from './cuentaSaldoUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
@@ -72,16 +64,34 @@ function sumSubtotales(lineas) {
   return lineas.reduce((s, L) => s + Number(L.subtotal ?? 0), 0)
 }
 
+function totalCargosDesdeLineas(lineas) {
+  return lineas
+    .filter((l) => l.tipo !== 'pago')
+    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+}
+
 function pagosDesdeLineas(lineas) {
-  return pagosDesdeLineasPago(lineas)
+  return lineas
+    .filter((l) => l.tipo === 'pago')
+    .map((l) => ({ pago: Math.abs(Number(l.subtotal ?? l.precioUnitario ?? 0)) }))
 }
 
 function sumPagosDesdeLineas(lineas) {
   return pagosDesdeLineas(lineas).reduce((s, p) => s + Number(p.pago ?? 0), 0)
 }
 
-function calcularSaldoPendiente(lineas) {
-  return calcularSaldoPendienteDesdeLineas(lineas)
+/** Balance neto (cargos − pagos); negativo = anticipo / saldo a favor. */
+function calcularBalanceNeto(lineas, cuentaTotal) {
+  const tieneLineas = lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
+  if (tieneLineas) {
+    return totalCargosDesdeLineas(lineas) - sumPagosDesdeLineas(lineas)
+  }
+  return Number(cuentaTotal ?? 0)
+}
+
+/** Adeudo pendiente (mínimo 0) para cobrar o liquidar. */
+function calcularSaldoPendiente(lineas, cuentaTotal) {
+  return Math.max(0, calcularBalanceNeto(lineas, cuentaTotal))
 }
 
 function totalVentaParaSync(cuentaTotal, lineas) {
@@ -274,20 +284,14 @@ export default function VentasCuentaScreen({
     const ct = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
     return ct > 0.0001 ? ct : cargos
   }, [lineas, cuentaInfo?.total, cuentaInicial?.total])
-  const saldoPendiente = useMemo(() => calcularSaldoPendiente(lineas), [lineas])
-  const anticipoDisponible = useMemo(
-    () =>
-      calcularAnticipoDisponible({
-        cargosVenta: totalCargosVentaDesdeLineas(lineas),
-        cargosReparacion: totalCargosReparacionDesdeLineas(lineas),
-        pagos: pagosDesdeLineas(lineas),
-      }),
-    [lineas],
+  const balanceNeto = useMemo(
+    () => calcularBalanceNeto(lineas, totalCargos),
+    [lineas, totalCargos],
   )
+  const saldoPendiente = useMemo(() => Math.max(0, balanceNeto), [balanceNeto])
   const totalStr = totalCargos.toFixed(2)
   const saldoStr = saldoPendiente.toFixed(2)
-  const saldoAFavor = anticipoDisponible > 0.0001 && totalCargos <= 0.0001
-  const anticipoStr = anticipoDisponible.toFixed(2)
+  const saldoAFavor = balanceNeto < -0.0001
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
@@ -417,16 +421,15 @@ export default function VentasCuentaScreen({
           } else if (supabase) {
             actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, cuentaRow, pagos, {
               totalVenta: totalSync,
-              movsCuenta: movs,
-              movsReparacion: reps,
             })
           } else {
-            const adeudo = calcularSaldoPendiente(built)
-            const pagado = pagos.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+            const pagosLs = pagos
+            const pagado = pagosLs.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+            const adeudo = Math.max(0, totalSync - pagado)
             const est = String(cuentaRow.estatus ?? '').trim().toUpperCase()
             if (adeudo > 0.01 || (totalSync <= 0.0001 && pagado > 0.0001 && est === 'LIQUIDADA')) {
-              actualizada = { ...cuentaRow, estatus: 'PENDIENTE', total: totalSync, saldo: adeudo, fecha_liquidada: null }
-            } else if (totalSync > 0.0001 && adeudo <= 0.01) {
+              actualizada = { ...cuentaRow, estatus: 'PENDIENTE', total: totalSync, fecha_liquidada: null }
+            } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
               if (est === 'LIQUIDADA') {
                 const nowLiq = new Date().toISOString()
                 actualizada = {
@@ -519,29 +522,18 @@ export default function VentasCuentaScreen({
           supabase,
           { ...base, total: totalSync },
           pagosSync,
-          {
-            totalVenta: totalSync,
-            movsCuenta: lineas.filter((l) => l.tipo === 'cuentamov').map((l) => ({
-              cantidad: l.cantidad,
-              costo: l.precioUnitario,
-            })),
-            movsReparacion: lineas
-              .filter((l) => l.tipo === 'reparamov' || l.tipo === 'reparacion_cargo')
-              .map((l) => ({
-                cantidad: l.cantidad,
-                costo: l.precioUnitario,
-              })),
-          },
+          { totalVenta: totalSync },
         )
         setCuentaInfo(actualizada)
       } else {
         const list = readLs(LS_CUENTAS, [])
         const prev = list.find((c) => sameId(c.id, cuentaId)) ?? { id: cuentaId }
-        const adeudo = calcularSaldoPendiente(lineas)
+        const pagado = pagosSync.reduce((s, p) => s + Number(p.pago ?? 0), 0)
+        const adeudo = Math.max(0, totalSync - pagado)
         let next = { ...prev, total: totalSync, saldo: adeudo }
         if (adeudo > 0.01) {
           next = { ...next, estatus: 'PENDIENTE', fecha_liquidada: null }
-        } else if (totalSync > 0.0001 && adeudo <= 0.01) {
+        } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
           const est = String(prev.estatus ?? '').toUpperCase()
           if (est === 'LIQUIDADA') {
             next = {
@@ -641,7 +633,7 @@ export default function VentasCuentaScreen({
     const est = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '').toUpperCase()
     if (est === 'LIQUIDADA' || est === 'PAGADA') return false
     if (totalCargosDesdeLineas(lineasUi) <= 0.0001) return false
-    return calcularSaldoPendiente(lineasUi) <= 0.0001
+    return calcularSaldoPendiente(lineasUi, totalCargos) <= 0.0001
   }
 
   async function aplicarCuentaPagadaActivaDesdePantalla() {
@@ -970,7 +962,7 @@ export default function VentasCuentaScreen({
   async function aplicarLiquidacionCuenta({ avisar = true, totalOverride = null } = {}) {
     if (!cuentaId) return false
     const saldoNet =
-      totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas)
+      totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas, totalCargos)
     if (saldoNet > 0.0001) {
       if (avisar) {
         onError?.(`No se puede liquidar: aún hay saldo pendiente de $${saldoNet.toFixed(2)}.`)
@@ -978,17 +970,26 @@ export default function VentasCuentaScreen({
       return false
     }
     const cargos = totalCargosDesdeLineas(lineas)
+    const pagosUi = sumMontoPagos(pagosDesdeLineas(lineas))
+    if (cargos > 0.01 && pagosUi < cargos - 0.01) {
+      if (avisar) {
+        onError?.(
+          `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUi.toFixed(2)}.`,
+        )
+      }
+      return false
+    }
     if (supabase && cargos > 0.01) {
       const { data: pagosDb, error: ePag } = await supabase
         .from('pagosclientes')
-        .select('*')
+        .select('pago')
         .eq('cuenta_id', cuentaId)
       if (!ePag) {
-        const adeudoDb = calcularSaldoPendienteDesdeLineas(lineas, pagosDb ?? [])
-        if (adeudoDb > 0.01) {
+        const pagadoDb = sumPagosCuenta(pagosDb ?? [])
+        if (pagadoDb < cargos - 0.01) {
           if (avisar) {
             onError?.(
-              `Faltan pagos en la base de datos ($${adeudoDb.toFixed(2)}). Use «Agregar pago» o «Pagar adeudo total» antes de liquidar.`,
+              `Faltan pagos en la base de datos ($${(cargos - pagadoDb).toFixed(2)}). Use «Agregar pago» o «Pagar adeudo total» antes de liquidar.`,
             )
           }
           return false
@@ -1161,12 +1162,8 @@ export default function VentasCuentaScreen({
           <div
             className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--total${saldoAFavor ? ' ventas-cuenta-recuadro--saldo-favor' : ''}`}
           >
-            <span className="ventas-cuenta-recuadro-etiqueta">
-              {saldoAFavor ? 'Anticipo disponible' : 'Total'}
-            </span>
-            <span className="ventas-cuenta-recuadro-monto">
-              ${saldoAFavor ? anticipoStr : totalStr}
-            </span>
+            <span className="ventas-cuenta-recuadro-etiqueta">{saldoAFavor ? 'Total (a favor)' : 'Total'}</span>
+            <span className="ventas-cuenta-recuadro-monto">${totalStr}</span>
           </div>
           <div
             className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--saldo${saldoPendiente > 0.0001 ? ' ventas-cuenta-recuadro--saldo-pend' : ''}`}
@@ -1174,12 +1171,6 @@ export default function VentasCuentaScreen({
             <span className="ventas-cuenta-recuadro-etiqueta">Saldo</span>
             <span className="ventas-cuenta-recuadro-monto">${saldoStr}</span>
           </div>
-          {anticipoDisponible > 0.0001 && totalCargos > 0.0001 ? (
-            <div className="ventas-cuenta-recuadro ventas-cuenta-recuadro--saldo-favor">
-              <span className="ventas-cuenta-recuadro-etiqueta">Anticipo</span>
-              <span className="ventas-cuenta-recuadro-monto">${anticipoStr}</span>
-            </div>
-          ) : null}
         </div>
 
         <label className="ventas-total-block">

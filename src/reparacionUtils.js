@@ -1,12 +1,4 @@
 import { TIPOS_REPARACION } from './catalogos.js'
-import {
-  calcularSaldoPendienteAnticipo,
-  calcularSaldoPendienteDesdeMovs,
-  sumCargosCuentamov,
-  sumCargosReparamov,
-} from './cuentaSaldoUtils.js'
-
-export { esPagoAnticipo, calcularSaldoPendienteAnticipo, calcularSaldoPendienteDesdeMovs } from './cuentaSaldoUtils.js'
 
 /** Claves del catálogo en mayúsculas (SERVICIO, GARANTIA EPSON, GARANTIA SISTEBIT). */
 export const TIPOS_SERVICIO_CANONICOS = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
@@ -381,37 +373,19 @@ export function sumPagosCuenta(pagosCuenta = []) {
 
 /** Total de cargos (cuenta.total o suma de cuentamov). */
 export function totalCargosCuenta(cuenta, movsCuenta = []) {
-  const cargosMovs = sumCargosCuentamov(movsCuenta)
+  const cargosMovs = (movsCuenta ?? []).reduce((s, m) => {
+    const line = Number(m.cantidad ?? 0) * Number(m.costo ?? 0)
+    return line > 0.0001 ? s + line : s
+  }, 0)
   const ct = Math.max(0, Number(cuenta?.total ?? 0))
   return Math.max(ct, cargosMovs)
 }
 
-/** Adeudo pendiente (≥ 0). Anticipos solo cubren reparación/servicio, no productos de venta. */
-export function saldoPendienteCuenta(totalVenta, pagosCuenta = [], opts = {}) {
-  const { movsCuenta = [], movsReparacion = [], cuenta = null } = opts
-  if (movsCuenta.length > 0 || movsReparacion.length > 0) {
-    return calcularSaldoPendienteDesdeMovs(pagosCuenta, movsCuenta, movsReparacion)
-  }
+/** Adeudo = total de la venta menos lo pagado (mínimo 0). */
+export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
   const total = Number(totalVenta ?? 0)
-  const cv = sumCargosCuentamov(movsCuenta)
-  let cr = sumCargosReparamov(movsReparacion)
-  if (cr <= 0.0001 && cuenta?.repara_id != null && cuenta.repara_id !== '' && total > cv + 0.01) {
-    cr = total - cv
-  }
-  if (cv > 0.0001 || cr > 0.0001) {
-    return calcularSaldoPendienteAnticipo({
-      cargosVenta: cv,
-      cargosReparacion: cr,
-      pagos: pagosCuenta,
-    })
-  }
-  if (total <= 0.0001) return 0
-  const tieneOrden = cuenta?.repara_id != null && cuenta.repara_id !== ''
-  return calcularSaldoPendienteAnticipo({
-    cargosVenta: tieneOrden ? 0 : total,
-    cargosReparacion: tieneOrden ? total : 0,
-    pagos: pagosCuenta,
-  })
+  const pagado = sumPagosCuenta(pagosCuenta)
+  return Math.max(0, total - pagado)
 }
 
 /** Saldo persistido en BD o calculado desde total y pagos. */
@@ -419,7 +393,7 @@ export function saldoDesdeCuenta(cuenta, pagosCuenta = []) {
   if (cuenta?.saldo != null && cuenta.saldo !== '' && !Number.isNaN(Number(cuenta.saldo))) {
     return Math.max(0, Number(cuenta.saldo))
   }
-  return saldoPendienteCuenta(cuenta?.total, pagosCuenta, { cuenta })
+  return saldoPendienteCuenta(cuenta?.total, pagosCuenta)
 }
 
 function patchTotalesSaldoCuenta(totalVenta, saldo, extras = {}) {
@@ -440,7 +414,7 @@ export async function sincronizarEstatusCuentaPorSaldo(
   supabase,
   cuenta,
   pagosCuenta = [],
-  { totalVenta: totalVentaOpt, movsCuenta = [], movsReparacion = [] } = {},
+  { totalVenta: totalVentaOpt } = {},
 ) {
   if (!cuenta?.id) return cuenta
 
@@ -448,11 +422,7 @@ export async function sincronizarEstatusCuentaPorSaldo(
   const pagado = sumPagosCuenta(pagos)
   const totalVenta =
     totalVentaOpt != null ? Number(totalVentaOpt) : Number(cuenta.total ?? 0)
-  const adeudo = saldoPendienteCuenta(totalVenta, pagos, {
-    movsCuenta,
-    movsReparacion,
-    cuenta,
-  })
+  const adeudo = saldoPendienteCuenta(totalVenta, pagos)
   const est = String(cuenta.estatus ?? '').trim().toUpperCase()
 
   const patchPendiente = patchTotalesSaldoCuenta(totalVenta, adeudo, {
@@ -499,9 +469,9 @@ export async function sincronizarEstatusCuentaPorSaldo(
     return { ...cuenta, ...patchSoloSaldo }
   }
 
-  // Cargos cubiertos (anticipos no cuentan para productos de venta).
-  const saldoCubierto = totalVenta > 0.0001 && adeudo <= 0.01
-  if (!saldoCubierto) return cuenta
+  // Pagos cubren el total de cargos.
+  const pagosCubrenTotal = totalVenta > 0.0001 && pagado >= totalVenta - 0.01
+  if (!pagosCubrenTotal) return cuenta
 
   // Cuenta pagada pero aún no entregada al cliente (sigue activa hasta liquidar o entregar orden).
   if (est === 'PAGADA') {
@@ -594,7 +564,7 @@ export async function liquidarCuentaPagadaAlEntregarOrden(supabase, reparaId) {
     .eq('cuenta_id', cuenta.id)
   if (ePag) throw ePag
   const totalVenta = Number(cuenta.total ?? 0)
-  if (saldoPendienteCuenta(totalVenta, pagos ?? [], { cuenta }) > 0.01) return cuenta
+  if (saldoPendienteCuenta(totalVenta, pagos ?? []) > 0.01) return cuenta
   const nowLiq = new Date().toISOString()
   const patch = patchTotalesSaldoCuenta(totalVenta, 0, {
     estatus: 'LIQUIDADA',
