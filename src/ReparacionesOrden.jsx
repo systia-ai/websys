@@ -18,7 +18,7 @@ import {
   enviarOrdenWhatsAppCloudApi,
   formatFechaOrdenMensaje,
   formatMontoAnticipoWa,
-  normalizarTelefonoWa,
+  telefonoWaParaEnvio,
   resumenFormasPagoWa,
 } from './whatsappUtils.js'
 import {
@@ -1192,6 +1192,13 @@ export default function ReparacionesOrden({
     }
   }
 
+  function telWaCloudApi() {
+    if (!telClienteUi || !String(telClienteUi).trim()) {
+      return { ok: false, errorMsg: 'El cliente no tiene un teléfono registrado.' }
+    }
+    return telefonoWaParaEnvio(telClienteUi)
+  }
+
   async function enviarWhatsAppOrdenCliente() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
@@ -1199,17 +1206,21 @@ export default function ReparacionesOrden({
       return
     }
     if (supabase) {
-      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const tel = telWaCloudApi()
+      if (!tel.ok) {
+        onError(tel.errorMsg)
+        return
+      }
       const res = await enviarOrdenWhatsAppCloudApi(supabase, {
         orden: ord,
         nombreCliente: nombreClienteUi,
         fecha: formatFechaOrdenMensaje(fechaCreacionOrden),
         descripcionEquipo,
         problemasReportados,
-        ...(toDigits ? { to: toDigits } : {}),
+        to: tel.to,
       })
       if (res.ok) {
-        onNotice('Orden de servicio enviada por WhatsApp.')
+        onNotice(`Orden enviada por WhatsApp a ${res.toDisplay ?? tel.display}.`)
         return
       }
       onError(res.errorMsg || 'No se pudo enviar la orden por WhatsApp.')
@@ -1255,17 +1266,21 @@ export default function ReparacionesOrden({
     const fechaPago = formatFechaOrdenMensaje(ultimo.fecha_creacion ?? ultimo.created_at ?? new Date())
 
     if (supabase) {
-      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const tel = telWaCloudApi()
+      if (!tel.ok) {
+        onError(tel.errorMsg)
+        return
+      }
       const res = await enviarAnticipoWhatsAppCloudApi(supabase, {
         orden: ord,
         nombreCliente: nombreClienteUi,
         monto,
         formaPago: forma,
         fecha: fechaPago,
-        ...(toDigits ? { to: toDigits } : {}),
+        to: tel.to,
       })
       if (res.ok) {
-        onNotice(`Anticipo (${monto}) enviado por WhatsApp.`)
+        onNotice(`Anticipo (${monto}) enviado por WhatsApp a ${res.toDisplay ?? tel.display}.`)
         return
       }
       onError(res.errorMsg || 'No se pudo enviar el anticipo por WhatsApp.')
@@ -1339,17 +1354,21 @@ export default function ReparacionesOrden({
     )
 
     if (supabase) {
-      const toDigits = normalizarTelefonoWa(telClienteUi)
+      const tel = telWaCloudApi()
+      if (!tel.ok) {
+        onError(tel.errorMsg)
+        return
+      }
       const res = await enviarLiquidacionWhatsAppCloudApi(supabase, {
         orden: ord,
         nombreCliente: nombreClienteUi,
         monto,
         formaPago: forma,
         fecha: fechaLiq,
-        ...(toDigits ? { to: toDigits } : {}),
+        to: tel.to,
       })
       if (res.ok) {
-        onNotice(`Pago total (${monto}) enviado por WhatsApp.`)
+        onNotice(`Pago total (${monto}) enviado por WhatsApp a ${res.toDisplay ?? tel.display}.`)
         return
       }
       onError(res.errorMsg || 'No se pudo enviar la liquidación por WhatsApp.')

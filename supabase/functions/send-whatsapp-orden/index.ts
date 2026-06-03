@@ -5,7 +5,7 @@
  *   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID (obligatorios)
  *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sist (nombre exacto en Meta)
  *   WHATSAPP_TEMPLATE_LANG     default es_MX
- *   WHATSAPP_TEST_TO           opcional: fuerza destino de prueba (solo dígitos)
+ *   WHATSAPP_TEST_TO           opcional: todos los mensajes a este número (pruebas; anula cliente)
  *   WHATSAPP_API_VERSION       default v25.0
  *
  * Plantilla esperada (cuerpo): {{1}} detalle cliente/equipo, {{2}} orden, {{3}} fecha
@@ -56,10 +56,10 @@ Deno.serve(async (req) => {
   }
 
   const to = resolverDestino(body.to, cfg.testTo)
-  if (!to || to.length < 8) {
+  if (!to || to.length < 10) {
     return json(400, {
       error:
-        'Destino no válido. Envíe `to` (E.164 solo dígitos) o configure WHATSAPP_TEST_TO para pruebas.',
+        'Destino no válido. Use teléfono MX de 10 dígitos (4622090526) o con lada 1 (14622090526). Opcional: WHATSAPP_TEST_TO en secretos si falta teléfono del cliente.',
     })
   }
 

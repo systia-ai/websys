@@ -68,10 +68,10 @@ Deno.serve(async (req) => {
   }
 
   const to = resolverDestino(body.to, cfg.testTo)
-  if (!to || to.length < 8) {
+  if (!to || to.length < 10) {
     return json(400, {
       error:
-        'Destino no válido. Envíe `to` (E.164 solo dígitos) o configure WHATSAPP_TEST_TO para pruebas.',
+        'Destino no válido. Use teléfono MX de 10 dígitos (4622090526) o con lada 1 (14622090526). Opcional: WHATSAPP_TEST_TO en secretos si falta teléfono del cliente.',
     })
   }
 

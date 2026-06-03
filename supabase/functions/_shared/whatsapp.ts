@@ -18,11 +18,51 @@ export function json(status: number, body: Record<string, unknown>) {
   })
 }
 
-/** Destino E.164 solo dígitos. `testTo` anula el teléfono del cliente (modo prueba). */
+const PAIS_DEFAULT = '52'
+
+/**
+ * México para WhatsApp: `52` + 10 dígitos (sin "1" intermedio).
+ * Alineado con `normalizarTelefonoWa` del frontend.
+ */
+export function normalizarTelefonoE164(
+  raw: string | undefined,
+  defaultPais = PAIS_DEFAULT,
+): string | null {
+  if (raw == null) return null
+  let dig = String(raw).replace(/\D/g, '')
+  if (!dig) return null
+
+  if (defaultPais === '52') {
+    if (dig.length > 13) {
+      const m = dig.match(/52\d{10}$/)
+      if (m) dig = m[0]
+    }
+    if (dig.length === 13 && dig.startsWith('521')) return `52${dig.slice(3)}`
+    if (dig.length === 10) return `${defaultPais}${dig}`
+    if (dig.length === 11 && dig.startsWith('1')) return `${defaultPais}${dig.slice(1)}`
+    if (dig.length === 12 && dig.startsWith('52')) return dig
+  }
+
+  if (dig.length >= 8 && dig.length <= 15) return dig
+  return null
+}
+
+/**
+ * Destino E.164 solo dígitos.
+ * Si `testTo` (WHATSAPP_TEST_TO) está configurado, **siempre** manda ahí (pruebas).
+ * Si no, usa el teléfono del cliente (`bodyTo`).
+ */
 export function resolverDestino(bodyTo: string | undefined, testTo: string | undefined): string {
-  const test = testTo?.replace(/\D/g, '') || ''
-  if (test) return test
-  return bodyTo?.replace(/\D/g, '') || ''
+  const fromTest = normalizarTelefonoE164(testTo)
+  if (fromTest) return fromTest
+  const rawTest = testTo?.replace(/\D/g, '') ?? ''
+  if (rawTest.length >= 10 && rawTest.length <= 15) return rawTest
+
+  const fromBody = normalizarTelefonoE164(bodyTo)
+  if (fromBody) return fromBody
+  const rawBody = bodyTo?.replace(/\D/g, '') ?? ''
+  if (rawBody.length >= 10 && rawBody.length <= 15) return rawBody
+  return ''
 }
 
 export function fechaDefaultEsMx(): string {

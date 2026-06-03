@@ -13,16 +13,14 @@ const NEGOCIO_DEFAULT = 'SISTEBIT'
 const PAIS_DEFAULT = '52'
 
 /**
- * Normaliza un teléfono al formato exigido por wa.me: sólo dígitos, con código
- * de país y (para celulares MX) el "1" móvil que sigue Meta.
+ * Normaliza teléfono MX para WhatsApp: `52` + 10 dígitos (sin el "1" intermedio).
  *
  * Reglas:
- *   - 10 dígitos          → se asume MX celular → `52` + `1` + número
- *   - 11 dígitos y "1..." → MX celular sin código país → `52` + número
- *   - 12 dígitos y "52.." → MX falta el "1" móvil    → `521` + 10 últimos
- *   - 13 dígitos y "521.."→ ya está OK
- *   - 8–15 dígitos con otro patrón → se respeta tal cual (clientes extranjeros)
- *   - Cualquier otro caso → `null`
+ *   - 10 dígitos           → `52` + número
+ *   - 11 dígitos y "1…"    → `52` + últimos 10 (quita el 1 de marcado)
+ *   - 12 dígitos y "52…"   → ya OK
+ *   - 13 dígitos y "521…"  → quita el 1 → `52` + 10 dígitos
+ *   - 8–15 otro patrón     → tal cual (extranjero)
  *
  * @param {string} raw
  * @param {string} [defaultPais='52']
@@ -30,16 +28,34 @@ const PAIS_DEFAULT = '52'
  */
 export function normalizarTelefonoWa(raw, defaultPais = PAIS_DEFAULT) {
   if (raw == null) return null
-  const dig = String(raw).replace(/\D+/g, '')
+  let dig = String(raw).replace(/\D+/g, '')
   if (!dig) return null
 
-  if (dig.length === 10) return `${defaultPais}1${dig}`
-  if (dig.length === 11 && dig.startsWith('1')) return `${defaultPais}${dig}`
-  if (defaultPais === '52' && dig.length === 12 && dig.startsWith('52') && dig[2] !== '1') {
-    return `521${dig.slice(2)}`
+  if (defaultPais === '52') {
+    if (dig.length > 13) {
+      const m = dig.match(/52\d{10}$/)
+      if (m) dig = m[0]
+    }
+    if (dig.length === 13 && dig.startsWith('521')) return `52${dig.slice(3)}`
+    if (dig.length === 10) return `${defaultPais}${dig}`
+    if (dig.length === 11 && dig.startsWith('1')) return `${defaultPais}${dig.slice(1)}`
+    if (dig.length === 12 && dig.startsWith('52')) return dig
   }
+
   if (dig.length >= 8 && dig.length <= 15) return dig
   return null
+}
+
+/** Muestra +52 462 264 7020 a partir de 524622647020 */
+export function formatearTelefonoWaDisplay(e164) {
+  const d = String(e164 ?? '').replace(/\D/g, '')
+  if (d.length === 12 && d.startsWith('52')) {
+    return `+52 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`
+  }
+  if (d.length === 13 && d.startsWith('521')) {
+    return `+52 ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}`
+  }
+  return d ? `+${d}` : '—'
 }
 
 /**
@@ -186,7 +202,37 @@ export function humanizarErrorWhatsApp(errorMsg) {
   if (m.includes('(#132001)') || m.includes('132001')) {
     return 'Plantilla no encontrada: revise WHATSAPP_TEMPLATE_NAME y WHATSAPP_TEMPLATE_LANG (es_MX) en Supabase.'
   }
+  if (
+    m.includes('131030') ||
+    m.includes('not in allowed') ||
+    m.includes('allow list') ||
+    m.includes('lista de permitidos')
+  ) {
+    return (
+      'Meta no permite enviar a ese número: agréguelo como destinatario de prueba en ' +
+      'Meta → WhatsApp → API Setup (o pase la app a modo Live).'
+    )
+  }
+  if (m.includes('133010') || m.includes('not a valid whatsapp')) {
+    return 'Ese número no tiene WhatsApp activo o el formato es incorrecto (use 10 dígitos o +52 1 …).'
+  }
+  if (m.includes('invalid oauth') || m.includes('expired') || m.includes('access token')) {
+    return 'Token de WhatsApp inválido o vencido: genere uno nuevo en Meta y actualice WHATSAPP_ACCESS_TOKEN en Supabase.'
+  }
   return String(errorMsg ?? 'Error al enviar por WhatsApp.')
+}
+
+/** Teléfono listo para Cloud API; mensaje si no es válido. */
+export function telefonoWaParaEnvio(raw) {
+  const to = normalizarTelefonoWa(raw)
+  if (!to) {
+    return {
+      ok: false,
+      errorMsg:
+        'Teléfono no válido para WhatsApp. Ejemplo México: 4622647020 o 52 462 264 7020.',
+    }
+  }
+  return { ok: true, to, display: formatearTelefonoWaDisplay(to) }
 }
 
 export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
@@ -213,7 +259,8 @@ export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
   if (data && typeof data === 'object' && 'error' in data && data.error) {
     return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
   }
-  return { ok: true, data }
+  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
+  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
 }
 
 /**
@@ -250,7 +297,8 @@ export async function enviarAnticipoWhatsAppCloudApi(supabase, p) {
   if (data && typeof data === 'object' && 'error' in data && data.error) {
     return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
   }
-  return { ok: true, data }
+  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
+  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
 }
 
 /**
@@ -304,7 +352,8 @@ export async function enviarLiquidacionWhatsAppCloudApi(supabase, p) {
   if (data && typeof data === 'object' && 'error' in data && data.error) {
     return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
   }
-  return { ok: true, data }
+  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
+  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
 }
 
 /**
