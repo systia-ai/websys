@@ -1042,37 +1042,22 @@ export default function VentasCuentaScreen({
     }
   }
 
-  function enviarComprobante() {
+  async function enviarComprobante() {
     if (!cliente.telefono?.trim()) {
       onError?.('El teléfono del cliente es requerido para el comprobante')
       return
     }
-    const rows = lineas
-      .map(
-        (L) =>
-          `<tr><td>${L.tipo === 'pago' ? -Number(L.cantidad) : Number(L.cantidad)}</td><td>${escapeHtml(L.descripcion)}</td><td>${escapeHtml(L.tipo === 'pago' ? L.fechaPago ?? '—' : '—')}</td><td>$${Number(L.precioUnitario).toFixed(2)}</td><td>$${Number(L.subtotal).toFixed(2)}</td></tr>`,
-      )
-      .join('')
-    const html = `<h1>Comprobante</h1><p><strong>Cliente:</strong> ${escapeHtml(cliente.nombre)} — ${escapeHtml(cliente.telefono)}</p><p><strong>Total:</strong> $${totalStr} — <strong>Estatus:</strong> ${escapeHtml(cuentaEstatus || '—')}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><thead><tr><th>Cant</th><th>Descripción</th><th>Fecha</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${rows}</tbody></table>`
-    const w = window.open('', '_blank')
-    if (!w) {
-      onError?.('Permita ventanas emergentes para imprimir.')
-      return
+    try {
+      const { printReciboCuentaPdf } = await import('./reciboCuentaPdf.js')
+      await printReciboCuentaPdf({
+        cliente: { nombre: cliente.nombre, telefono: cliente.telefono },
+        total: totalStr,
+        estatus: cuentaEstatus || '—',
+        lineas,
+      })
+    } catch (e) {
+      onError?.(`No se pudo imprimir el recibo: ${e?.message ?? e}`)
     }
-    w.document.write(
-      `<!DOCTYPE html><html><head><title>Comprobante</title><style>body{font-family:Arial;padding:16px}</style></head><body>${html}<p>Imprima o guarde como PDF y compártalo por WhatsApp.</p></body></html>`,
-    )
-    w.document.close()
-    w.focus()
-    w.print()
-  }
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
   }
 
   return (
@@ -1199,7 +1184,7 @@ export default function VentasCuentaScreen({
             </button>
           ) : null}
           <button type="button" className="btn-comprobante-ventas" onClick={enviarComprobante}>
-            📧 ENVIAR COMPROBANTE
+            📧 IMPRIMIR RECIBO
           </button>
           <button type="button" className="btn-salir-ventas" onClick={onSalir}>
             ❌ SALIR

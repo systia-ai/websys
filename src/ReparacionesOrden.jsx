@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
-import { insertPagoCliente } from './pagosClientesUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
@@ -43,7 +42,6 @@ const LS_REP = 'sistefix_local_reparaciones'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
-const LS_CAT = 'sistefix_local_catalogopagos'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
 
 function readLs(key, fb) {
@@ -206,18 +204,6 @@ export default function ReparacionesOrden({
   const ordenRegistradaRef = useRef(repIdStrEsOrdenExistente(repIdStr))
   const [actualizandoOrden, setActualizandoOrden] = useState(false)
   const actualizandoRef = useRef(false)
-  const [abriendoAnticipo, setAbriendoAnticipo] = useState(false)
-  const [registrandoAnticipo, setRegistrandoAnticipo] = useState(false)
-  const registrandoAnticipoRef = useRef(false)
-
-  const [pagoModal, setPagoModal] = useState(false)
-  const [catalogo, setCatalogo] = useState([])
-  const [busqPago, setBusqPago] = useState('')
-  const [selCat, setSelCat] = useState(null)
-  const [cantPago, setCantPago] = useState('1')
-  const [valorPago, setValorPago] = useState('')
-  const [formaPago, setFormaPago] = useState('EFECTIVO')
-  const [cuentaIdPago, setCuentaIdPago] = useState(null)
   const [waMenuAbierto, setWaMenuAbierto] = useState(false)
   const [enviandoWa, setEnviandoWa] = useState(false)
   const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
@@ -908,140 +894,6 @@ export default function ReparacionesOrden({
     }
   }
 
-  async function abrirAnticipo() {
-    if (abriendoAnticipo) return
-    const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
-    if (!rid || !Number.isFinite(Number(rid))) {
-      onError('Primero debe generar la orden de servicio')
-      return
-    }
-    const cid = await resolverClienteId()
-    if (cid == null) {
-      onError('No se pudo obtener el cliente')
-      return
-    }
-    setAbriendoAnticipo(true)
-    try {
-      let cuenta
-      if (supabase) {
-        const { data: rows, error } = await supabase
-          .from('cuentas')
-          .select('*')
-          .eq('repara_id', rid)
-          .order('id', { ascending: false })
-          .limit(1)
-        if (error) throw error
-        cuenta = rows?.[0] ?? null
-      } else {
-        const matches = readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) === Number(rid))
-        cuenta =
-          matches.length === 0
-            ? null
-            : [...matches].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
-      }
-      if (!cuenta?.id) {
-        const nueva = {
-          cliente_id: cid,
-          repara_id: Number(rid),
-          total: 0,
-          saldo: 0,
-          estatus: 'PENDIENTE',
-          tipo_pago: 'EFECTIVO',
-        }
-        if (supabase) {
-          const { data, error } = await supabase.from('cuentas').insert(nueva).select('*').single()
-          if (error) {
-            if (esViolacionUnica(error)) {
-              const { data: rows2, error: e2 } = await supabase
-                .from('cuentas')
-                .select('*')
-                .eq('repara_id', rid)
-                .order('id', { ascending: false })
-                .limit(1)
-              if (e2) throw e2
-              cuenta = rows2?.[0] ?? null
-              if (!cuenta?.id) throw new Error('Cuenta duplicada detectada pero no se pudo recuperar.')
-            } else {
-              throw error
-            }
-          } else {
-            cuenta = data
-          }
-        } else {
-          const id = nextLocalId()
-          cuenta = { id, ...nueva }
-          const all = readLs(LS_CUENTAS, [])
-          if (!all.some((c) => Number(c.repara_id) === Number(rid))) {
-            writeLs(LS_CUENTAS, [cuenta, ...all])
-          } else {
-            const m = all.filter((c) => Number(c.repara_id) === Number(rid))
-            cuenta = [...m].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
-          }
-        }
-      }
-      if (!cuenta?.id) {
-        throw new Error('No se pudo obtener o crear la cuenta de cobro para esta orden.')
-      }
-      setCuentaIdPago(cuenta.id)
-      if (supabase) {
-        const { data, error } = await supabase.from('catalogopagos').select('*')
-        if (error) throw error
-        setCatalogo(data ?? [])
-      } else {
-        setCatalogo(readLs(LS_CAT, []))
-      }
-      setSelCat(null)
-      setCantPago('1')
-      setValorPago('')
-      setBusqPago('')
-      setFormaPago('EFECTIVO')
-      setPagoModal(true)
-    } catch (e) {
-      onError(`Error al abrir anticipo: ${e.message}`)
-    } finally {
-      setAbriendoAnticipo(false)
-    }
-  }
-
-  async function registrarPago() {
-    if (registrandoAnticipoRef.current) return
-    if (!selCat || !cuentaIdPago) return
-    const cant = Number(cantPago)
-    const val = Number(valorPago)
-    if (!Number.isFinite(cant) || !Number.isFinite(val)) {
-      onError('Cantidad y valor numéricos requeridos')
-      return
-    }
-    const cid = await resolverClienteId()
-    if (cid == null) return
-    const monto = cant * val
-    const row = {
-      cliente_id: cid,
-      cuenta_id: cuentaIdPago,
-      pago: monto,
-      concepto: selCat.concepto ?? 'Anticipo',
-      forma_pago: formaPago,
-    }
-    registrandoAnticipoRef.current = true
-    setRegistrandoAnticipo(true)
-    try {
-      await insertPagoCliente(supabase, row, { nextLocalId })
-      setPagoModal(false)
-      onNotice(`Anticipo registrado: $${monto.toFixed(2)} (${row.forma_pago}). Use «Enviar por WhatsApp» para notificar al cliente.`)
-    } catch (e) {
-      onError(`Error al registrar anticipo: ${e.message}`)
-    } finally {
-      registrandoAnticipoRef.current = false
-      setRegistrandoAnticipo(false)
-    }
-  }
-
-  const catFiltrado = useMemo(() => {
-    const t = busqPago.trim().toLowerCase()
-    if (!t) return catalogo
-    return catalogo.filter((c) => String(c.concepto ?? '').toLowerCase().includes(t))
-  }, [catalogo, busqPago])
-
   const nombreClienteUi = clienteDesdeBd?.nombre || s.clienteNombre || ''
   const telClienteUi = clienteDesdeBd?.telefono || s.clienteTelefono || ''
   const domClienteUi = clienteDesdeBd?.domicilio || s.clienteDomicilio || ''
@@ -1088,8 +940,8 @@ export default function ReparacionesOrden({
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nt = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) ?? ''
     try {
-      const { downloadOrdenServicioPdf } = await import('./ordenServicioPdf.js')
-      await downloadOrdenServicioPdf({
+      const { printOrdenServicioPdf } = await import('./ordenServicioPdf.js')
+      await printOrdenServicioPdf({
         orden: ord,
         fechaCreacion: fechaCreacionOrden,
         cliente: {
@@ -1112,9 +964,8 @@ export default function ReparacionesOrden({
         },
         solucion: descripcionSolucion,
       })
-      onNotice('PDF de orden de servicio descargado.')
     } catch (e) {
-      onError(`No se pudo generar el PDF de la orden: ${e?.message ?? e}`)
+      onError(`No se pudo imprimir la orden: ${e?.message ?? e}`)
     }
   }
 
@@ -1258,7 +1109,7 @@ export default function ReparacionesOrden({
       return
     }
     if (!ultimo) {
-      onError('No hay anticipo registrado para esta orden. Use «Recibir anticipo» primero.')
+      onError('No hay anticipo registrado para esta orden. Regístrelo primero en Cuentas / Ventas.')
       return
     }
     const monto = formatMontoAnticipoWa(ultimo.pago)
@@ -1688,7 +1539,7 @@ export default function ReparacionesOrden({
             Imprimir etiqueta (PDF)
           </button>
           <button type="button" className="btn-primary wide" disabled={!puedeAccionesPdf} onClick={enviarOrdenPdf}>
-            Enviar orden de servicio
+            Imprimir orden de servicio
           </button>
           <button
             type="button"
@@ -1702,14 +1553,6 @@ export default function ReparacionesOrden({
             }
           >
             📲 Enviar por WhatsApp
-          </button>
-          <button
-            type="button"
-            className="btn-anticipo wide"
-            disabled={abriendoAnticipo || !puedeAccionesPdf}
-            onClick={() => void abrirAnticipo()}
-          >
-            {abriendoAnticipo ? 'Abriendo…' : 'Recibir anticipo'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
             <button
@@ -1792,78 +1635,6 @@ export default function ReparacionesOrden({
             <div className="modal-footer">
               <button type="button" onClick={() => setDialogExito(false)}>
                 Aceptar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pagoModal && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setPagoModal(false)}>
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>💵 Recibir anticipo</h3>
-              <p className="muted small" style={{ margin: '4px 0 0' }}>
-                Seleccione un concepto del catálogo, ajuste el monto y la forma de pago, y registre el anticipo.
-                Después use «Enviar por WhatsApp» → «Enviar anticipo de cliente» para notificar.
-              </p>
-            </div>
-            <div className="modal-body">
-              <input
-                className="full"
-                placeholder="Buscar por concepto..."
-                value={busqPago}
-                onChange={(e) => setBusqPago(e.target.value)}
-              />
-              <ul className="cat-pago-list">
-                {catFiltrado.map((c) => (
-                  <li key={c.id ?? c.concepto}>
-                    <button
-                      type="button"
-                      className={`rep-card ${selCat === c ? 'selected' : ''}`}
-                      onClick={() => {
-                        setSelCat(c)
-                        setCantPago('1')
-                        setValorPago(String(c.cantidad ?? ''))
-                      }}
-                    >
-                      <strong>{c.concepto}</strong>
-                      <span>${Number(c.cantidad ?? 0).toFixed(2)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {selCat && (
-                <div className="pago-row">
-                  <label>
-                    Cantidad
-                    <input value={cantPago} onChange={(e) => setCantPago(e.target.value)} />
-                  </label>
-                  <label>
-                    Valor
-                    <input value={valorPago} onChange={(e) => setValorPago(e.target.value)} />
-                  </label>
-                  <label>
-                    Forma pago
-                    <select value={formaPago} onChange={(e) => setFormaPago(e.target.value)}>
-                      <option value="EFECTIVO">EFECTIVO</option>
-                      <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                      <option value="TARJETA">TARJETA</option>
-                    </select>
-                  </label>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="secondary" onClick={() => setPagoModal(false)}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void registrarPago()}
-                disabled={!selCat || registrandoAnticipo}
-              >
-                {registrandoAnticipo ? 'Registrando…' : 'Registrar anticipo'}
               </button>
             </div>
           </div>

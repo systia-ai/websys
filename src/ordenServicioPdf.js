@@ -2,150 +2,32 @@ import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { formatFechaLegibleEsMx } from './reparacionUtils.js'
+import {
+  SISTEBIT_PDF_FORMAT,
+  GAP_CAMPOS,
+  TEMA,
+  COMPACT_CAMPO,
+  dashIfEmpty,
+  temaEstatus,
+  drawCampo,
+  anchoRecuadroCompacto,
+  drawEncabezadoSistebit,
+  printSistebitPdfDocument,
+} from './sistebitPdfCommon.js'
 
-/** Tamaño carta (216 × 279 mm), orientación vertical. */
-export const ORDEN_PDF_FORMAT = 'letter'
+/** @deprecated Use SISTEBIT_PDF_FORMAT */
+export const ORDEN_PDF_FORMAT = SISTEBIT_PDF_FORMAT
 
 const LEGAL_ORDEN_SERVICIO =
   'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
-
-const GAP_CAMPOS = 3.8
-
-/** Paleta tipo app (rep-block.highlight) y variaciones suaves. */
-const TEMA = {
-  orden: { fill: [227, 242, 253], border: [25, 118, 210], label: [21, 101, 192] },
-  fecha: { fill: [232, 245, 255], border: [3, 155, 229], label: [13, 71, 161] },
-  cliente: { fill: [237, 243, 255], border: [63, 81, 181], label: [48, 63, 159] },
-  serie: { fill: [225, 245, 254], border: [2, 136, 209], label: [1, 87, 155] },
-  tipo: { fill: [224, 247, 250], border: [0, 151, 167], label: [0, 121, 137] },
-  descripcion: { fill: [240, 248, 255], border: [100, 181, 246], label: [30, 136, 229] },
-  problema: { fill: [255, 248, 225], border: [255, 167, 38], label: [230, 126, 34] },
-}
 
 export function buildOrdenServicioPdfFilename(orden) {
   const safe = String(orden ?? 'orden').replace(/[^\w.-]+/g, '_')
   return `orden-servicio-${safe}.pdf`
 }
 
-function dashIfEmpty(v) {
-  const s = String(v ?? '').trim()
-  return s.length ? s : '—'
-}
-
 function formatFechaOrdenPdf(fechaCreacion) {
   return formatFechaLegibleEsMx(fechaCreacion, { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-function temaEstatus(estatus) {
-  const st = String(estatus ?? '').trim().toUpperCase()
-  if (st === 'ENTREGADO' || st === 'ENTREGADA') {
-    return { fill: [232, 245, 233], border: [56, 142, 60], label: [27, 94, 32] }
-  }
-  if (st === 'INGRESADO') {
-    return { fill: [227, 242, 253], border: [25, 118, 210], label: [21, 101, 192] }
-  }
-  return { fill: [236, 239, 241], border: [120, 144, 156], label: [69, 90, 100] }
-}
-
-/**
- * Logotipo tipográfico SISTEBIT (estilo WordArt).
- * @returns {number} altura en mm
- */
-function drawSistebitWordArtLogo(pdf, centerX, yTop) {
-  const BLUE = [0, 102, 179]
-  const BLACK = [28, 28, 28]
-  const SHADOW = [175, 175, 175]
-
-  const sizeS = 38
-  const sizeWord = 25
-  const overlap = 1.4
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(sizeS)
-  const wS = pdf.getTextWidth('S')
-  pdf.setFontSize(sizeWord)
-  const wIstebit = pdf.getTextWidth('ISTEBIT')
-  const markW = wS + wIstebit - overlap
-  const x0 = centerX - markW / 2
-  const baseline = yTop + 11.5
-
-  const offX = 0.55
-  const offY = 0.45
-
-  pdf.setFontSize(sizeS)
-  pdf.setTextColor(...SHADOW)
-  pdf.text('S', x0 + offX, baseline + offY)
-  pdf.setFontSize(sizeWord)
-  pdf.text('ISTEBIT', x0 + wS - overlap + offX, baseline + offY)
-
-  pdf.setFontSize(sizeS)
-  pdf.setTextColor(...BLUE)
-  pdf.text('S', x0, baseline)
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(sizeWord)
-  pdf.setTextColor(...BLACK)
-  pdf.text('ISTEBIT', x0 + wS - overlap, baseline)
-
-  pdf.setFont('helvetica', 'italic')
-  pdf.setFontSize(10.5)
-  pdf.setTextColor(...BLUE)
-  const taglineY = baseline + 6.2
-  pdf.text('smart Solutions', centerX, taglineY, { align: 'center' })
-
-  return taglineY - yTop + 4
-}
-
-/**
- * Recuadro con etiqueta + valor (similar a inputs de la app).
- * @returns {number} altura del recuadro en mm
- */
-function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
-  const val = dashIfEmpty(value)
-  const padX = opts.padX ?? (opts.compact ? 2.5 : 3)
-  const labelBand = opts.compact ? 4.6 : 5.2
-  const valueFontSize = opts.valueFontSize ?? 10.5
-  const labelFontSize = opts.compact ? 6.8 : 7.2
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(valueFontSize)
-  const valLines = pdf.splitTextToSize(val, w - padX * 2)
-  const lineH = opts.compact ? 3.9 : 4.4
-  const h = Math.max(minH, labelBand + 3.5 + valLines.length * lineH)
-
-  pdf.setFillColor(210, 218, 226)
-  pdf.roundedRect(x + 0.45, y + 0.45, w, h, 2.8, 2.8, 'F')
-
-  pdf.setFillColor(...theme.fill)
-  pdf.setDrawColor(...theme.border)
-  pdf.setLineWidth(0.65)
-  pdf.roundedRect(x, y, w, h, 2.8, 2.8, 'FD')
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(labelFontSize)
-  pdf.setTextColor(...theme.label)
-  pdf.text(String(label).toUpperCase(), x + padX, y + (opts.compact ? 3.2 : 3.6))
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(valueFontSize)
-  pdf.setTextColor(26, 32, 44)
-  pdf.text(valLines, x + padX, y + labelBand + (opts.compact ? 3.2 : 3.8))
-
-  return h
-}
-
-const COMPACT_CAMPO = { compact: true, valueFontSize: 9 }
-
-/** Ancho de recuadro compacto: el mayor entre etiqueta, valor y mínimo, + margen horizontal. */
-function anchoRecuadroCompacto(pdf, label, value, { min = 22, max = 52, pad = 9 } = {}) {
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(6.8)
-  const wLabel = pdf.getTextWidth(String(label).toUpperCase())
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(COMPACT_CAMPO.valueFontSize)
-  const wVal = pdf.getTextWidth(dashIfEmpty(value))
-  const w = Math.max(wLabel, wVal) + pad
-  return Math.min(Math.max(w, min), max)
 }
 
 /** Fila superior: dos recuadros pequeños (orden + fecha), alineados a la izquierda. */
@@ -208,7 +90,7 @@ export async function createOrdenServicioPdf(p) {
 
   const pdf = new jsPDF({
     unit: 'mm',
-    format: ORDEN_PDF_FORMAT,
+    format: SISTEBIT_PDF_FORMAT,
     orientation: 'portrait',
     compress: true,
   })
@@ -219,20 +101,7 @@ export async function createOrdenServicioPdf(p) {
   const contentW = W - 2 * margin
   const centerX = W / 2
 
-  let y = 10
-  y += drawSistebitWordArtLogo(pdf, centerX, y) + 2
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9.5)
-  pdf.setTextColor(60, 60, 60)
-  pdf.text('Centro de Servicio Autorizado EPSON', centerX, y, { align: 'center' })
-  y += 7
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(14.5)
-  pdf.setTextColor(25, 118, 210)
-  pdf.text('ORDEN DE SERVICIO', centerX, y, { align: 'center' })
-  y += 10
+  let y = drawEncabezadoSistebit(pdf, 'ORDEN DE SERVICIO', centerX, 10)
 
   const camposH = drawCamposOrden(pdf, p, margin, y, contentW)
   y += camposH + 6
@@ -268,4 +137,25 @@ export async function createOrdenServicioPdf(p) {
 export async function downloadOrdenServicioPdf(p) {
   const pdf = await createOrdenServicioPdf(p)
   pdf.save(buildOrdenServicioPdfFilename(p.orden))
+}
+
+/** @deprecated Use printSistebitPdfDocument from sistebitPdfCommon.js */
+export function printOrdenServicioPdfDocument(pdf) {
+  return printSistebitPdfDocument(pdf, {
+    timeoutMsg: 'Tiempo de espera al cargar la orden para imprimir.',
+    iframeTitle: 'Imprimir orden de servicio',
+  })
+}
+
+/** Genera el PDF y abre el diálogo de impresión. */
+export async function printOrdenServicioPdf(p) {
+  const pdf = await createOrdenServicioPdf(p)
+  return printOrdenServicioPdfDocument(pdf)
+}
+
+/** Descarga el PDF y abre el diálogo de impresión (un solo documento generado). */
+export async function downloadAndPrintOrdenServicioPdf(p) {
+  const pdf = await createOrdenServicioPdf(p)
+  pdf.save(buildOrdenServicioPdfFilename(p.orden))
+  return printOrdenServicioPdfDocument(pdf)
 }
