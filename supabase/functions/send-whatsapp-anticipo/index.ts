@@ -2,7 +2,7 @@
  * Edge Function: confirmación de anticipo por WhatsApp Cloud API (Meta).
  *
  * Secretos compartidos con send-whatsapp-orden, más:
- *   WHATSAPP_TEMPLATE_ANTICIPO_NAME   default anticipo_recibido_s
+ *   WHATSAPP_TEMPLATE_ANTICIPO_NAME   default anticipo_recibido_sisteb
  *
  * Plantilla esperada (cuerpo): {{1}} cliente, {{2}} orden, {{3}} monto, {{4}} forma pago, {{5}} fecha
  */
@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
   const cfg = leerConfigWhatsAppBase()
   const templateName =
-    Deno.env.get('WHATSAPP_TEMPLATE_ANTICIPO_NAME')?.trim() || 'anticipo_recibido_s'
+    Deno.env.get('WHATSAPP_TEMPLATE_ANTICIPO_NAME')?.trim() || 'anticipo_recibido_sisteb'
 
   if (!validarConfigBase(cfg)) {
     return json(500, {

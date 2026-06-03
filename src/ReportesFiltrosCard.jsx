@@ -12,6 +12,13 @@ export default function ReportesFiltrosCard({
   onFechaFin,
   estatusSeleccionados,
   onEstatusSeleccionados,
+  filtroModoFechaIngreso = false,
+  filtroModoFechaEntrega = false,
+  onToggleModoFechaIngreso = null,
+  onToggleModoFechaEntrega = null,
+  onSoloModoFechaIngreso = null,
+  onSoloModoFechaEntrega = null,
+  onClearModoFecha = null,
   tiposServicioSeleccionados = new Set(TIPOS_SERVICIO_CANONICOS),
   onTiposServicioSeleccionados = null,
   busqueda = '',
@@ -35,8 +42,11 @@ export default function ReportesFiltrosCard({
 
   function seleccionarSolo(est) {
     const st = String(est).trim().toUpperCase()
+    onClearModoFecha?.()
     onEstatusSeleccionados(new Set([st]))
   }
+
+  const modoFechaActivo = filtroModoFechaIngreso || filtroModoFechaEntrega
 
   function toggleTipoServicio(tipo) {
     if (!onTiposServicioSeleccionados) return
@@ -66,7 +76,8 @@ export default function ReportesFiltrosCard({
         <span className="corte-caja-hero-tip-ico" aria-hidden="true">
           💡
         </span>
-        Rango de fechas de la orden y estatus a incluir (puede elegir varios).
+        Rango de fechas y estatus a incluir (puede elegir varios). Use «Fecha ingresado» o «Fecha entrega» para
+        filtrar solo por esa fecha en el rango, como en el monitor de órdenes.
       </p>
 
       <div className="corte-caja-fechas-grid reportes-filtros-fechas">
@@ -158,7 +169,58 @@ export default function ReportesFiltrosCard({
               </label>
             )
           })}
+          <label
+            className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroModoFechaIngreso)}`}
+          >
+            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+            <input
+              type="checkbox"
+              className="monitor-ordenes-check-input"
+              checked={filtroModoFechaIngreso}
+              onChange={() => onToggleModoFechaIngreso?.()}
+            />
+            <span className="monitor-ordenes-check-text">Fecha ingresado</span>
+            <button
+              type="button"
+              className="monitor-ordenes-solo"
+              onClick={(e) => {
+                e.preventDefault()
+                onSoloModoFechaIngreso?.()
+              }}
+              title="Solo órdenes ingresadas en el rango de fechas de arriba"
+            >
+              Solo
+            </button>
+          </label>
+          <label
+            className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroModoFechaEntrega)}`}
+          >
+            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+            <input
+              type="checkbox"
+              className="monitor-ordenes-check-input"
+              checked={filtroModoFechaEntrega}
+              onChange={() => onToggleModoFechaEntrega?.()}
+            />
+            <span className="monitor-ordenes-check-text">Fecha entrega</span>
+            <button
+              type="button"
+              className="monitor-ordenes-solo"
+              onClick={(e) => {
+                e.preventDefault()
+                onSoloModoFechaEntrega?.()
+              }}
+              title="Solo órdenes entregadas en el rango de fechas de arriba"
+            >
+              Solo
+            </button>
+          </label>
         </div>
+        {modoFechaActivo ? (
+          <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="status">
+            Modo fecha activo: se usa el rango «Desde / Hasta» y se omiten los estatus marcados arriba.
+          </p>
+        ) : null}
       </fieldset>
 
       <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus reportes-estatus-fieldset">

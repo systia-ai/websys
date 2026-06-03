@@ -49,10 +49,10 @@ function drawResumenRecibo(pdf, p, x, y, width) {
   const gap = 3
   const wTotal = anchoRecuadroCompacto(pdf, 'Total', totalStr, { min: 24, max: 40, pad: 8 })
   const wEst = Math.min(width - wTotal - gap, anchoRecuadroCompacto(pdf, 'Estatus', estatus, { min: 32, max: 85, pad: 7 }))
-  const h = 9
-  drawCampo(pdf, 'Total', totalStr, x, cy, wTotal, h, TEMA.orden, CAMPO_RECIBO)
-  drawCampo(pdf, 'Estatus', estatus, x + wTotal + gap, cy, wEst, h, temaEstatus(estatus), CAMPO_RECIBO)
-  cy += h
+  const hMin = 9
+  const hTotal = drawCampo(pdf, 'Total', totalStr, x, cy, wTotal, hMin, TEMA.orden, CAMPO_RECIBO)
+  const hEst = drawCampo(pdf, 'Estatus', estatus, x + wTotal + gap, cy, wEst, hMin, temaEstatus(estatus), CAMPO_RECIBO)
+  cy += Math.max(hTotal, hEst) + GAP_RECIBO
 
   return cy - y
 }
@@ -191,13 +191,14 @@ export function createReciboCuentaPdf(p) {
     subtitleSize: 7.5,
     titleSize: 11,
   })
-  y += drawResumenRecibo(pdf, p, MARGIN, y, contentW) + 3
+  y += drawResumenRecibo(pdf, p, MARGIN, y, contentW) + 2
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(8)
   pdf.setTextColor(25, 118, 210)
+  y += 3.5
   pdf.text('DETALLE DE MOVIMIENTOS', MARGIN, y)
-  y += 4
+  y += 5
 
   drawTablaDetalle(pdf, p.lineas, MARGIN, y, contentW, H, MARGIN)
 

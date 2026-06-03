@@ -1,79 +1,114 @@
-# WhatsApp — app Sistebit (configuración actual)
+# WhatsApp — app Sistebit CAS Epson (producción)
 
-Usar la app **Sistebit** (no Sistebit CAS Epson). Ahí está vinculada la cuenta **Test WhatsApp Business Account**.
+Usar la app **Sistebit CAS Epson** en Meta Developers. Es la que tiene el número de WhatsApp Business real de SISTEBIT.
 
-## IDs correctos
+## IDs de la app (capturas Meta)
 
 | Dato | Valor |
 |------|--------|
-| Business Portfolio | Sistebit (`2051087975830734`) |
-| Usuario del sistema | Systia (`61589259461561`) |
-| App Meta | **Sistebit** (`26654586127534028`) |
-| Cuenta WhatsApp | Test WhatsApp Business Account (`2033268898074307`) |
-| **Phone number ID** (Supabase) | **`1083008164899211`** |
-| Número de envío Meta (prueba) | +1 555-167-5584 |
-| Tu celular destino pruebas | `524622647020` (+52 462 264 7020) |
+| App Meta | **Sistebit CAS Epson** |
+| App ID | `1701676374523471` |
+| WhatsApp Business Account ID | `2044195813178508` |
+| **Phone number ID** (Supabase) | **`1061313353733967`** |
 | Supabase project | `gvxffxyygvtpmqlsrsmn` |
+| Link directo | [developers.facebook.com/apps/1701676374523471](https://developers.facebook.com/apps/1701676374523471) |
+
+> No uses la app «Sistebit» (`26654586127534028`) ni el Phone ID `1083008164899211` — es la cuenta de prueba Test WABA.
 
 ## Secretos en Supabase (Edge Functions)
 
-| Secreto | Valor |
-|---------|--------|
-| `WHATSAPP_ACCESS_TOKEN` | Token de Systia (app **Sistebit**) |
-| `WHATSAPP_PHONE_NUMBER_ID` | `1083008164899211` |
-| `WHATSAPP_TEST_TO` | `524622647020` |
-| `WHATSAPP_API_VERSION` | `v25.0` |
+Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 
-Plantillas de producción (cuando las crees):
-
-| Secreto | Valor |
-|---------|--------|
+| Secreto | Valor producción |
+|---------|------------------|
+| `WHATSAPP_ACCESS_TOKEN` | Token permanente de **Sistebit CAS Epson** (ver abajo) |
+| `WHATSAPP_PHONE_NUMBER_ID` | `1061313353733967` |
 | `WHATSAPP_TEMPLATE_LANG` | `es_MX` |
-| `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sist` |
-| `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_s` |
+| `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` |
+| `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` |
 | `WHATSAPP_TEMPLATE_LIQUIDACION_NAME` | `liquidacion_orden_s` |
+| `WHATSAPP_API_VERSION` | `v25.0` |
+| `WHATSAPP_TEST_TO` | `524622647020` → **modo prueba:** todos los mensajes van a **462 264 7020** (quitar en producción) |
 
-Prueba rápida (solo plantilla `hello_world` que ya existe):
+**No configurar** `WHATSAPP_TEST_TO` en producción final — si existe, todos los mensajes van a ese número y no al cliente.
 
-| Secreto | Valor |
-|---------|--------|
-| `WHATSAPP_TEMPLATE_NAME` | `hello_world` |
-| `WHATSAPP_TEMPLATE_LANG` | `en_US` |
+Desplegar funciones:
 
-## Pasos en Meta (donde estás ahora)
+```bash
+npm run deploy:function:whatsapp
+```
 
-### 1. Regenerar token (obligatorio tras asignar activos)
+---
 
-En **Usuarios del sistema → Systia**:
+## Paso 1 — Token permanente (Meta)
 
-1. Clic **Generar identificador**
-2. App: **Sistebit**
-3. Permisos: `whatsapp_business_messaging`, `whatsapp_business_management`
-4. Copiar token → Supabase → `WHATSAPP_ACCESS_TOKEN`
+El token del botón «Generar identificador» en API Setup **caduca en ~24 h**. Para producción:
 
-### 2. Completar API Setup de la app Sistebit
+1. [business.facebook.com/settings/system-users](https://business.facebook.com/settings/system-users)
+2. Usuario **Systia** (o el que administre el negocio)
+3. **Asignar activos:**
+   - App: **Sistebit CAS Epson**
+   - Cuenta WhatsApp: la WABA `2044195813178508`
+   - Permisos: mensajería WhatsApp
+4. **Generar identificador** → app **Sistebit CAS Epson**
+5. Permisos: `whatsapp_business_messaging`, `whatsapp_business_management`
+6. Copiar token → Supabase → `WHATSAPP_ACCESS_TOKEN`
 
-1. [developers.facebook.com/apps/26654586127534028](https://developers.facebook.com/apps/26654586127534028)
-2. Menú **WhatsApp** → **API Setup** (Configuración de API)
-3. Verifica que aparezca Phone number ID **`1083008164899211`**
-4. En **Para** / destinatarios de prueba: **+52 462 264 7020**
-5. Si pide registrar el número, sigue el asistente de Meta
+**Importante:** el token debe generarse para la app **CAS Epson**, no para «Sistebit» genérica. Si el token es de otra app, Meta responde «no permissions».
 
-Error `(#133010) Account not registered` = falta completar este paso en la app **Sistebit**.
+---
 
-### 3. Probar envío en Meta
+## Paso 2 — API Setup (verificar número)
 
-En API Setup → Paso 1 → plantilla **hello_world** → enviar a `+52 462 264 7020`.  
-Si llega al celular, la API está lista.
+1. App **Sistebit CAS Epson** → **WhatsApp** → **API Setup**
+2. Confirmar **Phone number ID** = `1061313353733967`
+3. Confirmar el número de envío (+52 … de SISTEBIT)
+4. En **API Setup → Paso 1**, probar envío de `hello_world` a un celular de prueba
 
-### 4. Probar en SISTEBIT
+---
 
-Orden → **Enviar por WhatsApp** → **Enviar orden cliente**.
+## Paso 3 — Plantillas en WhatsApp Manager
 
-## Plantillas para producción
+Crear las 3 plantillas en **es_MX**, categoría **Utilidad**, estado **Activa**:
 
-La cuenta de prueba solo trae `hello_world`. Crea en WhatsApp Manager las 3 plantillas en `es_MX` (ver `docs/WHATSAPP-SETUP.md`) y quita los secretos `hello_world` / `en_US`.
+Ver textos exactos en `docs/WHATSAPP-SETUP.md`.
+
+| Nombre plantilla | Variables cuerpo |
+|------------------|------------------|
+| `orden_servicio_sisteb` | 3 |
+| `anticipo_recibido_sisteb` | 5 |
+| `liquidacion_orden_s` | 5 |
+
+---
+
+## Paso 4 — App en modo Live
+
+1. App **Sistebit CAS Epson** → panel → cambiar **Development** → **Live**
+2. Completar lo que Meta pida (privacidad, icono, etc.)
+
+En **Development** solo llega a números agregados como testers en API Setup.
+
+---
+
+## Paso 5 — Probar en SISTEBIT
+
+1. Orden con cliente que tenga celular (10 dígitos MX)
+2. **Enviar por WhatsApp** → **Enviar orden cliente**
+3. Debe llegar al **celular del cliente**
+
+Si falla la API, la app abre WhatsApp manual (`wa.me`) como respaldo.
+
+---
+
+## Errores frecuentes
+
+| Error | Causa | Solución |
+|-------|--------|----------|
+| `no permissions` / token inválido | Token de otra app (Sistebit vs CAS Epson) | Regenerar token para **CAS Epson** |
+| `Recipient not in allowed list` | App en Development | Agregar número tester o pasar a **Live** |
+| `Template not found` / `#132001` | Plantilla no existe o no está Activa | Crear/aprobar plantillas en es_MX |
+| Mensaje va a tu celular, no al cliente | `WHATSAPP_TEST_TO` configurado | Eliminar ese secreto en Supabase |
 
 ## Seguridad
 
-No compartas tokens en chat. Si se filtró, en Systia → **Revocar identificadores** → generar uno nuevo.
+No pegues tokens en chat ni en el repo. Solo en Supabase Secrets. Si se filtró: revocar en Meta → generar nuevo.

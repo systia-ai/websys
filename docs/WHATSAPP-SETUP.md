@@ -2,6 +2,8 @@
 
 Guía para conectar la app con Meta WhatsApp Business. El token **nunca** va en el frontend: solo en **Supabase → Edge Functions → Secrets**.
 
+**App Meta a usar:** **Sistebit CAS Epson** (`1701676374523471`) — ver `docs/WHATSAPP-SISTEBIT-PASOS.md` para IDs y pasos detallados.
+
 ## Cómo funciona la app
 
 1. **Con Supabase configurado:** intenta envío automático vía Cloud API (plantillas aprobadas).
@@ -23,10 +25,63 @@ Deben estar en estado **Activa** (no “En revisión” ni “Rechazada”).
 
 | Secreto (opcional) | Nombre por defecto | Variables en el cuerpo |
 |--------------------|--------------------|-------------------------|
-| `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sist` | 3: detalle cliente/equipo, número orden, fecha |
-| `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_s` | 5: cliente, orden, monto, forma pago, fecha |
+| `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` | 3: detalle cliente/equipo, número orden, fecha |
+| `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` | 5: cliente, orden, monto, forma pago, fecha |
 | `WHATSAPP_TEMPLATE_LIQUIDACION_NAME` | `liquidacion_orden_s` | 5: cliente, orden, total pagado, forma pago, fecha |
 | `WHATSAPP_TEMPLATE_LANG` | `es_MX` | Idioma exacto de la plantilla |
+
+### Textos sugeridos para crear las plantillas en Meta
+
+Categoría **Utilidad**, idioma **español (México) / es_MX**. Los nombres deben coincidir **exactamente** con la tabla de arriba.
+
+**1. `orden_servicio_sisteb`** — 3 variables en el cuerpo:
+
+```
+Hola, buen día.
+De parte de SISTEBIT le informamos sobre su orden de servicio:
+
+{{1}}
+
+Número de orden: {{2}}
+Fecha: {{3}}
+
+Quedamos atentos a cualquier duda.
+```
+
+`{{1}}` = detalle (nombre, equipo, problema). `{{2}}` = número de orden. `{{3}}` = fecha.
+
+**2. `anticipo_recibido_sisteb`** — 5 variables:
+
+```
+Hola, buen día.
+De parte de SISTEBIT confirmamos su anticipo:
+
+Cliente: {{1}}
+Orden de servicio: {{2}}
+Monto: {{3}}
+Forma de pago: {{4}}
+Fecha: {{5}}
+
+Gracias por su pago.
+```
+
+**3. `liquidacion_orden_s`** — 5 variables:
+
+```
+Hola, buen día.
+De parte de SISTEBIT le confirmamos el pago total de su orden de servicio:
+
+{{1}}
+
+Número de orden: {{2}}
+Total pagado: {{3}}
+Forma de pago: {{4}}
+Fecha: {{5}}
+
+Gracias por su preferencia.
+```
+
+`{{1}}` = nombre del cliente (con viñeta •). Resto: orden, monto, forma de pago, fecha.
 
 ### Opcionales
 

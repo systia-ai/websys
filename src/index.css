@@ -5718,6 +5718,45 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   cursor: not-allowed;
 }
 
+.wa-menu-option--enviado {
+  background: #d4edda !important;
+  color: #155724 !important;
+  border: 1px solid #28a745;
+}
+
+.wa-enviado-exito {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.wa-enviado-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #28a745;
+  color: #fff;
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(40, 167, 69, 0.35);
+}
+
+.wa-enviado-texto {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #155724;
+}
+
 .btn-primary.wide {
   background: #1976d2;
   color: #fff;

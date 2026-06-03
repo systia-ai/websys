@@ -11,6 +11,14 @@ export function truncar(s: string, max: number) {
   return t.length <= max ? t : `${t.slice(0, max)}…`
 }
 
+/** Meta no permite \\n, \\t ni más de 4 espacios seguidos en parámetros de plantilla. */
+export function sanitizarParamPlantilla(text: string): string {
+  return String(text ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/ {5,}/g, '    ')
+    .trim()
+}
+
 export function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
@@ -105,7 +113,10 @@ export async function enviarPlantillaWhatsApp(p: {
     template.components = [
       {
         type: 'body',
-        parameters: p.bodyParams.map((text) => ({ type: 'text', text })),
+        parameters: p.bodyParams.map((text) => ({
+          type: 'text',
+          text: sanitizarParamPlantilla(text),
+        })),
       },
     ]
   }

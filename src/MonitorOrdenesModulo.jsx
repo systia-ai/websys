@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial reparaciones / catálogos */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ESTATUS_ORDEN } from './catalogos.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
@@ -115,6 +114,16 @@ function etiquetaEstatusMonitor(est) {
 
 const TECNICO_TODAS = ''
 const TECNICO_SIN = '__sin_tecnico__'
+
+/** Orden visual de chips en el monitor (Entregado en lugar de En revisión). */
+const ESTATUS_ORDEN_MONITOR = [
+  'INGRESADO',
+  'ENTREGADO',
+  'EN ESPERA POR REFACCION',
+  'REPARADO',
+  'SIN REPARACION',
+  'EN REVISION',
+]
 
 const TIPOS_SERVICIO_FILTRO = TIPOS_SERVICIO_CANONICOS
 
@@ -696,7 +705,7 @@ export default function MonitorOrdenesModulo({
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
             <div className="monitor-ordenes-estatus-grid">
-              {ESTATUS_ORDEN.map((est) => {
+              {ESTATUS_ORDEN_MONITOR.map((est) => {
                 const st = String(est).trim().toUpperCase()
                 const checked = estatusSeleccionados.has(st)
                 return (

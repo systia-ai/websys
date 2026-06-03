@@ -3,7 +3,7 @@
  *
  * Secretos (Supabase → Edge Functions → Secrets):
  *   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID (obligatorios)
- *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sist (nombre exacto en Meta)
+ *   WHATSAPP_TEMPLATE_NAME     default orden_servicio_sisteb (nombre exacto en Meta)
  *   WHATSAPP_TEMPLATE_LANG     default es_MX
  *   WHATSAPP_TEST_TO           opcional: todos los mensajes a este número (pruebas; anula cliente)
  *   WHATSAPP_API_VERSION       default v25.0
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
   const cfg = leerConfigWhatsAppBase()
   const templateName =
-    Deno.env.get('WHATSAPP_TEMPLATE_NAME')?.trim() || 'orden_servicio_sist'
+    Deno.env.get('WHATSAPP_TEMPLATE_NAME')?.trim() || 'orden_servicio_sisteb'
 
   if (!validarConfigBase(cfg)) {
     return json(500, {
@@ -67,10 +67,10 @@ Deno.serve(async (req) => {
   const nombreBase = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
   const descEq = truncar(String(body.descripcionEquipo ?? '').trim(), 200)
   const prob = truncar(String(body.problemasReportados ?? '').trim(), 200)
-  const partes = [`• ${nombreBase}`]
-  if (descEq) partes.push(`• Equipo: ${descEq}`)
-  if (prob) partes.push(`• Problema: ${prob}`)
-  const detalleCliente = truncar(partes.join('\n'), 512)
+  const partes = [nombreBase]
+  if (descEq) partes.push(`Equipo: ${descEq}`)
+  if (prob) partes.push(`Problema: ${prob}`)
+  const detalleCliente = truncar(partes.join(' - '), 512)
   const fecha =
     body.fecha != null && String(body.fecha).trim()
       ? truncar(String(body.fecha).trim(), 120)

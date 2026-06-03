@@ -208,6 +208,10 @@ export default function ReparacionesOrden({
   const [waMenuAbierto, setWaMenuAbierto] = useState(false)
   const [enviandoWa, setEnviandoWa] = useState(false)
   const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
+  /** Evita reenviar el mismo tipo de mensaje WA en la misma sesión de orden. */
+  const [waEnviados, setWaEnviados] = useState({ orden: false, anticipo: false, liquidacion: false })
+  const [waExitoVisible, setWaExitoVisible] = useState(false)
+  const waExitoTimerRef = useRef(null)
   /** Datos de cliente cargados por `cliente_id` cuando la sesión no trae nombre/teléfono. */
   const [clienteDesdeBd, setClienteDesdeBd] = useState(null)
   /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
@@ -469,6 +473,33 @@ export default function ReparacionesOrden({
     // Solo al cambiar de orden (repIdStr); no recargar en cada re-render del padre.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repIdStr])
+
+  useEffect(() => {
+    setWaEnviados({ orden: false, anticipo: false, liquidacion: false })
+    setWaExitoVisible(false)
+    if (waExitoTimerRef.current) {
+      clearTimeout(waExitoTimerRef.current)
+      waExitoTimerRef.current = null
+    }
+  }, [repIdStr, idReparacion])
+
+  useEffect(
+    () => () => {
+      if (waExitoTimerRef.current) clearTimeout(waExitoTimerRef.current)
+    },
+    [],
+  )
+
+  function mostrarExitoWhatsApp(tipo) {
+    setWaEnviados((prev) => ({ ...prev, [tipo]: true }))
+    setWaExitoVisible(true)
+    if (waExitoTimerRef.current) clearTimeout(waExitoTimerRef.current)
+    waExitoTimerRef.current = setTimeout(() => {
+      setWaExitoVisible(false)
+      setWaMenuAbierto(false)
+      waExitoTimerRef.current = null
+    }, 2600)
+  }
 
   async function buscarOrdenRecienteMismaSesion(cid, eid, problemas, tipoRep) {
     const prob = String(problemas ?? '').trim()
@@ -1051,29 +1082,28 @@ export default function ReparacionesOrden({
     return telefonoWaParaEnvio(telClienteUi)
   }
 
-  function notificarResultadoWhatsApp(outcome, { cloudOk, manualOk, telDisplay }) {
+  function notificarResultadoWhatsApp(outcome, { manualOk }) {
     if (!outcome.ok) {
       onError(outcome.errorMsg)
-      return
+      return outcome
     }
-    if (outcome.modo === 'cloud') {
-      onNotice(`${cloudOk} ${outcome.toDisplay ?? telDisplay ?? 'cliente'}.`)
-      return
+    if (outcome.modo === 'manual') {
+      onNotice(`${outcome.aviso ?? 'Envío automático no disponible.'} ${manualOk}`)
     }
-    onNotice(`${outcome.aviso ?? 'Envío automático no disponible.'} ${manualOk}`)
+    return outcome
   }
 
   async function enviarWhatsAppOrdenCliente() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
       onError('Primero registra la orden de servicio para enviar el mensaje.')
-      return
+      return { ok: false }
     }
     if (supabase) {
       const tel = telWaCloudApi()
       if (!tel.ok) {
         onError(tel.errorMsg)
-        return
+        return { ok: false }
       }
       const res = await enviarOrdenWhatsAppCloudApi(supabase, {
         orden: ord,
@@ -1083,7 +1113,7 @@ export default function ReparacionesOrden({
         problemasReportados,
         to: tel.to,
       })
-      notificarResultadoWhatsApp(
+      return notificarResultadoWhatsApp(
         enviarWhatsAppConRespaldoManual(res, abrirWhatsAppOrden, {
           telefono: telClienteUi,
           numeroOrden: ord,
@@ -1096,12 +1126,9 @@ export default function ReparacionesOrden({
           serieEquipo,
         }),
         {
-          cloudOk: 'Orden enviada por WhatsApp a',
           manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
-          telDisplay: tel.display,
         },
       )
-      return
     }
     const wa = abrirWhatsAppOrden({
       telefono: telClienteUi,
@@ -1116,27 +1143,28 @@ export default function ReparacionesOrden({
     })
     if (wa.ok) {
       onNotice('Mensaje de orden listo en WhatsApp. Pulsa enviar en la app.')
-      return
+      return { ok: true, modo: 'manual' }
     }
     reportarErrorTelefonoWa(wa)
+    return { ok: false }
   }
 
   async function enviarWhatsAppAnticipoCliente() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
       onError('Primero registra la orden de servicio.')
-      return
+      return { ok: false }
     }
     let ultimo
     try {
       ultimo = await obtenerUltimoAnticipo()
     } catch (e) {
       onError(`No se pudo consultar el anticipo: ${e.message}`)
-      return
+      return { ok: false }
     }
     if (!ultimo) {
       onError('No hay anticipo registrado para esta orden. Regístrelo primero en Cuentas / Ventas.')
-      return
+      return { ok: false }
     }
     const monto = formatMontoAnticipoWa(ultimo.pago)
     const forma = String(ultimo.forma_pago ?? '—')
@@ -1146,7 +1174,7 @@ export default function ReparacionesOrden({
       const tel = telWaCloudApi()
       if (!tel.ok) {
         onError(tel.errorMsg)
-        return
+        return { ok: false }
       }
       const res = await enviarAnticipoWhatsAppCloudApi(supabase, {
         orden: ord,
@@ -1156,7 +1184,7 @@ export default function ReparacionesOrden({
         fecha: fechaPago,
         to: tel.to,
       })
-      notificarResultadoWhatsApp(
+      return notificarResultadoWhatsApp(
         enviarWhatsAppConRespaldoManual(res, abrirWhatsAppAnticipo, {
           telefono: telClienteUi,
           numeroOrden: ord,
@@ -1167,12 +1195,9 @@ export default function ReparacionesOrden({
           fecha: fechaPago,
         }),
         {
-          cloudOk: `Anticipo (${monto}) enviado por WhatsApp a`,
           manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
-          telDisplay: tel.display,
         },
       )
-      return
     }
     const wa = abrirWhatsAppAnticipo({
       telefono: telClienteUi,
@@ -1185,12 +1210,18 @@ export default function ReparacionesOrden({
     })
     if (wa.ok) {
       onNotice('Mensaje de anticipo listo en WhatsApp. Pulsa enviar en la app.')
-      return
+      return { ok: true, modo: 'manual' }
     }
     reportarErrorTelefonoWa(wa)
+    return { ok: false }
   }
 
   async function abrirMenuWhatsApp() {
+    setWaExitoVisible(false)
+    if (waExitoTimerRef.current) {
+      clearTimeout(waExitoTimerRef.current)
+      waExitoTimerRef.current = null
+    }
     setWaMenuAbierto(true)
     setConsultandoCuentaWa(true)
     try {
@@ -1207,7 +1238,7 @@ export default function ReparacionesOrden({
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
       onError('Primero registra la orden de servicio.')
-      return
+      return { ok: false }
     }
     let cuenta
     let pagos
@@ -1215,22 +1246,22 @@ export default function ReparacionesOrden({
       ;({ cuenta, pagos } = await obtenerCuentaOrdenConPagos())
     } catch (e) {
       onError(`No se pudo consultar la cuenta: ${e.message}`)
-      return
+      return { ok: false }
     }
     if (!cuenta) {
       onError('No hay cuenta vinculada a esta orden.')
-      return
+      return { ok: false }
     }
     if (!puedeEnviarPagoTotalWhatsApp(cuenta, estatus)) {
       onError('Liquide la cuenta en Ventas o marque la orden como entregada antes de enviar este mensaje.')
-      return
+      return { ok: false }
     }
     const totalNum = Number(cuenta.total ?? 0)
     const pagado = (pagos ?? []).reduce((s, p) => s + Number(p.pago ?? 0), 0)
     const montoBase = totalNum > 0.0001 ? totalNum : pagado
     if (montoBase <= 0.0001 && !estatusEsEntregado(estatus)) {
       onError('No hay monto de liquidación registrado en la cuenta.')
-      return
+      return { ok: false }
     }
     const monto = formatMontoAnticipoWa(montoBase > 0.0001 ? montoBase : pagado)
     const forma = resumenFormasPagoWa(pagos)
@@ -1245,7 +1276,7 @@ export default function ReparacionesOrden({
       const tel = telWaCloudApi()
       if (!tel.ok) {
         onError(tel.errorMsg)
-        return
+        return { ok: false }
       }
       const res = await enviarLiquidacionWhatsAppCloudApi(supabase, {
         orden: ord,
@@ -1255,7 +1286,7 @@ export default function ReparacionesOrden({
         fecha: fechaLiq,
         to: tel.to,
       })
-      notificarResultadoWhatsApp(
+      return notificarResultadoWhatsApp(
         enviarWhatsAppConRespaldoManual(res, abrirWhatsAppLiquidacion, {
           telefono: telClienteUi,
           numeroOrden: ord,
@@ -1266,12 +1297,9 @@ export default function ReparacionesOrden({
           fecha: fechaLiq,
         }),
         {
-          cloudOk: `Pago total (${monto}) enviado por WhatsApp a`,
           manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
-          telDisplay: tel.display,
         },
       )
-      return
     }
     const wa = abrirWhatsAppLiquidacion({
       telefono: telClienteUi,
@@ -1284,27 +1312,40 @@ export default function ReparacionesOrden({
     })
     if (wa.ok) {
       onNotice('Mensaje de liquidación listo en WhatsApp. Pulsa enviar en la app.')
-      return
+      return { ok: true, modo: 'manual' }
     }
     reportarErrorTelefonoWa(wa)
+    return { ok: false }
   }
 
   async function elegirEnvioWhatsApp(tipo) {
-    if (enviandoWa) return
+    if (enviandoWa || waEnviados[tipo]) return
     if (tipo === 'liquidacion' && !puedeEnviarPagoTotalWa) return
     setEnviandoWa(true)
     try {
+      let outcome
       if (tipo === 'orden') {
-        await enviarWhatsAppOrdenCliente()
+        outcome = await enviarWhatsAppOrdenCliente()
       } else if (tipo === 'anticipo') {
-        await enviarWhatsAppAnticipoCliente()
+        outcome = await enviarWhatsAppAnticipoCliente()
       } else {
-        await enviarWhatsAppLiquidacionCliente()
+        outcome = await enviarWhatsAppLiquidacionCliente()
       }
-      setWaMenuAbierto(false)
+      if (outcome?.ok && outcome.modo === 'cloud') {
+        mostrarExitoWhatsApp(tipo)
+        return
+      }
+      if (outcome?.ok) {
+        setWaMenuAbierto(false)
+      }
     } finally {
       setEnviandoWa(false)
     }
+  }
+
+  function cerrarMenuWhatsApp() {
+    if (enviandoWa || waExitoVisible) return
+    setWaMenuAbierto(false)
   }
 
   return (
@@ -1621,52 +1662,67 @@ export default function ReparacionesOrden({
         <div
           className="modal-backdrop"
           role="presentation"
-          onClick={() => !enviandoWa && setWaMenuAbierto(false)}
+          onClick={() => cerrarMenuWhatsApp()}
         >
           <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>📲 Enviar por WhatsApp</h3>
             </div>
-            <div className="modal-body wa-menu-body">
-              <button
-                type="button"
-                className="wa-menu-option btn-primary wide"
-                disabled={enviandoWa}
-                onClick={() => void elegirEnvioWhatsApp('orden')}
-              >
-                {enviandoWa ? 'Enviando…' : 'Enviar orden cliente'}
-              </button>
-              <button
-                type="button"
-                className="wa-menu-option btn-anticipo wide"
-                disabled={enviandoWa}
-                onClick={() => void elegirEnvioWhatsApp('anticipo')}
-              >
-                {enviandoWa ? 'Enviando…' : 'Enviar anticipo de cliente'}
-              </button>
-              <button
-                type="button"
-                className={`wa-menu-option btn-liquidacion wide${puedeEnviarPagoTotalWa ? ' btn-liquidacion--activo' : ' btn-liquidacion--inactivo'}`}
-                disabled={enviandoWa || consultandoCuentaWa || !puedeEnviarPagoTotalWa}
-                title={
-                  puedeEnviarPagoTotalWa
-                    ? 'Enviar confirmación de pago total (cuenta liquidada o orden entregada)'
-                    : 'Disponible cuando liquide la cuenta en Ventas o marque la orden entregada'
-                }
-                onClick={() => void elegirEnvioWhatsApp('liquidacion')}
-              >
-                {enviandoWa
-                  ? 'Enviando…'
-                  : consultandoCuentaWa
-                    ? 'Verificando cuenta…'
-                    : 'Pago total (cuenta liquidada)'}
-              </button>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="secondary" disabled={enviandoWa} onClick={() => setWaMenuAbierto(false)}>
-                Cancelar
-              </button>
-            </div>
+            {waExitoVisible ? (
+              <div className="modal-body wa-enviado-exito" role="status" aria-live="polite">
+                <div className="wa-enviado-icono" aria-hidden="true">
+                  ✓
+                </div>
+                <p className="wa-enviado-texto">Mensaje enviado</p>
+              </div>
+            ) : (
+              <>
+                <div className="modal-body wa-menu-body">
+                  <button
+                    type="button"
+                    className={`wa-menu-option btn-primary wide${waEnviados.orden ? ' wa-menu-option--enviado' : ''}`}
+                    disabled={enviandoWa || waEnviados.orden}
+                    onClick={() => void elegirEnvioWhatsApp('orden')}
+                  >
+                    {waEnviados.orden ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : 'Enviar orden cliente'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`wa-menu-option btn-anticipo wide${waEnviados.anticipo ? ' wa-menu-option--enviado' : ''}`}
+                    disabled={enviandoWa || waEnviados.anticipo}
+                    onClick={() => void elegirEnvioWhatsApp('anticipo')}
+                  >
+                    {waEnviados.anticipo ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : 'Enviar anticipo de cliente'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`wa-menu-option btn-liquidacion wide${puedeEnviarPagoTotalWa ? ' btn-liquidacion--activo' : ' btn-liquidacion--inactivo'}${waEnviados.liquidacion ? ' wa-menu-option--enviado' : ''}`}
+                    disabled={enviandoWa || consultandoCuentaWa || !puedeEnviarPagoTotalWa || waEnviados.liquidacion}
+                    title={
+                      waEnviados.liquidacion
+                        ? 'Este mensaje ya se envió en esta sesión'
+                        : puedeEnviarPagoTotalWa
+                          ? 'Enviar confirmación de pago total (cuenta liquidada o orden entregada)'
+                          : 'Disponible cuando liquide la cuenta en Ventas o marque la orden entregada'
+                    }
+                    onClick={() => void elegirEnvioWhatsApp('liquidacion')}
+                  >
+                    {waEnviados.liquidacion
+                      ? '✓ Mensaje enviado'
+                      : enviandoWa
+                        ? 'Enviando…'
+                        : consultandoCuentaWa
+                          ? 'Verificando cuenta…'
+                          : 'Pago total (cuenta liquidada)'}
+                  </button>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="secondary" disabled={enviandoWa} onClick={() => cerrarMenuWhatsApp()}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

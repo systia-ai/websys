@@ -17,7 +17,8 @@ import {
   contarOrdenesDuplicadas,
   excluirOrdenesDuplicadas,
   labelEstatusAplicados,
-  filtrarPorEstatus,
+  filtrarReparacionesParaReporte,
+  mapsFechasEntregaReporte,
 } from './reportesFiltros.js'
 import {
   aplicarFiltroPagosPorFechas,
@@ -40,6 +41,7 @@ const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_PAGOS = 'sistefix_local_pagosclientes'
+const LS_CUENTAS = 'sistefix_local_cuentas'
 
 function ymdHoy() {
   return ymdHoyLocal()
@@ -98,14 +100,6 @@ function formatearFechaCorta(ymdStr) {
   return formatFechaLegibleEsMx(ymdStr, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 function esEntregada(rep) {
   return /ENTREGAD/i.test(String(rep?.estatus ?? ''))
 }
@@ -133,6 +127,8 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
     () => new Set(TIPOS_SERVICIO_CANONICOS),
   )
+  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
+  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
   const [vista, setVista] = useState(leerVistaReportes)
 
   function cambiarVista(modo) {
@@ -183,26 +179,43 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   }, [cargarEquipos])
 
   const cargarDatosPeriodo = useCallback(
-    async (ini, fin, estatusSet) => {
+    async (ini, fin, estatusSet, modoFecha = null) => {
       setLoading(true)
       setSinColumnaFecha(false)
       try {
         let todos = []
+        let cuentas = []
         if (supabase) {
-          const { data, error } = await supabase.from('reparaciones').select('*').order('id', { ascending: false })
-          if (error) throw error
-          todos = data ?? []
+          const [rRep, rCuentas] = await Promise.all([
+            supabase.from('reparaciones').select('*').order('id', { ascending: false }),
+            supabase.from('cuentas').select('*'),
+          ])
+          if (rRep.error) throw rRep.error
+          todos = rRep.data ?? []
+          if (!rCuentas.error) cuentas = rCuentas.data ?? []
         } else {
           todos = readLs(LS_REP, [])
+          cuentas = readLs(LS_CUENTAS, [])
         }
-        const { filas: porFecha, sinColumnaFecha: sinF } = aplicarFiltroFechas(todos, ini, fin)
-        const porEstatus = filtrarPorEstatus(porFecha, estatusSet)
-        const nDup = contarOrdenesDuplicadas(porEstatus)
-        const filas = excluirOrdenesDuplicadas(porEstatus)
+
+        const pagosTodos = await cargarTodosPagosClientes(supabase)
+        const { cuentaPorReparaId, entregaDesdePagosPorRepara } = mapsFechasEntregaReporte(
+          cuentas,
+          pagosTodos,
+        )
+        const porFiltro = filtrarReparacionesParaReporte(todos, {
+          estatusSet,
+          ini,
+          fin,
+          modoFecha,
+          cuentaPorReparaId,
+          entregaDesdePagosPorRepara,
+        })
+        const nDup = contarOrdenesDuplicadas(porFiltro)
+        const filas = excluirOrdenesDuplicadas(porFiltro)
         setReparaciones(filas)
 
         const cuentasMap = supabase ? await cargarCuentasMapParaPagos(supabase) : new Map()
-        const pagosTodos = await cargarTodosPagosClientes(supabase)
         const { filas: pagosFiltrados, sinFechaIncluidos } = aplicarFiltroPagosPorFechas(
           pagosTodos,
           ini,
@@ -219,9 +232,15 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         }
 
         setDuplicadasExcluidas(nDup)
-        setSinColumnaFecha(sinF)
+        setSinColumnaFecha(false)
         setPeriodoAplicado({ ini, fin })
-        setEstatusAplicado(labelEstatusAplicados(estatusSet))
+        const etiquetaFiltro =
+          modoFecha === 'ingreso'
+            ? 'Fecha ingresado'
+            : modoFecha === 'entrega'
+              ? 'Fecha entrega'
+              : labelEstatusAplicados(estatusSet)
+        setEstatusAplicado(etiquetaFiltro)
         setBusqueda('')
         if (nDup > 0) {
           onNotice?.(
@@ -229,9 +248,6 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
               ? 'Se excluyó 1 orden marcada como duplicada del reporte y las estadísticas.'
               : `Se excluyeron ${nDup} órdenes marcadas como duplicadas del reporte y las estadísticas.`,
           )
-        }
-        if (sinF && todos.length > 0) {
-          onNotice?.('Las órdenes no tienen fecha reconocible; se muestran todas para el reporte.')
         }
         return true
       } catch (e) {
@@ -247,6 +263,46 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   )
 
   const rangoInvalido = Boolean(fechaInicio && fechaFin && fechaInicio > fechaFin)
+  const modoFechaActivo = filtroModoFechaIngreso
+    ? 'ingreso'
+    : filtroModoFechaEntrega
+      ? 'entrega'
+      : null
+  const filtrosListos =
+    !rangoInvalido &&
+    Boolean(fechaInicio.trim() && fechaFin.trim()) &&
+    (modoFechaActivo != null || estatusSeleccionados.size > 0)
+
+  function clearModoFecha() {
+    setFiltroModoFechaIngreso(false)
+    setFiltroModoFechaEntrega(false)
+  }
+
+  function toggleModoFechaIngreso() {
+    setFiltroModoFechaIngreso((prev) => {
+      const next = !prev
+      if (next) setFiltroModoFechaEntrega(false)
+      return next
+    })
+  }
+
+  function toggleModoFechaEntrega() {
+    setFiltroModoFechaEntrega((prev) => {
+      const next = !prev
+      if (next) setFiltroModoFechaIngreso(false)
+      return next
+    })
+  }
+
+  function soloModoFechaIngreso() {
+    setFiltroModoFechaEntrega(false)
+    setFiltroModoFechaIngreso(true)
+  }
+
+  function soloModoFechaEntrega() {
+    setFiltroModoFechaIngreso(false)
+    setFiltroModoFechaEntrega(true)
+  }
 
   function validarFiltros() {
     const ini = fechaInicio.trim()
@@ -259,17 +315,17 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
       onError?.('La fecha inicio no puede ser posterior a la fecha fin')
       return null
     }
-    if (estatusSeleccionados.size === 0) {
-      onError?.('Seleccione al menos un estatus')
+    if (!modoFechaActivo && estatusSeleccionados.size === 0) {
+      onError?.('Seleccione al menos un estatus o active Fecha ingresado / Fecha entrega')
       return null
     }
-    return { ini, fin }
+    return { ini, fin, modoFecha: modoFechaActivo }
   }
 
   async function onGenerarReporte() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
     if (ok) {
       setEstadisticasDesdeReporte(false)
       setPantalla('resultados')
@@ -279,7 +335,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   async function onVerEstadisticas() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
     if (ok) {
       setEstadisticasDesdeReporte(false)
       setPantalla('estadisticas')
@@ -289,7 +345,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   async function onActualizarEstadisticas() {
     const rango = validarFiltros()
     if (!rango) return
-    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados)
+    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
   }
 
   function onVerEstadisticasDelPeriodo() {
@@ -362,6 +418,28 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     setDuplicadasExcluidas(0)
     setBusqueda('')
     setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_CANONICOS))
+    clearModoFecha()
+  }
+
+  const propsFiltrosReporte = {
+    fechaInicio,
+    fechaFin,
+    onFechaInicio: setFechaInicio,
+    onFechaFin: setFechaFin,
+    estatusSeleccionados,
+    onEstatusSeleccionados: setEstatusSeleccionados,
+    filtroModoFechaIngreso,
+    filtroModoFechaEntrega,
+    onToggleModoFechaIngreso: toggleModoFechaIngreso,
+    onToggleModoFechaEntrega: toggleModoFechaEntrega,
+    onSoloModoFechaIngreso: soloModoFechaIngreso,
+    onSoloModoFechaEntrega: soloModoFechaEntrega,
+    onClearModoFecha: clearModoFecha,
+    tiposServicioSeleccionados,
+    onTiposServicioSeleccionados: setTiposServicioSeleccionados,
+    busqueda,
+    onBusqueda: setBusqueda,
+    rangoInvalido,
   }
 
   if (pantalla === 'estadisticas') {
@@ -380,24 +458,12 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
         onHome={onHome}
         filtrosSlot={
           !estadisticasDesdeReporte ? (
-            <ReportesFiltrosCard
-              fechaInicio={fechaInicio}
-              fechaFin={fechaFin}
-              onFechaInicio={setFechaInicio}
-              onFechaFin={setFechaFin}
-              estatusSeleccionados={estatusSeleccionados}
-              onEstatusSeleccionados={setEstatusSeleccionados}
-              tiposServicioSeleccionados={tiposServicioSeleccionados}
-              onTiposServicioSeleccionados={setTiposServicioSeleccionados}
-              busqueda={busqueda}
-              onBusqueda={setBusqueda}
-              rangoInvalido={rangoInvalido}
-            >
+            <ReportesFiltrosCard {...propsFiltrosReporte}>
               <button
                 type="button"
                 className="btn-agregar-equipo btn-consultar-corte-caja"
                 onClick={() => void onActualizarEstadisticas()}
-                disabled={loading || rangoInvalido}
+                disabled={loading || !filtrosListos}
               >
                 {loading ? 'Actualizando…' : 'ACTUALIZAR GRÁFICAS'}
               </button>
@@ -408,55 +474,38 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     )
   }
 
-  function imprimirReporte() {
+  async function imprimirReporte() {
     if (!periodoAplicado || reparaciones.length === 0) {
       onError?.('No hay datos del reporte para imprimir.')
       return
     }
-    const periodoTxt = `${formatearFechaCorta(periodoAplicado.ini)} — ${formatearFechaCorta(periodoAplicado.fin)}`
-    const estTxt = escapeHtml(estatusAplicado || 'Todos')
-    const filas = reparaciones
-      .map(
-        (r) =>
-          `<tr><td>${r.id ?? '—'}</td><td>${escapeHtml(nombreCliente(clientes, r.cliente_id))}</td><td>${escapeHtml(String(r.estatus ?? '—'))}</td><td>${escapeHtml(String(r.tipo_reparacion ?? '—'))}</td><td>${escapeHtml(extractDateYmd(r) ?? '—')}</td><td style="text-align:right">$${Number(r.pago ?? 0).toFixed(2)}</td><td style="text-align:right">$${Number(r.costo_reparacion ?? 0).toFixed(2)}</td></tr>`,
-      )
-      .join('')
-    const porEstRows =
-      Object.entries(resumen.porEstatus)
-        .filter(([, n]) => n > 0)
-        .map(([k, n]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${n}</td></tr>`)
-        .join('') || '<tr><td colspan="2">—</td></tr>'
-    const html = `<h1>Reporte de reparaciones</h1>
-<p><strong>Periodo:</strong> ${escapeHtml(periodoTxt)}<br><strong>Estatus filtrado:</strong> ${estTxt}</p>
-<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:520px;margin-bottom:16px"><tbody>
-<tr><th colspan="2" style="text-align:left;background:#eceff1">Resumen</th></tr>
-<tr><td>Total órdenes</td><td style="text-align:right"><strong>${resumen.total}</strong></td></tr>
-<tr><td>Activas (no entregadas)</td><td style="text-align:right">${resumen.activas}</td></tr>
-<tr><td>Entregadas</td><td style="text-align:right">${resumen.entregadas}</td></tr>
-<tr><td>Suma pagos</td><td style="text-align:right">$${resumen.totalPagos.toFixed(2)}</td></tr>
-<tr><td>Suma costo reparación</td><td style="text-align:right">$${resumen.totalCosto.toFixed(2)}</td></tr>
-</tbody></table>
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:520px;margin-bottom:20px"><caption style="caption-side:top;text-align:left;font-weight:bold;padding:8px 0">Por estatus</caption><tbody>${porEstRows}</tbody></table>
-<h2>Detalle de órdenes</h2>
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>No</th><th>Cliente</th><th>Estatus</th><th>Tipo</th><th>Fecha</th><th>Pago</th><th>Costo</th></tr></thead><tbody>${filas}</tbody></table>`
-    const w = window.open('', '_blank')
-    if (!w) {
-      onError?.('Permita ventanas emergentes para imprimir.')
-      return
+    try {
+      const { printReporteReparacionesPdf } = await import('./reporteReparacionesPdf.js')
+      await printReporteReparacionesPdf({
+        periodo: periodoAplicado,
+        formatearFechaCorta,
+        estatusFiltro: estatusAplicado || 'Todos',
+        resumen: {
+          total: resumen.total,
+          activas: resumen.activas,
+          entregadas: resumen.entregadas,
+          totalPagos: resumen.totalPagos,
+          totalCosto: resumen.totalCosto,
+        },
+        porEstatus: resumen.porEstatus,
+        filas: reparaciones.map((r) => ({
+          orden: String(r.id ?? '—'),
+          cliente: nombreCliente(clientes, r.cliente_id),
+          estatus: String(r.estatus ?? '—'),
+          tipo: String(r.tipo_reparacion ?? '—'),
+          fecha: extractDateYmd(r) ?? '—',
+          pago: `$${Number(r.pago ?? 0).toFixed(2)}`,
+          costo: `$${Number(r.costo_reparacion ?? 0).toFixed(2)}`,
+        })),
+      })
+    } catch (e) {
+      onError?.(`No se pudo imprimir el reporte: ${e?.message ?? e}`)
     }
-    w.document.write(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte reparaciones</title><style>
-body{font-family:Arial,sans-serif;padding:20px;color:#111}
-h1{font-size:1.35rem;margin:0 0 12px}
-h2{font-size:1.1rem;margin:20px 0 10px}
-th{background:#eceff1;font-size:0.8rem}
-td{font-size:0.88rem}
-p{margin:0 0 16px;line-height:1.5}
-</style></head><body>${html}<p class="muted">Imprima o guarde como PDF desde el navegador.</p></body></html>`,
-    )
-    w.document.close()
-    w.focus()
-    w.print()
   }
 
   if (pantalla === 'fechas') {
@@ -479,25 +528,13 @@ p{margin:0 0 16px;line-height:1.5}
           )}
         </header>
         <div className="servicios-body corte-caja-body reportes-body">
-          <ReportesFiltrosCard
-            fechaInicio={fechaInicio}
-            fechaFin={fechaFin}
-            onFechaInicio={setFechaInicio}
-            onFechaFin={setFechaFin}
-            estatusSeleccionados={estatusSeleccionados}
-            onEstatusSeleccionados={setEstatusSeleccionados}
-            tiposServicioSeleccionados={tiposServicioSeleccionados}
-            onTiposServicioSeleccionados={setTiposServicioSeleccionados}
-            busqueda={busqueda}
-            onBusqueda={setBusqueda}
-            rangoInvalido={rangoInvalido}
-          >
+          <ReportesFiltrosCard {...propsFiltrosReporte}>
             <div className="reportes-inicio-acciones">
               <button
                 type="button"
                 className="btn-agregar-equipo btn-consultar-corte-caja"
                 onClick={() => void onGenerarReporte()}
-                disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
+                disabled={loading || !filtrosListos}
               >
                 {loading ? '⏳ Generando…' : '📋 GENERAR REPORTE'}
               </button>
@@ -505,7 +542,7 @@ p{margin:0 0 16px;line-height:1.5}
                 type="button"
                 className="btn-agregar-equipo btn-ver-estadisticas"
                 onClick={() => void onVerEstadisticas()}
-                disabled={loading || rangoInvalido || estatusSeleccionados.size === 0}
+                disabled={loading || !filtrosListos}
               >
                 {loading ? '⏳ Cargando…' : '📈 VER ESTADÍSTICAS'}
               </button>
@@ -630,7 +667,7 @@ p{margin:0 0 16px;line-height:1.5}
           <button
             type="button"
             className="btn-agregar-equipo btn-imprimir-corte-caja"
-            onClick={imprimirReporte}
+            onClick={() => void imprimirReporte()}
             disabled={loading || reparaciones.length === 0}
           >
             🖨 IMPRIMIR REPORTE

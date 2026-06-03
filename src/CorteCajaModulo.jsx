@@ -53,14 +53,6 @@ function emojiFormaPago(forma) {
   return '💵'
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 /**
  * Corte de caja: primero fechas inicio/fin (como Android), luego resumen y movimientos de pagos
  * (`pagosclientes` o, si existe, `pagocliente`).
@@ -209,7 +201,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     return extractFechaPagoYmd(p, cuentasPorIdRef.current) ?? '—'
   }
 
-  function imprimirCorte() {
+  async function imprimirCorte() {
     if (!periodoAplicado) {
       onError?.('Consulte un periodo antes de imprimir.')
       return
@@ -218,48 +210,25 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
       onError?.('No hay movimientos en el corte para imprimir.')
       return
     }
-    const periodoTxt = `${formatearFechaCorta(periodoAplicado.ini)} — ${formatearFechaCorta(periodoAplicado.fin)}`
-    const filas = pagos
-      .map(
-        (p) =>
-          `<tr><td>${escapeHtml(String(p.concepto ?? '—'))}</td><td>${escapeHtml(nombreCliente(clientes, p.cliente_id))}</td><td>${p.cuenta_id != null && p.cuenta_id !== '' ? escapeHtml(String(p.cuenta_id)) : '—'}</td><td>${escapeHtml(String(p.forma_pago ?? '—'))}</td><td>${escapeHtml(fechaPagoEtiqueta(p))}</td><td style="text-align:right">$${Number(p.pago ?? 0).toFixed(2)}</td></tr>`,
-      )
-      .join('')
-    const otros =
-      resumen.porForma.OTRO > 0
-        ? `<tr><td>Otras formas de pago</td><td style="text-align:right">$${resumen.porForma.OTRO.toFixed(2)}</td></tr>`
-        : ''
-    const html = `<h1>Corte de caja</h1><p><strong>Periodo:</strong> ${escapeHtml(periodoTxt)}</p>
-<table class="res" border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:480px"><tbody>
-<tr><th colspan="2" style="text-align:left;background:#eceff1">Resumen</th></tr>
-<tr><td><strong>${escapeHtml(etiquetaTotalResumen)}</strong></td><td style="text-align:right"><strong>$${resumen.totalIngresos.toFixed(2)}</strong></td></tr>
-<tr><td>Cantidad de pagos</td><td style="text-align:right">${resumen.cantidadPagos}</td></tr>
-<tr><td>Efectivo</td><td style="text-align:right">$${resumen.porForma.EFECTIVO.toFixed(2)}</td></tr>
-<tr><td>Transferencia</td><td style="text-align:right">$${resumen.porForma.TRANSFERENCIA.toFixed(2)}</td></tr>
-<tr><td>Tarjeta</td><td style="text-align:right">$${resumen.porForma.TARJETA.toFixed(2)}</td></tr>
-${otros}
-</tbody></table>
-<h2>Detalle</h2>
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr><th>Concepto</th><th>Cliente</th><th>Cuenta</th><th>Forma</th><th>Fecha</th><th>Monto</th></tr></thead><tbody>${filas}</tbody></table>`
-    const w = window.open('', '_blank')
-    if (!w) {
-      onError?.('Permita ventanas emergentes para imprimir.')
-      return
+    try {
+      const { printCorteCajaPdf } = await import('./corteCajaPdf.js')
+      await printCorteCajaPdf({
+        periodo: periodoAplicado,
+        formatearFechaCorta,
+        etiquetaTotal: etiquetaTotalResumen,
+        resumen,
+        filas: pagos.map((p) => ({
+          concepto: String(p.concepto ?? '—'),
+          cliente: nombreCliente(clientes, p.cliente_id),
+          cuenta: p.cuenta_id != null && p.cuenta_id !== '' ? String(p.cuenta_id) : '—',
+          forma: String(p.forma_pago ?? '—'),
+          fecha: fechaPagoEtiqueta(p),
+          monto: `$${Number(p.pago ?? 0).toFixed(2)}`,
+        })),
+      })
+    } catch (e) {
+      onError?.(`No se pudo imprimir el corte: ${e?.message ?? e}`)
     }
-    w.document.write(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Corte de caja</title><style>
-body{font-family:Arial,sans-serif;padding:20px;color:#111}
-h1{font-size:1.35rem;margin:0 0 12px}
-h2{font-size:1.1rem;margin:20px 0 10px}
-table.res{margin:12px 0;width:100%;max-width:520px}
-p{margin:0 0 16px}
-th{background:#eceff1;font-size:0.8rem}
-td{font-size:0.9rem}
-</style></head><body>${html}<p class="muted">Use Imprimir o Guarde como PDF desde el navegador.</p></body></html>`,
-    )
-    w.document.close()
-    w.focus()
-    w.print()
   }
 
   if (pantalla === 'fechas') {
@@ -432,7 +401,7 @@ td{font-size:0.9rem}
         <button
           type="button"
           className="btn-agregar-equipo btn-imprimir-corte-caja"
-          onClick={imprimirCorte}
+          onClick={() => void imprimirCorte()}
           disabled={loadingCorte || pagos.length === 0}
         >
           🖨 IMPRIMIR CORTE
