@@ -498,3 +498,35 @@ export function abrirWhatsAppOrden(p) {
   if (!win) return { ok: false, motivo: 'popup-bloqueado' }
   return { ok: true, url }
 }
+
+/**
+ * Si la Cloud API falló, abre wa.me con el mensaje ya escrito (respaldo manual).
+ * @returns {{ ok: true, modo: 'cloud'|'manual', toDisplay?: string, aviso?: string } | { ok: false, errorMsg: string }}
+ */
+export function enviarWhatsAppConRespaldoManual(cloudResult, abrirWa, waParams) {
+  if (cloudResult?.ok) {
+    return {
+      ok: true,
+      modo: 'cloud',
+      toDisplay: cloudResult.toDisplay ?? null,
+    }
+  }
+  const wa = abrirWa(waParams)
+  if (wa.ok) {
+    return {
+      ok: true,
+      modo: 'manual',
+      aviso: cloudResult?.errorMsg
+        ? `No se envió automáticamente: ${cloudResult.errorMsg}`
+        : 'Envío automático no disponible.',
+    }
+  }
+  const base = cloudResult?.errorMsg || 'No se pudo enviar por WhatsApp.'
+  if (wa.motivo === 'popup-bloqueado') {
+    return { ok: false, errorMsg: `${base} Además, el navegador bloqueó WhatsApp.` }
+  }
+  if (wa.motivo === 'telefono-invalido' || wa.motivo === 'sin-telefono') {
+    return { ok: false, errorMsg: base }
+  }
+  return { ok: false, errorMsg: base }
+}

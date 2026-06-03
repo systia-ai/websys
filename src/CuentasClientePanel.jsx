@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
+import { saldoDesdeCuenta, totalCargosCuenta } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 function fmtFechaCuenta(v) {
@@ -67,7 +67,7 @@ export default function CuentasClientePanel({
     return cuentas.map((cuenta) => {
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
       const total = totalCargosCuenta(cuenta)
-      const saldo = saldoPendienteCuenta(total, pagosC)
+      const saldo = saldoDesdeCuenta(cuenta, pagosC)
       return {
         cuenta,
         idCuenta: cuenta.id != null ? String(cuenta.id) : '—',

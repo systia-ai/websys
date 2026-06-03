@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
+import { saldoDesdeCuenta, saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_CUENTAS_CLIENTE = 'sistefix_clientes_cuentas_vista'
@@ -83,7 +83,7 @@ export default function ClientesCuentasVentasPanel({
     return cuentas.map((cuenta) => {
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
       const total = totalCargosCuenta(cuenta)
-      const saldo = saldoPendienteCuenta(total, pagosC)
+      const saldo = saldoDesdeCuenta(cuenta, pagosC)
       const estatus = String(cuenta.estatus ?? '—').trim() || '—'
       const estatusUpper = estatus.toUpperCase()
       const liquidada = estatusUpper === 'LIQUIDADA'

@@ -7,6 +7,7 @@ import { cargarTodosPagosClientes } from './pagosClientesUtils.js'
 import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
+  saldoPendienteCuenta,
   sincronizarEstatusCuentaPorSaldo,
 } from './reparacionUtils.js'
 import ClientesCuentasVentasPanel from './ClientesCuentasVentasPanel.jsx'
@@ -340,7 +341,10 @@ export default function ClientesModulo({
               const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
               const movs = movsPorCuenta.get(String(cu.id)) ?? []
               const totalVenta = totalVentaCuenta(cu, movs)
-              return sincronizarEstatusCuentaPorSaldo(supabase, cu, pagosC, { totalVenta })
+              return sincronizarEstatusCuentaPorSaldo(supabase, cu, pagosC, {
+                totalVenta,
+                movsCuenta: movs,
+              })
             }),
           )
           const { data: refreshed, error: errRef } = await supabase
@@ -354,8 +358,8 @@ export default function ClientesModulo({
             const pagosC = pagosDelCliente.filter((p) => sameId(p.cuenta_id, cu.id))
             const movs = movsPorCuenta.get(String(cu.id)) ?? []
             const total = totalVentaCuenta(cu, movs)
-            const pagado = pagosC.reduce((s, p) => s + Number(p.pago ?? 0), 0)
-            return { ...cu, total, saldo: Math.max(0, total - pagado) }
+            const saldo = saldoPendienteCuenta(total, pagosC, { movsCuenta: movs, cuenta: cu })
+            return { ...cu, total, saldo }
           })
         }
         setCuentasEncontradas(cuentasFinales)

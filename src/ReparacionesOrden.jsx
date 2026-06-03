@@ -15,6 +15,7 @@ import {
   enviarAnticipoWhatsAppCloudApi,
   enviarLiquidacionWhatsAppCloudApi,
   enviarOrdenWhatsAppCloudApi,
+  enviarWhatsAppConRespaldoManual,
   formatFechaOrdenMensaje,
   formatMontoAnticipoWa,
   telefonoWaParaEnvio,
@@ -1050,6 +1051,18 @@ export default function ReparacionesOrden({
     return telefonoWaParaEnvio(telClienteUi)
   }
 
+  function notificarResultadoWhatsApp(outcome, { cloudOk, manualOk, telDisplay }) {
+    if (!outcome.ok) {
+      onError(outcome.errorMsg)
+      return
+    }
+    if (outcome.modo === 'cloud') {
+      onNotice(`${cloudOk} ${outcome.toDisplay ?? telDisplay ?? 'cliente'}.`)
+      return
+    }
+    onNotice(`${outcome.aviso ?? 'Envío automático no disponible.'} ${manualOk}`)
+  }
+
   async function enviarWhatsAppOrdenCliente() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || ''
     if (!ord) {
@@ -1070,11 +1083,24 @@ export default function ReparacionesOrden({
         problemasReportados,
         to: tel.to,
       })
-      if (res.ok) {
-        onNotice(`Orden enviada por WhatsApp a ${res.toDisplay ?? tel.display}.`)
-        return
-      }
-      onError(res.errorMsg || 'No se pudo enviar la orden por WhatsApp.')
+      notificarResultadoWhatsApp(
+        enviarWhatsAppConRespaldoManual(res, abrirWhatsAppOrden, {
+          telefono: telClienteUi,
+          numeroOrden: ord,
+          negocio: 'SISTEBIT',
+          fechaCreacion: fechaCreacionOrden,
+          nombreCliente: nombreClienteUi,
+          descripcionEquipo,
+          problemasReportados,
+          tipoEquipo,
+          serieEquipo,
+        }),
+        {
+          cloudOk: 'Orden enviada por WhatsApp a',
+          manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
+          telDisplay: tel.display,
+        },
+      )
       return
     }
     const wa = abrirWhatsAppOrden({
@@ -1130,11 +1156,22 @@ export default function ReparacionesOrden({
         fecha: fechaPago,
         to: tel.to,
       })
-      if (res.ok) {
-        onNotice(`Anticipo (${monto}) enviado por WhatsApp a ${res.toDisplay ?? tel.display}.`)
-        return
-      }
-      onError(res.errorMsg || 'No se pudo enviar el anticipo por WhatsApp.')
+      notificarResultadoWhatsApp(
+        enviarWhatsAppConRespaldoManual(res, abrirWhatsAppAnticipo, {
+          telefono: telClienteUi,
+          numeroOrden: ord,
+          negocio: 'SISTEBIT',
+          nombreCliente: nombreClienteUi,
+          monto,
+          formaPago: forma,
+          fecha: fechaPago,
+        }),
+        {
+          cloudOk: `Anticipo (${monto}) enviado por WhatsApp a`,
+          manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
+          telDisplay: tel.display,
+        },
+      )
       return
     }
     const wa = abrirWhatsAppAnticipo({
@@ -1218,11 +1255,22 @@ export default function ReparacionesOrden({
         fecha: fechaLiq,
         to: tel.to,
       })
-      if (res.ok) {
-        onNotice(`Pago total (${monto}) enviado por WhatsApp a ${res.toDisplay ?? tel.display}.`)
-        return
-      }
-      onError(res.errorMsg || 'No se pudo enviar la liquidación por WhatsApp.')
+      notificarResultadoWhatsApp(
+        enviarWhatsAppConRespaldoManual(res, abrirWhatsAppLiquidacion, {
+          telefono: telClienteUi,
+          numeroOrden: ord,
+          negocio: 'SISTEBIT',
+          nombreCliente: nombreClienteUi,
+          monto,
+          formaPago: forma,
+          fecha: fechaLiq,
+        }),
+        {
+          cloudOk: `Pago total (${monto}) enviado por WhatsApp a`,
+          manualOk: 'Se abrió WhatsApp con el mensaje — pulse Enviar en la app.',
+          telDisplay: tel.display,
+        },
+      )
       return
     }
     const wa = abrirWhatsAppLiquidacion({
