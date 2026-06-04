@@ -1,5 +1,7 @@
 /** Utilidades compartidas para PDFs SISTEBIT (orden de servicio, recibo de cuenta, etc.). */
 
+import { WHATSAPP_ICON_PNG_BASE64 } from './whatsappIconBase64.js'
+
 /** Tamaño carta (216 × 279 mm), orientación vertical. */
 export const SISTEBIT_PDF_FORMAT = 'letter'
 
@@ -39,31 +41,31 @@ const SISTEBIT_CIUDAD = 'Irapuato Gto.'
 /** Texto plano (sin icono); pie PDF usa `drawContactoSistebitPdf`. */
 export const CONTACTO_SISTEBIT = `${SISTEBIT_DIRECCION} ${SISTEBIT_TEL} ${SISTEBIT_WHATSAPP} ${SISTEBIT_CIUDAD}`
 
-const WHATSAPP_ICON_MM = 2.6
+const WHATSAPP_LABEL = 'WhatsApp'
+const WHATSAPP_ICON_MM = 3.8
+const WHATSAPP_ICON_GAP = 0.9
+const WHATSAPP_ICON_DATA_URL = `data:image/png;base64,${WHATSAPP_ICON_PNG_BASE64}`
 
-/** Icono WhatsApp pequeño (verde marca + burbuja blanca). */
-function drawWhatsappIconMini(pdf, x, yBaseline, sizeMm) {
-  const top = yBaseline - sizeMm * 0.82
-  const cx = x + sizeMm / 2
-  const cy = top + sizeMm / 2
-  const r = sizeMm * 0.48
-  pdf.setFillColor(37, 211, 102)
-  pdf.circle(cx, cy, r, 'F')
-  pdf.setFillColor(255, 255, 255)
-  const bw = sizeMm * 0.44
-  const bh = sizeMm * 0.5
-  const bx = cx - bw * 0.52
-  const by = cy - bh * 0.48
-  pdf.roundedRect(bx, by, bw, bh, bw * 0.32, bh * 0.32, 'F')
-  pdf.triangle(
-    bx + bw * 0.14,
-    by + bh * 0.9,
-    bx - bw * 0.2,
-    by + bh * 1.02,
-    bx + bw * 0.32,
-    by + bh * 0.86,
-    'F',
-  )
+function whatsappContactoTexto() {
+  return `${WHATSAPP_LABEL} ${SISTEBIT_WHATSAPP}`
+}
+
+function measureWhatsappBloqueWidth(pdf) {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7.5)
+  return WHATSAPP_ICON_MM + WHATSAPP_ICON_GAP + pdf.getTextWidth(whatsappContactoTexto())
+}
+
+/** Logo WhatsApp oficial (PNG) + texto en negrita. @returns {number} ancho total en mm */
+function drawWhatsappBloque(pdf, x, yBaseline) {
+  const size = WHATSAPP_ICON_MM
+  const top = yBaseline - size * 0.88
+  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, size, size, undefined, 'FAST')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7.5)
+  pdf.setTextColor(21, 101, 192)
+  pdf.text(whatsappContactoTexto(), x + size + WHATSAPP_ICON_GAP, yBaseline)
+  return measureWhatsappBloqueWidth(pdf)
 }
 
 export function dashIfEmpty(v) {
@@ -239,8 +241,6 @@ export function measureContactoSistebitPdf(pdf, contentW) {
   const maxW = contentW - 6
   const lineH = 3.6
   const seg = '  '
-  const iconSize = WHATSAPP_ICON_MM
-  const iconGap = 0.55
 
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(7.5)
@@ -249,11 +249,9 @@ export function measureContactoSistebitPdf(pdf, contentW) {
 
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
-  pdf.setFont('helvetica', 'bold')
-  const wWa = pdf.getTextWidth(SISTEBIT_WHATSAPP)
-  pdf.setFont('helvetica', 'normal')
+  const wWa = measureWhatsappBloqueWidth(pdf)
   const wCiudad = pdf.getTextWidth(`${seg}${SISTEBIT_CIUDAD}`)
-  const filaW = wTel + wSeg + iconSize + iconGap + wWa + wCiudad
+  const filaW = wTel + wSeg + wWa + wCiudad
   h += filaW <= maxW ? lineH : lineH * 2
   return h
 }
@@ -265,8 +263,6 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
   pdf.setTextColor(21, 101, 192)
   const maxW = contentW - 6
   const lineH = 3.6
-  const iconSize = WHATSAPP_ICON_MM
-  const iconGap = 0.55
   const seg = '  '
 
   let yCur = y
@@ -274,24 +270,19 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
   pdf.text(addrLines, centerX, yCur, { align: 'center', maxWidth: maxW })
   yCur += addrLines.length * lineH
 
+  pdf.setFont('helvetica', 'normal')
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
-  pdf.setFont('helvetica', 'bold')
-  const wWa = pdf.getTextWidth(SISTEBIT_WHATSAPP)
-  pdf.setFont('helvetica', 'normal')
+  const wWa = measureWhatsappBloqueWidth(pdf)
   const ciudadText = `${seg}${SISTEBIT_CIUDAD}`
   const wCiudad = pdf.getTextWidth(ciudadText)
-  const filaW = wTel + wSeg + iconSize + iconGap + wWa + wCiudad
+  const filaW = wTel + wSeg + wWa + wCiudad
 
   if (filaW <= maxW) {
     let x = centerX - filaW / 2
     pdf.text(SISTEBIT_TEL, x, yCur)
     x += wTel + wSeg
-    drawWhatsappIconMini(pdf, x, yCur, iconSize)
-    x += iconSize + iconGap
-    pdf.setFont('helvetica', 'bold')
-    pdf.text(SISTEBIT_WHATSAPP, x, yCur)
-    pdf.setFont('helvetica', 'normal')
+    drawWhatsappBloque(pdf, x, yCur)
     x += wWa
     pdf.text(ciudadText, x, yCur)
     return yCur - y + lineH
@@ -299,13 +290,9 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
 
   pdf.text(SISTEBIT_TEL, centerX, yCur, { align: 'center' })
   yCur += lineH
-  const fila2W = iconSize + iconGap + wWa + wCiudad
+  const fila2W = wWa + wCiudad
   let x2 = centerX - fila2W / 2
-  drawWhatsappIconMini(pdf, x2, yCur, iconSize)
-  x2 += iconSize + iconGap
-  pdf.setFont('helvetica', 'bold')
-  pdf.text(SISTEBIT_WHATSAPP, x2, yCur)
-  pdf.setFont('helvetica', 'normal')
+  drawWhatsappBloque(pdf, x2, yCur)
   x2 += wWa
   pdf.text(ciudadText, x2, yCur)
   return yCur - y + lineH
