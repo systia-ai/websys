@@ -1,6 +1,16 @@
 import { ESTATUS_ORDEN } from './catalogos.js'
 import { aYmdLocalDesdeRaw, esOrdenDuplicada, repCoincideFiltroMonitor } from './reparacionUtils.js'
 
+/** Orden en la cuadrícula de filtros de reportes (2 columnas). */
+export const ESTATUS_ORDEN_REPORTES = [
+  'INGRESADO',
+  'ENTREGADO',
+  'EN ESPERA POR REFACCION',
+  'EN REVISION',
+  'SIN REPARACION',
+  'REPARADO',
+]
+
 export function estatusParaFiltroReporte(rep) {
   const st = String(rep?.estatus ?? '').trim().toUpperCase()
   if (st === 'ENTREGADA') return 'ENTREGADO'

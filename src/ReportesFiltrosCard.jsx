@@ -1,5 +1,4 @@
-import { ESTATUS_ORDEN } from './catalogos.js'
-import { crearSetEstatusTodos } from './reportesFiltros.js'
+import { crearSetEstatusTodos, ESTATUS_ORDEN_REPORTES } from './reportesFiltros.js'
 import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
 
 /**
@@ -156,7 +155,7 @@ export default function ReportesFiltrosCard({
           </button>
         </div>
         <div className="monitor-ordenes-estatus-grid">
-          {ESTATUS_ORDEN.map((est) => {
+          {ESTATUS_ORDEN_REPORTES.map((est) => {
             const st = String(est).trim().toUpperCase()
             const checked = estatusSeleccionados.has(st)
             return (
