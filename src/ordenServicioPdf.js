@@ -66,20 +66,59 @@ function drawPieOrden(pdf, y, contentW, centerX) {
   return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX)
 }
 
-/** Fila superior: dos recuadros pequeños (orden + fecha), alineados a la izquierda. */
-function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
-  void totalW
+/** Cliente, no. de orden y fecha en un mismo renglón (recuadros compactos). */
+function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, x, y, totalW) {
   const gap = 3.5
+  const hMin = 10
+  const nombre = dashIfEmpty(clienteNombre)
   const ordenStr = String(orden ?? '—')
   const fechaStr = dashIfEmpty(fecha)
 
-  const wOrden = anchoRecuadroCompacto(pdf, 'No. de Orden', ordenStr, { min: 24, max: 32, pad: 10 })
-  const wFecha = anchoRecuadroCompacto(pdf, 'Fecha', fechaStr, { min: 36, max: 50, pad: 8 })
+  const blocks = [
+    { label: 'Cliente', value: nombre, theme: TEMA.cliente, min: 24, campo: true },
+    { label: 'No. de Orden', value: ordenStr, theme: TEMA.orden, min: 22, max: 30, campo: false },
+    { label: 'Fecha', value: fechaStr, theme: TEMA.fecha, min: 34, max: 54, campo: false },
+  ]
 
-  const h = 10
-  drawCampo(pdf, 'No. de Orden', ordenStr, x, y, wOrden, h, TEMA.orden, { ...COMPACT_CAMPO, padX: 3.2 })
-  drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, h, TEMA.fecha, COMPACT_CAMPO)
-  return h
+  const gapsTotal = gap * (blocks.length - 1)
+  let widths = blocks.map((b) => {
+    if (b.campo) {
+      const w = anchoRecuadroCampo(pdf, b.label, b.value, {
+        min: b.min,
+        maxW: totalW,
+        pad: 10,
+        labelFontSize: 6.8,
+        valueFontSize: 9,
+      })
+      return Math.max(b.min, w)
+    }
+    return Math.min(
+      b.max,
+      Math.max(b.min, anchoRecuadroCompacto(pdf, b.label, b.value, { min: b.min, max: b.max, pad: 7 })),
+    )
+  })
+
+  const sumW = widths.reduce((s, w) => s + w, 0)
+  if (sumW > totalW - gapsTotal) {
+    const scale = (totalW - gapsTotal) / sumW
+    widths = widths.map((w, i) => Math.max(blocks[i].min, w * scale))
+    const sum2 = widths.reduce((s, w) => s + w, 0)
+    if (sum2 > totalW - gapsTotal) {
+      const extra = (sum2 - (totalW - gapsTotal)) / blocks.length
+      widths = widths.map((w) => w - extra)
+    }
+  }
+
+  let cx = x
+  let maxH = 0
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    const opts = b.campo ? { ...COMPACT_CAMPO, padX: 2.4 } : { ...COMPACT_CAMPO, padX: 3.2 }
+    const h = drawCampo(pdf, b.label, b.value, cx, y, widths[i], hMin, b.theme, opts)
+    maxH = Math.max(maxH, h)
+    cx += widths[i] + gap
+  }
+  return maxH
 }
 
 /** Serie, tipo y descripción en una fila (recuadros compactos). */
@@ -140,17 +179,7 @@ function drawCamposOrden(pdf, p, x, y, width, maxY) {
   }
 
   ensureSpace(11 + gap)
-  cy += drawFilaOrdenYFecha(pdf, String(orden ?? '—'), fecha, x, cy, width) + gap
-
-  const nombreCliente = dashIfEmpty(cliente.nombre)
-  const wCliente = anchoRecuadroCampo(pdf, 'Cliente', nombreCliente, {
-    min: 42,
-    maxW: width,
-    pad: 12,
-    valueFontSize: 9,
-  })
-  ensureSpace(13 + gap)
-  cy += drawCampo(pdf, 'Cliente', nombreCliente, x, cy, wCliente, 12, TEMA.cliente, COMPACT_CAMPO) + gap
+  cy += drawFilaClienteOrdenFecha(pdf, cliente.nombre, orden, fecha, x, cy, width) + gap
 
   ensureSpace(11 + gap)
   cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + gap

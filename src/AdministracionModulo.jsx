@@ -157,6 +157,7 @@ export default function AdministracionModulo({
           <TablaScrollSuperior
             ariaLabel="Usuarios y roles"
             classNameWrap="cuentas-cliente-tabla-wrap administracion-tabla-wrap"
+            showHint={false}
             syncDeps={[usuarios, loading, isAdmin]}
           >
             <table className="cuentas-cliente-tabla administracion-tabla">
