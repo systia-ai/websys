@@ -6,16 +6,14 @@ import { WHATSAPP_ICON_PNG_BASE64 } from './whatsappIconBase64.js'
 export const SISTEBIT_PDF_FORMAT = 'letter'
 
 /**
- * Comprobante / recibo: media hoja carta (8.5″ × 5.5″, statement size).
- * En jsPDF el ancho es mayor que el alto → usar `RECIBO_PDF_ORIENTATION` landscape
- * (igual que etiquetas 2″×1″).
+ * Comprobante en media hoja carta: PDF tamaño Carta vertical; contenido en la mitad superior (5.5″).
+ * Así la impresora usa papel Carta sin forzar orientación horizontal ni tamaño custom.
  */
 export const RECIBO_IN_W = 8.5
 export const RECIBO_IN_H = 5.5
 export const RECIBO_MM_W = 215.9
 export const RECIBO_MM_H = 139.7
-export const RECIBO_PDF_FORMAT_MM = [RECIBO_MM_W, RECIBO_MM_H]
-export const RECIBO_PDF_ORIENTATION = 'landscape'
+export const RECIBO_PAGE_FORMAT = SISTEBIT_PDF_FORMAT
 
 export const GAP_CAMPOS = 3.8
 

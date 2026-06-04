@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf'
 import { LEGAL_ORDEN_SERVICIO } from './ordenServicioPdf.js'
 import {
-  RECIBO_PDF_FORMAT_MM,
-  RECIBO_PDF_ORIENTATION,
+  RECIBO_MM_H,
+  RECIBO_PAGE_FORMAT,
   TEMA,
   drawCampo,
   anchoRecuadroCompacto,
@@ -13,18 +13,32 @@ import {
   printSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 
+/** PDF carta vertical; zona de impresión = mitad superior (media carta). */
 function newReciboPdf() {
   return new jsPDF({
     unit: 'mm',
-    format: RECIBO_PDF_FORMAT_MM,
-    /** Media carta: 8.5″ ancho × 5.5″ alto (jsPDF requiere landscape si ancho > alto). */
-    orientation: RECIBO_PDF_ORIENTATION,
+    format: RECIBO_PAGE_FORMAT,
+    orientation: 'portrait',
     compress: true,
   })
 }
 
 function addReciboPage(pdf) {
-  pdf.addPage(RECIBO_PDF_FORMAT_MM, 'l')
+  pdf.addPage(RECIBO_PAGE_FORMAT, 'p')
+}
+
+/** Línea guía opcional al corte de media hoja (5.5″). */
+function drawGuiaMediaHoja(pdf, contentW, margin) {
+  const y = RECIBO_MM_H
+  pdf.setDrawColor(190, 198, 208)
+  pdf.setLineWidth(0.25)
+  if (typeof pdf.setLineDashPattern === 'function') {
+    pdf.setLineDashPattern([1.5, 1.5], 0)
+  }
+  pdf.line(margin, y, margin + contentW, y)
+  if (typeof pdf.setLineDashPattern === 'function') {
+    pdf.setLineDashPattern([], 0)
+  }
 }
 
 /** Márgenes compactos para media carta (8.5″ × 5.5″). */
@@ -200,11 +214,14 @@ function drawFilaTabla(pdf, row, x, y, contentW, idx) {
   return rowH
 }
 
-/** @returns {number} posición Y final tras la tabla */
-function drawTablaDetalle(pdf, lineas, x, yStart, contentW, pageH) {
+/**
+ * @param {number} zonaMaxY Límite inferior de la media hoja (mm desde arriba).
+ * @returns {number} posición Y final tras la tabla
+ */
+function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
   let y = yStart
   y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
-  const maxY = pageH - MARGIN - 2
+  const maxY = zonaMaxY - MARGIN - 2
 
   const rows = (lineas ?? []).map(mapLineaRecibo)
   if (rows.length === 0) {
@@ -239,17 +256,16 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, pageH) {
 }
 
 /**
- * Genera el PDF del comprobante (media hoja carta: 8.5″ × 5.5″).
+ * Genera el comprobante: hoja Carta vertical, contenido en la mitad superior (8.5″ × 5.5″).
  * @param {{ cliente: { nombre?: string, telefono?: string }, total: string, estatus: string, lineas: object[] }} p
  */
 export function createReciboCuentaPdf(p) {
   const pdf = newReciboPdf()
 
   const W = pdf.internal.pageSize.getWidth()
-  const H = pdf.internal.pageSize.getHeight()
   const contentW = W - 2 * MARGIN
   const centerX = W / 2
-  const pageBottom = H - MARGIN
+  const zonaBottom = RECIBO_MM_H - MARGIN
 
   let y = drawEncabezadoSistebit(pdf, 'COMPROBANTE', centerX, 4, {
     scale: 0.5,
@@ -264,10 +280,10 @@ export function createReciboCuentaPdf(p) {
   pdf.text('DETALLE DE MOVIMIENTOS', MARGIN, y + 3.2)
   y += GAP_DETALLE_TABLA + 3.2
 
-  y = drawTablaDetalle(pdf, p.lineas, MARGIN, y, contentW, H)
+  y = drawTablaDetalle(pdf, p.lineas, MARGIN, y, contentW, RECIBO_MM_H)
 
   const bloqueFinalH = GAP_ANTES_TOTAL + TOTAL_BOX_H + GAP_TOTAL_LEYENDA + measurePieReciboHeight(pdf, contentW)
-  if (y + bloqueFinalH > pageBottom) {
+  if (y + bloqueFinalH > zonaBottom) {
     addReciboPage(pdf)
     y = MARGIN
   }
@@ -277,14 +293,24 @@ export function createReciboCuentaPdf(p) {
   y += totalH + GAP_TOTAL_LEYENDA
   drawPieRecibo(pdf, y, contentW, centerX)
 
+  const pageCount = pdf.getNumberOfPages()
+  for (let n = 1; n <= pageCount; n++) {
+    pdf.setPage(n)
+    drawGuiaMediaHoja(pdf, contentW, MARGIN)
+  }
+
   return pdf
 }
 
-/** Genera el comprobante y abre el diálogo de impresión (papel media carta). */
+/** Imprime comprobante (papel Carta, orientación vertical, contenido en media hoja). */
 export async function printReciboCuentaPdf(p) {
   const pdf = createReciboCuentaPdf(p)
   return printSistebitPdfDocument(pdf, {
     timeoutMsg: 'Tiempo de espera al cargar el recibo para imprimir.',
-    iframeTitle: 'Imprimir recibo (media carta)',
+    iframeTitle: 'Imprimir comprobante — Carta vertical, media hoja arriba',
   })
 }
+
+/** Texto breve para mostrar al usuario al imprimir. */
+export const RECIBO_PRINT_HINT =
+  'Impresión: papel Carta, orientación Vertical, escala 100 %. El comprobante sale en la mitad superior (5.5″); puede cortar o usar media hoja precortada.'

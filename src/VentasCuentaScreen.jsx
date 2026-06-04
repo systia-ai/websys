@@ -1049,13 +1049,14 @@ export default function VentasCuentaScreen({
       return
     }
     try {
-      const { printReciboCuentaPdf } = await import('./reciboCuentaPdf.js')
+      const { printReciboCuentaPdf, RECIBO_PRINT_HINT } = await import('./reciboCuentaPdf.js')
       await printReciboCuentaPdf({
         cliente: { nombre: cliente.nombre, telefono: cliente.telefono },
         total: totalStr,
         estatus: cuentaEstatus || '—',
         lineas,
       })
+      onNotice?.(RECIBO_PRINT_HINT)
     } catch (e) {
       onError?.(`No se pudo imprimir el recibo: ${e?.message ?? e}`)
     }
