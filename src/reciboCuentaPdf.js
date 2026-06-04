@@ -1,9 +1,9 @@
-import { jsPDF } from 'jspdf'
 import { LEGAL_ORDEN_SERVICIO } from './ordenServicioPdf.js'
 import {
   RECIBO_MM_H,
-  RECIBO_PAGE_FORMAT,
   TEMA,
+  addMediaCartaPage,
+  createMediaCartaPdf,
   drawCampo,
   anchoRecuadroCompacto,
   anchoRecuadroCampo,
@@ -11,35 +11,8 @@ import {
   drawContactoSistebitPdf,
   measureContactoSistebitPdf,
   printSistebitPdfDocument,
+  stampGuiaMediaCartaTodasPaginas,
 } from './sistebitPdfCommon.js'
-
-/** PDF carta vertical; zona de impresión = mitad superior (media carta). */
-function newReciboPdf() {
-  return new jsPDF({
-    unit: 'mm',
-    format: RECIBO_PAGE_FORMAT,
-    orientation: 'portrait',
-    compress: true,
-  })
-}
-
-function addReciboPage(pdf) {
-  pdf.addPage(RECIBO_PAGE_FORMAT, 'p')
-}
-
-/** Línea guía opcional al corte de media hoja (5.5″). */
-function drawGuiaMediaHoja(pdf, contentW, margin) {
-  const y = RECIBO_MM_H
-  pdf.setDrawColor(190, 198, 208)
-  pdf.setLineWidth(0.25)
-  if (typeof pdf.setLineDashPattern === 'function') {
-    pdf.setLineDashPattern([1.5, 1.5], 0)
-  }
-  pdf.line(margin, y, margin + contentW, y)
-  if (typeof pdf.setLineDashPattern === 'function') {
-    pdf.setLineDashPattern([], 0)
-  }
-}
 
 /** Márgenes compactos para media carta (8.5″ × 5.5″). */
 const MARGIN = 6
@@ -227,7 +200,7 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
   if (rows.length === 0) {
     const h = 8
     if (y + h > maxY) {
-      addReciboPage(pdf)
+      addMediaCartaPage(pdf)
       y = MARGIN
       y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
     }
@@ -244,7 +217,7 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
   for (let i = 0; i < rows.length; i++) {
     const rowH = calcAlturaFila(pdf, rows[i], contentW)
     if (y + rowH > maxY) {
-      addReciboPage(pdf)
+      addMediaCartaPage(pdf)
       y = MARGIN
       y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
     }
@@ -260,7 +233,7 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
  * @param {{ cliente: { nombre?: string, telefono?: string }, total: string, estatus: string, lineas: object[] }} p
  */
 export function createReciboCuentaPdf(p) {
-  const pdf = newReciboPdf()
+  const pdf = createMediaCartaPdf()
 
   const W = pdf.internal.pageSize.getWidth()
   const contentW = W - 2 * MARGIN
@@ -284,7 +257,7 @@ export function createReciboCuentaPdf(p) {
 
   const bloqueFinalH = GAP_ANTES_TOTAL + TOTAL_BOX_H + GAP_TOTAL_LEYENDA + measurePieReciboHeight(pdf, contentW)
   if (y + bloqueFinalH > zonaBottom) {
-    addReciboPage(pdf)
+    addMediaCartaPage(pdf)
     y = MARGIN
   }
 
@@ -293,11 +266,7 @@ export function createReciboCuentaPdf(p) {
   y += totalH + GAP_TOTAL_LEYENDA
   drawPieRecibo(pdf, y, contentW, centerX)
 
-  const pageCount = pdf.getNumberOfPages()
-  for (let n = 1; n <= pageCount; n++) {
-    pdf.setPage(n)
-    drawGuiaMediaHoja(pdf, contentW, MARGIN)
-  }
+  stampGuiaMediaCartaTodasPaginas(pdf, contentW, MARGIN)
 
   return pdf
 }

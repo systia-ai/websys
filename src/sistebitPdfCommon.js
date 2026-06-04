@@ -1,5 +1,6 @@
 /** Utilidades compartidas para PDFs SISTEBIT (orden de servicio, recibo de cuenta, etc.). */
 
+import { jsPDF } from 'jspdf'
 import { WHATSAPP_ICON_PNG_BASE64 } from './whatsappIconBase64.js'
 
 /** Tamaño carta (216 × 279 mm), orientación vertical. */
@@ -14,6 +15,42 @@ export const RECIBO_IN_H = 5.5
 export const RECIBO_MM_W = 215.9
 export const RECIBO_MM_H = 139.7
 export const RECIBO_PAGE_FORMAT = SISTEBIT_PDF_FORMAT
+
+/** Crea PDF carta vertical (contenido en mitad superior vía `RECIBO_MM_H`). */
+export function createMediaCartaPdf() {
+  return new jsPDF({
+    unit: 'mm',
+    format: RECIBO_PAGE_FORMAT,
+    orientation: 'portrait',
+    compress: true,
+  })
+}
+
+export function addMediaCartaPage(pdf) {
+  pdf.addPage(RECIBO_PAGE_FORMAT, 'p')
+}
+
+/** Línea guía al corte de media hoja (5.5″ desde el borde superior). */
+export function drawGuiaMediaCartaPdf(pdf, contentW, margin) {
+  const y = RECIBO_MM_H
+  pdf.setDrawColor(190, 198, 208)
+  pdf.setLineWidth(0.25)
+  if (typeof pdf.setLineDashPattern === 'function') {
+    pdf.setLineDashPattern([1.5, 1.5], 0)
+  }
+  pdf.line(margin, y, margin + contentW, y)
+  if (typeof pdf.setLineDashPattern === 'function') {
+    pdf.setLineDashPattern([], 0)
+  }
+}
+
+export function stampGuiaMediaCartaTodasPaginas(pdf, contentW, margin) {
+  const n = pdf.getNumberOfPages()
+  for (let i = 1; i <= n; i++) {
+    pdf.setPage(i)
+    drawGuiaMediaCartaPdf(pdf, contentW, margin)
+  }
+}
 
 export const GAP_CAMPOS = 3.8
 

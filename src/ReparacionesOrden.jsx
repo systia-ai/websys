@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga de reparación existente vía Supabase/local */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
@@ -935,33 +934,9 @@ export default function ReparacionesOrden({
   async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nombre = nombreClienteUi || '—'
-    const equipoParts = []
-    if (serieEquipo) equipoParts.push(`Serie: ${serieEquipo}`)
-    if (tipoEquipo) equipoParts.push(`Tipo: ${tipoEquipo}`)
-    if (descripcionEquipo) equipoParts.push(descripcionEquipo)
-    const equipoText = equipoParts.length ? equipoParts.join(' — ') : '—'
-    const qrText = buildEtiquetaQrPlainText({
-      nombre: nombreClienteUi,
-      orden: ord,
-      equipo: equipoText,
-    })
-    let qrDataUrl
-    try {
-      const QRCode = (await import('qrcode')).default
-      qrDataUrl = await QRCode.toDataURL(qrText, {
-        errorCorrectionLevel: 'L',
-        margin: 1,
-        width: 400,
-        color: { dark: '#000000', light: '#ffffff' },
-      })
-    } catch {
-      onError('No se pudo generar el código QR para la etiqueta.')
-      return
-    }
-
     try {
       const { downloadEtiquetaPdf } = await import('./etiquetaPdf.js')
-      downloadEtiquetaPdf({ nombre, orden: ord, qrDataUrl })
+      downloadEtiquetaPdf({ nombre, orden: ord })
       onNotice('PDF de etiqueta descargado (2×1 in).')
     } catch (e) {
       onError(`No se pudo generar el PDF de la etiqueta: ${e?.message ?? e}`)
@@ -972,7 +947,7 @@ export default function ReparacionesOrden({
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nt = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) ?? ''
     try {
-      const { printOrdenServicioPdf } = await import('./ordenServicioPdf.js')
+      const { printOrdenServicioPdf, ORDEN_PRINT_HINT } = await import('./ordenServicioPdf.js')
       await printOrdenServicioPdf({
         orden: ord,
         fechaCreacion: fechaCreacionOrden,
@@ -996,6 +971,7 @@ export default function ReparacionesOrden({
         },
         solucion: descripcionSolucion,
       })
+      onNotice?.(ORDEN_PRINT_HINT)
     } catch (e) {
       onError(`No se pudo imprimir la orden: ${e?.message ?? e}`)
     }

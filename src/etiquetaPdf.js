@@ -37,14 +37,13 @@ function wrapLineasPorAncho(pdf, lines, maxW) {
 }
 
 /**
- * PDF de etiqueta (mismo aspecto que referencia física): borde negro, nombre a la izquierda en mayúsculas,
- * bloque derecho con “Orden” + número y QR debajo.
+ * PDF de etiqueta: borde negro, nombre a la izquierda en mayúsculas, número de orden grande a la derecha.
  *
- * @param {{ nombre: string, orden: string|number, qrDataUrl: string }} p
+ * @param {{ nombre: string, orden: string|number }} p
  * @returns {object}
  */
 export function createEtiquetaPdf(p) {
-  const { nombre, orden, qrDataUrl } = p
+  const { nombre, orden } = p
   const ordStr = String(orden ?? '—')
   const lineasNombre = splitNombreLineas(nombre)
 
@@ -61,7 +60,7 @@ export function createEtiquetaPdf(p) {
 
   /** Marco negro respecto al borde físico de la hoja. */
   const frameM = 0.7
-  /** Aire interior entre el trazo del marco y el texto/QR (evita que choque con el borde). */
+  /** Aire interior entre el trazo del marco y el texto (evita que choque con el borde). */
   const insidePad = 2.15
 
   const contentX = frameM + insidePad
@@ -77,8 +76,8 @@ export function createEtiquetaPdf(p) {
   const gapCol = 0.85
   const leftColW = contentW * 0.54
   const rightColLeft = contentX + leftColW + gapCol
-  /** Margen derecho explícito para “Orden” y el QR. */
   const rightInnerRight = contentX + contentW - 0.55
+  const rightColW = rightInnerRight - rightColLeft
   const nameLeft = contentX + 0.45
   const maxNameW = leftColW - 0.95
 
@@ -107,43 +106,46 @@ export function createEtiquetaPdf(p) {
     yNombre += lineMm
   }
 
-  const ordY = contentY + ascenderMm * 0.55 + 1.95
+  const pref = 'Orden'
+  const prefPt = 6.8
+  let numPt = 18
+  pdf.setFont('helvetica', 'bold')
+  while (numPt >= 11) {
+    pdf.setFontSize(numPt)
+    if (pdf.getTextWidth(ordStr) <= rightColW - 0.4) break
+    numPt -= 0.8
+  }
+
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(5.8)
-  const pref = 'Orden '
+  pdf.setFontSize(prefPt)
   const wPref = pdf.getTextWidth(pref)
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9.2)
+  pdf.setFontSize(numPt)
   const wNum = pdf.getTextWidth(ordStr)
-  const blockW = wPref + wNum
-  const xOrd = rightInnerRight - blockW
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(5.8)
-  pdf.text(pref, xOrd, ordY)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9.2)
-  pdf.text(ordStr, xOrd + wPref, ordY)
+  const prefLineMm = prefPt * 0.352778 * 1.05
+  const numLineMm = numPt * 0.352778 * 1.08
+  const gapPrefNum = 1.1
+  const blockH = prefLineMm + gapPrefNum + numLineMm
+  const yPref = contentY + (contentH - blockH) / 2 + prefLineMm
+  const yNum = yPref + gapPrefNum
 
-  let qrSize = Math.min(14.8, rightInnerRight - rightColLeft - 0.45, contentH - 5.8)
-  const qrY = ordY + 2.15
-  if (qrY + qrSize > contentY + contentH - 0.55) {
-    qrSize = Math.max(8, contentY + contentH - 0.55 - qrY)
-  }
-  const qrX = rightInnerRight - qrSize
-  try {
-    pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
-  } catch {
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(5)
-    pdf.text('QR', qrX + qrSize * 0.35, qrY + qrSize * 0.55)
-  }
+  const xPref = rightInnerRight - wPref
+  const xNum = rightInnerRight - wNum
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(prefPt)
+  pdf.setTextColor(0, 0, 0)
+  pdf.text(pref, xPref, yPref)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(numPt)
+  pdf.text(ordStr, xNum, yNum)
 
   return pdf
 }
 
 /**
  * Genera y descarga el PDF de la etiqueta.
- * @param {{ nombre: string, orden: string|number, qrDataUrl: string }} p
+ * @param {{ nombre: string, orden: string|number }} p
  */
 export function downloadEtiquetaPdf(p) {
   const pdf = createEtiquetaPdf(p)
@@ -152,7 +154,7 @@ export function downloadEtiquetaPdf(p) {
 
 /**
  * Abre el diálogo de impresión con el PDF a tamaño real de etiqueta (2×1 in / 51×25 mm).
- * @param {{ nombre: string, orden: string|number, qrDataUrl: string }} p
+ * @param {{ nombre: string, orden: string|number }} p
  * @returns {Promise<void>}
  */
 export function printEtiquetaPdf(p) {

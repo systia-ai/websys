@@ -1,8 +1,7 @@
-import { jsPDF } from 'jspdf'
 import { formatFechaLegibleEsMx } from './reparacionUtils.js'
 import {
-  SISTEBIT_PDF_FORMAT,
-  GAP_CAMPOS,
+  RECIBO_MM_H,
+  RECIBO_PAGE_FORMAT,
   TEMA,
   COMPACT_CAMPO,
   dashIfEmpty,
@@ -11,14 +10,26 @@ import {
   anchoRecuadroCampo,
   drawEncabezadoSistebit,
   drawContactoSistebitPdf,
+  measureContactoSistebitPdf,
+  createMediaCartaPdf,
+  addMediaCartaPage,
+  stampGuiaMediaCartaTodasPaginas,
   printSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 
-/** @deprecated Use SISTEBIT_PDF_FORMAT */
-export const ORDEN_PDF_FORMAT = SISTEBIT_PDF_FORMAT
+/** @deprecated Use RECIBO_PAGE_FORMAT (Carta vertical, media hoja arriba) */
+export const ORDEN_PDF_FORMAT = RECIBO_PAGE_FORMAT
 
 export const LEGAL_ORDEN_SERVICIO =
   'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
+
+const MARGIN = 6
+const GAP_ORDEN_CAMPOS = 3
+const GAP_ANTES_PIE = 4
+const GAP_ANTES_LEYENDA = 2
+const GAP_LEYENDA_CONTACTO = 2
+const FUENTE_LEGAL_ORDEN = 7.2
+const LINE_H_LEGAL = 3.5
 
 export function buildOrdenServicioPdfFilename(orden) {
   const safe = String(orden ?? 'orden').replace(/[^\w.-]+/g, '_')
@@ -27,6 +38,32 @@ export function buildOrdenServicioPdfFilename(orden) {
 
 function formatFechaOrdenPdf(fechaCreacion) {
   return formatFechaLegibleEsMx(fechaCreacion, { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function measureLeyendaOrdenHeight(pdf, contentW) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(FUENTE_LEGAL_ORDEN)
+  const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
+  return legalLines.length * LINE_H_LEGAL + GAP_LEYENDA_CONTACTO
+}
+
+function measurePieOrdenHeight(pdf, contentW) {
+  return GAP_ANTES_LEYENDA + measureLeyendaOrdenHeight(pdf, contentW) + measureContactoSistebitPdf(pdf, contentW)
+}
+
+function drawLeyendaOrden(pdf, y, contentW, centerX) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(FUENTE_LEGAL_ORDEN)
+  pdf.setTextColor(55, 55, 55)
+  const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
+  pdf.text(legalLines, centerX, y, { align: 'center', maxWidth: contentW - 6 })
+  return legalLines.length * LINE_H_LEGAL + GAP_LEYENDA_CONTACTO
+}
+
+function drawPieOrden(pdf, y, contentW, centerX) {
+  const yLeyenda = y + GAP_ANTES_LEYENDA
+  const leyendaH = drawLeyendaOrden(pdf, yLeyenda, contentW, centerX)
+  return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX)
 }
 
 /** Fila superior: dos recuadros pequeños (orden + fecha), alineados a la izquierda. */
@@ -39,7 +76,7 @@ function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
   const wOrden = anchoRecuadroCompacto(pdf, 'No. de Orden', ordenStr, { min: 24, max: 32, pad: 10 })
   const wFecha = anchoRecuadroCompacto(pdf, 'Fecha', fechaStr, { min: 36, max: 50, pad: 8 })
 
-  const h = 11
+  const h = 10
   drawCampo(pdf, 'No. de Orden', ordenStr, x, y, wOrden, h, TEMA.orden, { ...COMPACT_CAMPO, padX: 3.2 })
   drawCampo(pdf, 'Fecha', fechaStr, x + wOrden + gap, y, wFecha, h, TEMA.fecha, COMPACT_CAMPO)
   return h
@@ -48,7 +85,7 @@ function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
 /** Serie, tipo y descripción en una fila (recuadros compactos). */
 function drawFilaSerieTipoDescripcion(pdf, equipo, x, y, totalW) {
   const gap = 3.5
-  const hMin = 11
+  const hMin = 10
   const items = [
     { label: 'Serie del Equipo', value: dashIfEmpty(equipo.serie), theme: TEMA.serie, min: 30, max: 56 },
     { label: 'Tipo de Equipo', value: dashIfEmpty(equipo.tipo), theme: TEMA.tipo, min: 28, max: 46 },
@@ -85,58 +122,76 @@ function drawFilaSerieTipoDescripcion(pdf, equipo, x, y, totalW) {
 
 /**
  * Bloques apilados de datos de la orden.
+ * @param {number} [maxY] Si el siguiente bloque pasaría este Y, nueva página.
  * @returns {number} altura total en mm
  */
-function drawCamposOrden(pdf, p, x, y, width) {
+function drawCamposOrden(pdf, p, x, y, width, maxY) {
   const { orden, fechaCreacion, cliente = {}, equipo = {}, servicio = {} } = p
   const fecha = formatFechaOrdenPdf(fechaCreacion)
 
   let cy = y
-  cy += drawFilaOrdenYFecha(pdf, String(orden ?? '—'), fecha, x, cy, width) + GAP_CAMPOS
+  const gap = GAP_ORDEN_CAMPOS
+
+  function ensureSpace(needMm) {
+    if (maxY != null && cy + needMm > maxY) {
+      addMediaCartaPage(pdf)
+      cy = MARGIN
+    }
+  }
+
+  ensureSpace(11 + gap)
+  cy += drawFilaOrdenYFecha(pdf, String(orden ?? '—'), fecha, x, cy, width) + gap
 
   const nombreCliente = dashIfEmpty(cliente.nombre)
   const wCliente = anchoRecuadroCampo(pdf, 'Cliente', nombreCliente, {
-    min: 48,
+    min: 42,
     maxW: width,
-    pad: 14,
-    valueFontSize: 10.5,
+    pad: 12,
+    valueFontSize: 9,
   })
-  cy += drawCampo(pdf, 'Cliente', nombreCliente, x, cy, wCliente, 14, TEMA.cliente) + GAP_CAMPOS
-  cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + GAP_CAMPOS
-  cy += drawCampo(pdf, 'Problema Reportado', dashIfEmpty(servicio.problemas), x, cy, width, 18, TEMA.problema)
+  ensureSpace(13 + gap)
+  cy += drawCampo(pdf, 'Cliente', nombreCliente, x, cy, wCliente, 12, TEMA.cliente, COMPACT_CAMPO) + gap
+
+  ensureSpace(11 + gap)
+  cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + gap
+
+  ensureSpace(14)
+  cy += drawCampo(pdf, 'Problema Reportado', dashIfEmpty(servicio.problemas), x, cy, width, 12, TEMA.problema, {
+    ...COMPACT_CAMPO,
+    valueFontSize: 8.5,
+  })
 
   return cy - y
 }
 
 /**
- * Genera el PDF de la orden de servicio (estilo comprobante SISTEBIT).
+ * Genera la orden: hoja Carta vertical, contenido en la mitad superior (8.5″ × 5.5″).
  */
 export function createOrdenServicioPdf(p) {
-  const pdf = new jsPDF({
-    unit: 'mm',
-    format: SISTEBIT_PDF_FORMAT,
-    orientation: 'portrait',
-    compress: true,
-  })
+  const pdf = createMediaCartaPdf()
 
   const W = pdf.internal.pageSize.getWidth()
-  const margin = 16
-  const contentW = W - 2 * margin
+  const contentW = W - 2 * MARGIN
   const centerX = W / 2
+  const zonaBottom = RECIBO_MM_H - MARGIN
 
-  let y = drawEncabezadoSistebit(pdf, 'ORDEN DE SERVICIO', centerX, 10)
+  let y = drawEncabezadoSistebit(pdf, 'ORDEN DE SERVICIO', centerX, 4, {
+    scale: 0.5,
+    subtitleSize: 7.2,
+    titleSize: 10.5,
+  })
 
-  const camposH = drawCamposOrden(pdf, p, margin, y, contentW)
-  y += camposH + 6
+  y += drawCamposOrden(pdf, p, MARGIN, y, contentW, zonaBottom) + GAP_ANTES_PIE
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8.3)
-  pdf.setTextColor(55, 55, 55)
-  const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
-  const legalH = legalLines.length * 4.1
-  pdf.text(legalLines, centerX, y, { align: 'center', maxWidth: contentW - 6 })
-  y += legalH + 3
-  drawContactoSistebitPdf(pdf, y, contentW, centerX)
+  const pieH = measurePieOrdenHeight(pdf, contentW)
+  if (y + pieH > zonaBottom) {
+    addMediaCartaPage(pdf)
+    y = MARGIN
+  }
+
+  drawPieOrden(pdf, y, contentW, centerX)
+
+  stampGuiaMediaCartaTodasPaginas(pdf, contentW, MARGIN)
 
   return pdf
 }
@@ -151,7 +206,7 @@ export function downloadOrdenServicioPdf(p) {
 export function printOrdenServicioPdfDocument(pdf) {
   return printSistebitPdfDocument(pdf, {
     timeoutMsg: 'Tiempo de espera al cargar la orden para imprimir.',
-    iframeTitle: 'Imprimir orden de servicio',
+    iframeTitle: 'Imprimir orden — Carta vertical, media hoja arriba',
   })
 }
 
@@ -160,6 +215,9 @@ export async function printOrdenServicioPdf(p) {
   const pdf = createOrdenServicioPdf(p)
   return printOrdenServicioPdfDocument(pdf)
 }
+
+export const ORDEN_PRINT_HINT =
+  'Impresión: papel Carta, orientación Vertical, escala 100 %. La orden sale en la mitad superior (5.5″); puede cortar o usar media hoja precortada.'
 
 /** Descarga el PDF y abre el diálogo de impresión (un solo documento generado). */
 export async function downloadAndPrintOrdenServicioPdf(p) {
