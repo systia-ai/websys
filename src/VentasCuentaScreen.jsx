@@ -23,9 +23,11 @@ import {
   aplicarCuentaPagadaActiva,
   sincronizarEstatusCuentaPorSaldo,
   sumPagosCuenta,
+  descripcionEquipoParaRecibo,
 } from './reparacionUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
+const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_REPARAMOV = 'sistefix_local_reparamov'
@@ -246,6 +248,8 @@ export default function VentasCuentaScreen({
   const [loading, setLoading] = useState(true)
   const [cuentaInfo, setCuentaInfo] = useState(null)
   const [reparaIdCuenta, setReparaIdCuenta] = useState(null)
+  /** Orden y equipo ligados a la cuenta (para comprobante PDF). */
+  const [reciboOrdenEquipo, setReciboOrdenEquipo] = useState(null)
   const [lineas, setLineas] = useState([])
   const [mostrarCamposProducto, setMostrarCamposProducto] = useState(false)
   const [modalPago, setModalPago] = useState(false)
@@ -369,23 +373,46 @@ export default function VentasCuentaScreen({
 
         let reps = []
         let repOrden = null
+        let equipoOrden = null
         if (rid != null) {
           if (supabase) {
             const [r2, rRep] = await Promise.all([
               supabase.from('reparamov').select('*').eq('repara_id', rid),
               supabase
                 .from('reparaciones')
-                .select('id, costo_reparacion, descripcion_equipo')
+                .select('id, costo_reparacion, descripcion_equipo, equipo_id')
                 .eq('id', rid)
                 .maybeSingle(),
             ])
             if (!r2.error) reps = r2.data ?? []
             if (!rRep.error) repOrden = rRep.data
+            const eid = repOrden?.equipo_id
+            if (eid != null && eid !== '') {
+              const rEq = await supabase
+                .from('equipos')
+                .select('tipo_equipo, descripcion, serie')
+                .eq('id', eid)
+                .maybeSingle()
+              if (!rEq.error) equipoOrden = rEq.data
+            }
           } else {
             reps = readLs(LS_REPARAMOV, []).filter((x) => sameId(x.repara_id, rid))
             repOrden = readLs(LS_REP, []).find((x) => sameId(x.id, rid)) ?? null
+            if (repOrden?.equipo_id != null) {
+              equipoOrden = readLs(LS_EQUIPOS, []).find((e) => sameId(e.id, repOrden.equipo_id)) ?? null
+            }
           }
         }
+
+        const descEq = descripcionEquipoParaRecibo(repOrden, equipoOrden)
+        setReciboOrdenEquipo(
+          rid != null
+            ? {
+                orden: String(rid),
+                descripcionEquipo: descEq || null,
+              }
+            : null,
+        )
 
         let pagos = []
         if (cid != null) {
@@ -1052,7 +1079,10 @@ export default function VentasCuentaScreen({
       const { printReciboCuentaPdf, RECIBO_PRINT_HINT } = await import('./reciboCuentaPdf.js')
       await printReciboCuentaPdf({
         cliente: { nombre: cliente.nombre, telefono: cliente.telefono },
+        orden: reciboOrdenEquipo?.orden ?? reparaIdCuenta ?? null,
+        descripcionEquipo: reciboOrdenEquipo?.descripcionEquipo ?? '',
         total: totalStr,
+        saldo: balanceNeto.toFixed(2),
         estatus: cuentaEstatus || '—',
         lineas,
       })

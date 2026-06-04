@@ -66,28 +66,99 @@ function measurePieReciboHeight(pdf, contentW) {
   )
 }
 
-/** Solo nombre del cliente (sin teléfono); ancho según el nombre. */
-function drawClienteRecibo(pdf, p, x, y, width) {
+const GAP_CAMPOS_RECIBO = 2.5
+const ALTURA_CAMPO_RECIBO = 9
+
+/** Cliente, no. de orden y equipo en un mismo renglón (recuadros compactos). */
+function drawFilaClienteOrdenEquipo(pdf, p, x, y, totalW) {
   const nombre = String(p.cliente?.nombre ?? '').trim() || '—'
-  const wCliente = anchoRecuadroCampo(pdf, 'Cliente', nombre, {
-    min: 42,
-    maxW: width,
-    pad: 12,
-    labelFontSize: 6.8,
-    valueFontSize: CAMPO_RECIBO.valueFontSize,
+  const ordenStr =
+    p.orden != null && String(p.orden).trim() !== '' && String(p.orden).trim() !== '—'
+      ? String(p.orden).trim()
+      : null
+  const equipoStr = String(p.descripcionEquipo ?? '').trim() || null
+
+  const blocks = [{ label: 'Cliente', value: nombre, theme: TEMA.cliente, min: 24, campo: true }]
+  if (ordenStr) {
+    blocks.push({ label: 'No. de Orden', value: ordenStr, theme: TEMA.orden, min: 20, max: 28, campo: false })
+  }
+  if (equipoStr) {
+    blocks.push({ label: 'Equipo', value: equipoStr, theme: TEMA.descripcion, min: 22, max: 58, campo: false })
+  }
+
+  const gapsTotal = GAP_CAMPOS_RECIBO * (blocks.length - 1)
+  let widths = blocks.map((b) => {
+    if (b.campo) {
+      const w = anchoRecuadroCampo(pdf, b.label, b.value, {
+        min: b.min,
+        maxW: totalW,
+        pad: 10,
+        labelFontSize: 6.8,
+        valueFontSize: CAMPO_RECIBO.valueFontSize,
+      })
+      return Math.max(b.min, w)
+    }
+    return Math.min(
+      b.max,
+      Math.max(b.min, anchoRecuadroCompacto(pdf, b.label, b.value, { min: b.min, max: b.max, pad: 7 })),
+    )
   })
-  return drawCampo(pdf, 'Cliente', nombre, x, y, wCliente, 10, TEMA.cliente, CAMPO_RECIBO) + GAP_RECIBO
+
+  const sumW = widths.reduce((s, w) => s + w, 0)
+  if (sumW > totalW - gapsTotal) {
+    const scale = (totalW - gapsTotal) / sumW
+    widths = widths.map((w, i) => Math.max(blocks[i].min, w * scale))
+    const sum2 = widths.reduce((s, w) => s + w, 0)
+    if (sum2 > totalW - gapsTotal) {
+      const extra = (sum2 - (totalW - gapsTotal)) / blocks.length
+      widths = widths.map((w) => w - extra)
+    }
+  }
+
+  let cx = x
+  let maxH = 0
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]
+    const opts = { ...CAMPO_RECIBO, padX: 2.4 }
+    const h = drawCampo(pdf, b.label, b.value, cx, y, widths[i], ALTURA_CAMPO_RECIBO, b.theme, opts)
+    maxH = Math.max(maxH, h)
+    cx += widths[i] + GAP_CAMPOS_RECIBO
+  }
+
+  return maxH + GAP_RECIBO
 }
 
-/** Total debajo de la tabla (alineado a la derecha). @returns {number} altura del recuadro en mm */
-function drawTotalRecibo(pdf, total, x, y, width) {
-  const totalStr = `$${total}`
+const GAP_TOTAL_SALDO = 2.5
+
+/** Formato moneda; negativo = anticipo / saldo a favor (ej. -$200.00). */
+function formatMontoRecibo(value) {
+  const v = Number(value)
+  if (!Number.isFinite(v)) return '$0.00'
+  const abs = Math.abs(v).toFixed(2)
+  if (v < -0.0001) return `-$${abs}`
+  return `$${abs}`
+}
+
+/** Total y saldo debajo de la tabla (alineados a la derecha). @returns {number} altura en mm */
+function drawTotalesRecibo(pdf, total, saldo, x, y, width) {
+  const totalVal = formatMontoRecibo(total)
+  const saldoNum = Number(saldo)
+  const saldoVal = formatMontoRecibo(saldoNum)
   const wTotal = Math.min(
-    width,
-    anchoRecuadroCompacto(pdf, 'Total', totalStr, { min: 28, max: 52, pad: 8 }),
+    width * 0.5,
+    anchoRecuadroCompacto(pdf, 'Total', totalVal, { min: 26, max: 46, pad: 8 }),
   )
-  const xTotal = x + width - wTotal
-  return drawCampo(pdf, 'Total', totalStr, xTotal, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+  const wSaldo = Math.min(
+    width * 0.5,
+    anchoRecuadroCompacto(pdf, 'Saldo', saldoVal, { min: 26, max: 50, pad: 8 }),
+  )
+  const rowW = wSaldo + GAP_TOTAL_SALDO + wTotal
+  let xCur = x + width - rowW
+  const temaSaldo = saldoNum < -0.0001 ? TEMA.pago : TEMA.orden
+  const hSaldo = drawCampo(pdf, 'Saldo', saldoVal, xCur, y, wSaldo, TOTAL_BOX_H, temaSaldo, CAMPO_RECIBO)
+  xCur += wSaldo + GAP_TOTAL_SALDO
+  const hTotal = drawCampo(pdf, 'Total', totalVal, xCur, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+  return Math.max(hTotal, hSaldo)
 }
 
 function drawLeyendaRecibo(pdf, y, contentW, centerX) {
@@ -230,7 +301,7 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
 
 /**
  * Genera el comprobante: hoja Carta vertical, contenido en la mitad superior (8.5″ × 5.5″).
- * @param {{ cliente: { nombre?: string, telefono?: string }, total: string, estatus: string, lineas: object[] }} p
+ * @param {{ cliente: { nombre?: string, telefono?: string }, orden?: string|number, descripcionEquipo?: string, total: string, saldo: string|number, estatus: string, lineas: object[] }} p
  */
 export function createReciboCuentaPdf(p) {
   const pdf = createMediaCartaPdf()
@@ -245,7 +316,7 @@ export function createReciboCuentaPdf(p) {
     subtitleSize: 7.2,
     titleSize: 10.5,
   })
-  y += drawClienteRecibo(pdf, p, MARGIN, y, contentW) + GAP_DESPUES_CLIENTE
+  y += drawFilaClienteOrdenEquipo(pdf, p, MARGIN, y, contentW) + GAP_DESPUES_CLIENTE
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(7.8)
@@ -262,8 +333,8 @@ export function createReciboCuentaPdf(p) {
   }
 
   y += GAP_ANTES_TOTAL
-  const totalH = drawTotalRecibo(pdf, p.total, MARGIN, y, contentW)
-  y += totalH + GAP_TOTAL_LEYENDA
+  const totalesH = drawTotalesRecibo(pdf, p.total, p.saldo ?? 0, MARGIN, y, contentW)
+  y += totalesH + GAP_TOTAL_LEYENDA
   drawPieRecibo(pdf, y, contentW, centerX)
 
   stampGuiaMediaCartaTodasPaginas(pdf, contentW, MARGIN)

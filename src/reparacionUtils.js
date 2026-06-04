@@ -727,6 +727,17 @@ export function registrarOrdenCreadaEnSesion(id) {
 }
 
 /** ID de orden creada hace poco en esta pestaña (evita segundo INSERT tras remount). */
+/** Texto de equipo para comprobante (tipo + descripción de la orden). */
+export function descripcionEquipoParaRecibo(reparacion, equipo) {
+  const tipo = String(equipo?.tipo_equipo ?? '').trim()
+  const desc = String(reparacion?.descripcion_equipo ?? equipo?.descripcion ?? '').trim()
+  if (tipo && desc) {
+    if (desc.toLowerCase().startsWith(tipo.toLowerCase())) return desc
+    return `${tipo} ${desc}`
+  }
+  return tipo || desc
+}
+
 export function leerOrdenRecienCreadaEnSesion(maxEdadMs = 120_000) {
   try {
     const raw = sessionStorage.getItem(LS_LAST_CREATED)

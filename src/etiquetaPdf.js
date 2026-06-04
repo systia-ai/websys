@@ -37,7 +37,7 @@ function wrapLineasPorAncho(pdf, lines, maxW) {
 }
 
 /**
- * PDF de etiqueta: borde negro, nombre a la izquierda en mayúsculas, número de orden grande a la derecha.
+ * PDF de etiqueta: borde negro, nombre a la izquierda en mayúsculas, número de orden en recuadro a la derecha.
  *
  * @param {{ nombre: string, orden: string|number }} p
  * @returns {object}
@@ -76,8 +76,7 @@ export function createEtiquetaPdf(p) {
   const gapCol = 0.85
   const leftColW = contentW * 0.54
   const rightColLeft = contentX + leftColW + gapCol
-  const rightInnerRight = contentX + contentW - 0.55
-  const rightColW = rightInnerRight - rightColLeft
+  const rightColW = contentX + contentW - rightColLeft - 0.55
   const nameLeft = contentX + 0.45
   const maxNameW = leftColW - 0.95
 
@@ -106,39 +105,51 @@ export function createEtiquetaPdf(p) {
     yNombre += lineMm
   }
 
-  const pref = 'Orden'
-  const prefPt = 6.8
-  let numPt = 18
+  const boxPad = 0.55
+  const boxW = rightColW
+  const boxH = Math.min(contentH - 0.5, boxW * 0.92)
+  const boxX = rightColLeft
+  const boxY = contentY + (contentH - boxH) / 2
+
+  pdf.setFillColor(227, 242, 253)
+  pdf.setDrawColor(25, 118, 210)
+  pdf.setLineWidth(0.4)
+  pdf.roundedRect(boxX, boxY, boxW, boxH, 1.1, 1.1, 'FD')
+
+  const maxNumW = boxW - boxPad * 2
+  const labelOrd = 'ORD.'
+  const labelPt = 8.2
+  const gapLabelNum = 0.65
+
   pdf.setFont('helvetica', 'bold')
-  while (numPt >= 11) {
+  pdf.setFontSize(labelPt)
+  const labelLineMm = labelPt * 0.352778 * 1.08
+  const labelBlockH = labelLineMm + gapLabelNum
+
+  let numPt = 17
+  while (numPt >= 10) {
     pdf.setFontSize(numPt)
-    if (pdf.getTextWidth(ordStr) <= rightColW - 0.4) break
+    const numLineMm = numPt * 0.352778 * 1.05
+    const blockH = labelBlockH + numLineMm
+    const fitsW = pdf.getTextWidth(ordStr) <= maxNumW
+    const fitsH = blockH <= boxH - boxPad * 2
+    if (fitsW && fitsH) break
     numPt -= 0.8
   }
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(prefPt)
-  const wPref = pdf.getTextWidth(pref)
-  pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(numPt)
-  const wNum = pdf.getTextWidth(ordStr)
-  const prefLineMm = prefPt * 0.352778 * 1.05
-  const numLineMm = numPt * 0.352778 * 1.08
-  const gapPrefNum = 1.1
-  const blockH = prefLineMm + gapPrefNum + numLineMm
-  const yPref = contentY + (contentH - blockH) / 2 + prefLineMm
-  const yNum = yPref + gapPrefNum
+  const numLineMm = numPt * 0.352778 * 1.05
+  const blockH = labelBlockH + numLineMm
+  const yLabel = boxY + (boxH - blockH) / 2 + labelLineMm
+  const yNum = yLabel + gapLabelNum + numLineMm * 0.9
+  const cx = boxX + boxW / 2
 
-  const xPref = rightInnerRight - wPref
-  const xNum = rightInnerRight - wNum
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(prefPt)
-  pdf.setTextColor(0, 0, 0)
-  pdf.text(pref, xPref, yPref)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(13, 71, 161)
+  pdf.setFontSize(labelPt)
+  pdf.text(labelOrd, cx, yLabel, { align: 'center' })
+  pdf.setTextColor(21, 101, 192)
   pdf.setFontSize(numPt)
-  pdf.text(ordStr, xNum, yNum)
+  pdf.text(ordStr, cx, yNum, { align: 'center' })
 
   return pdf
 }
