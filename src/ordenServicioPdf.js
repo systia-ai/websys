@@ -1,6 +1,4 @@
 import { jsPDF } from 'jspdf'
-import QRCode from 'qrcode'
-import { buildEtiquetaQrPlainText } from './etiquetaLink.js'
 import { formatFechaLegibleEsMx } from './reparacionUtils.js'
 import {
   SISTEBIT_PDF_FORMAT,
@@ -8,17 +6,18 @@ import {
   TEMA,
   COMPACT_CAMPO,
   dashIfEmpty,
-  temaEstatus,
   drawCampo,
   anchoRecuadroCompacto,
+  anchoRecuadroCampo,
   drawEncabezadoSistebit,
+  drawContactoSistebitPdf,
   printSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 
 /** @deprecated Use SISTEBIT_PDF_FORMAT */
 export const ORDEN_PDF_FORMAT = SISTEBIT_PDF_FORMAT
 
-const LEGAL_ORDEN_SERVICIO =
+export const LEGAL_ORDEN_SERVICIO =
   'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
 
 export function buildOrdenServicioPdfFilename(orden) {
@@ -46,6 +45,44 @@ function drawFilaOrdenYFecha(pdf, orden, fecha, x, y, totalW) {
   return h
 }
 
+/** Serie, tipo y descripción en una fila (recuadros compactos). */
+function drawFilaSerieTipoDescripcion(pdf, equipo, x, y, totalW) {
+  const gap = 3.5
+  const hMin = 11
+  const items = [
+    { label: 'Serie del Equipo', value: dashIfEmpty(equipo.serie), theme: TEMA.serie, min: 30, max: 56 },
+    { label: 'Tipo de Equipo', value: dashIfEmpty(equipo.tipo), theme: TEMA.tipo, min: 28, max: 46 },
+    { label: 'Descripción', value: dashIfEmpty(equipo.descripcion), theme: TEMA.descripcion, min: 28, max: 56 },
+  ]
+
+  const gapsTotal = gap * (items.length - 1)
+  let widths = items.map((it) =>
+    Math.min(
+      it.max,
+      Math.max(it.min, anchoRecuadroCompacto(pdf, it.label, it.value, { min: it.min, max: it.max, pad: 7 })),
+    ),
+  )
+  const sumW = widths.reduce((s, w) => s + w, 0)
+  if (sumW > totalW - gapsTotal) {
+    const scale = (totalW - gapsTotal) / sumW
+    widths = widths.map((w, i) => Math.max(items[i].min, w * scale))
+    const sum2 = widths.reduce((s, w) => s + w, 0)
+    if (sum2 > totalW - gapsTotal) {
+      const extra = (sum2 - (totalW - gapsTotal)) / items.length
+      widths = widths.map((w) => w - extra)
+    }
+  }
+
+  let cx = x
+  let maxH = 0
+  for (let i = 0; i < items.length; i++) {
+    const h = drawCampo(pdf, items[i].label, items[i].value, cx, y, widths[i], hMin, items[i].theme, COMPACT_CAMPO)
+    maxH = Math.max(maxH, h)
+    cx += widths[i] + gap
+  }
+  return maxH
+}
+
 /**
  * Bloques apilados de datos de la orden.
  * @returns {number} altura total en mm
@@ -57,37 +94,24 @@ function drawCamposOrden(pdf, p, x, y, width) {
   let cy = y
   cy += drawFilaOrdenYFecha(pdf, String(orden ?? '—'), fecha, x, cy, width) + GAP_CAMPOS
 
-  const campos = [
-    ['Cliente', cliente.nombre, TEMA.cliente, 14],
-    ['Serie del Equipo', equipo.serie, TEMA.serie, 13],
-    ['Tipo de Equipo', equipo.tipo, TEMA.tipo, 13],
-    ['Descripción', equipo.descripcion, TEMA.descripcion, 16],
-    ['Problema Reportado', servicio.problemas, TEMA.problema, 18],
-    ['Estatus', servicio.estatus, temaEstatus(servicio.estatus), 13],
-  ]
-
-  for (const [label, value, theme, minH] of campos) {
-    const h = drawCampo(pdf, label, value, x, cy, width, minH, theme)
-    cy += h + GAP_CAMPOS
-  }
+  const nombreCliente = dashIfEmpty(cliente.nombre)
+  const wCliente = anchoRecuadroCampo(pdf, 'Cliente', nombreCliente, {
+    min: 48,
+    maxW: width,
+    pad: 14,
+    valueFontSize: 10.5,
+  })
+  cy += drawCampo(pdf, 'Cliente', nombreCliente, x, cy, wCliente, 14, TEMA.cliente) + GAP_CAMPOS
+  cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + GAP_CAMPOS
+  cy += drawCampo(pdf, 'Problema Reportado', dashIfEmpty(servicio.problemas), x, cy, width, 18, TEMA.problema)
 
   return cy - y
-}
-
-function textoEquipoQr(equipo = {}) {
-  const parts = []
-  if (equipo.tipo) parts.push(String(equipo.tipo).trim())
-  if (equipo.descripcion) parts.push(String(equipo.descripcion).trim())
-  if (equipo.serie) parts.push(`Serie: ${String(equipo.serie).trim()}`)
-  return parts.length ? parts.join(' — ') : '—'
 }
 
 /**
  * Genera el PDF de la orden de servicio (estilo comprobante SISTEBIT).
  */
-export async function createOrdenServicioPdf(p) {
-  const { cliente = {}, equipo = {} } = p
-
+export function createOrdenServicioPdf(p) {
   const pdf = new jsPDF({
     unit: 'mm',
     format: SISTEBIT_PDF_FORMAT,
@@ -96,7 +120,6 @@ export async function createOrdenServicioPdf(p) {
   })
 
   const W = pdf.internal.pageSize.getWidth()
-  const H = pdf.internal.pageSize.getHeight()
   const margin = 16
   const contentW = W - 2 * margin
   const centerX = W / 2
@@ -112,30 +135,15 @@ export async function createOrdenServicioPdf(p) {
   const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
   const legalH = legalLines.length * 4.1
   pdf.text(legalLines, centerX, y, { align: 'center', maxWidth: contentW - 6 })
-  y += legalH + 10
-
-  const qrText = buildEtiquetaQrPlainText({
-    nombre: cliente.nombre,
-    orden: p.orden,
-    equipo: textoEquipoQr(equipo),
-  })
-  const qrDataUrl = await QRCode.toDataURL(qrText, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
-    width: 320,
-    color: { dark: '#000000', light: '#ffffff' },
-  })
-
-  const qrSize = 36
-  const qrY = Math.min(y, H - margin - qrSize - 2)
-  pdf.addImage(qrDataUrl, 'PNG', centerX - qrSize / 2, qrY, qrSize, qrSize, undefined, 'FAST')
+  y += legalH + 3
+  drawContactoSistebitPdf(pdf, y, contentW, centerX)
 
   return pdf
 }
 
 /** Genera y descarga el PDF de la orden de servicio. */
-export async function downloadOrdenServicioPdf(p) {
-  const pdf = await createOrdenServicioPdf(p)
+export function downloadOrdenServicioPdf(p) {
+  const pdf = createOrdenServicioPdf(p)
   pdf.save(buildOrdenServicioPdfFilename(p.orden))
 }
 
@@ -149,13 +157,13 @@ export function printOrdenServicioPdfDocument(pdf) {
 
 /** Genera el PDF y abre el diálogo de impresión. */
 export async function printOrdenServicioPdf(p) {
-  const pdf = await createOrdenServicioPdf(p)
+  const pdf = createOrdenServicioPdf(p)
   return printOrdenServicioPdfDocument(pdf)
 }
 
 /** Descarga el PDF y abre el diálogo de impresión (un solo documento generado). */
 export async function downloadAndPrintOrdenServicioPdf(p) {
-  const pdf = await createOrdenServicioPdf(p)
+  const pdf = createOrdenServicioPdf(p)
   pdf.save(buildOrdenServicioPdfFilename(p.orden))
   return printOrdenServicioPdfDocument(pdf)
 }

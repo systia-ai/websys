@@ -3,8 +3,17 @@
 /** Tamaño carta (216 × 279 mm), orientación vertical. */
 export const SISTEBIT_PDF_FORMAT = 'letter'
 
-/** Media hoja carta: 8.5″ × 5.5″ (216 × 140 mm), formato comprobante. */
-export const RECIBO_PDF_FORMAT_MM = [216, 140]
+/**
+ * Comprobante / recibo: media hoja carta (8.5″ × 5.5″, statement size).
+ * En jsPDF el ancho es mayor que el alto → usar `RECIBO_PDF_ORIENTATION` landscape
+ * (igual que etiquetas 2″×1″).
+ */
+export const RECIBO_IN_W = 8.5
+export const RECIBO_IN_H = 5.5
+export const RECIBO_MM_W = 215.9
+export const RECIBO_MM_H = 139.7
+export const RECIBO_PDF_FORMAT_MM = [RECIBO_MM_W, RECIBO_MM_H]
+export const RECIBO_PDF_ORIENTATION = 'landscape'
 
 export const GAP_CAMPOS = 3.8
 
@@ -21,6 +30,41 @@ export const TEMA = {
 }
 
 export const COMPACT_CAMPO = { compact: true, valueFontSize: 9 }
+
+const SISTEBIT_DIRECCION = 'Blvd Díaz Ordas 1723, local 15 A, Zona centro.'
+const SISTEBIT_TEL = 'Tel 62 6-26-55-55'
+const SISTEBIT_WHATSAPP = '462 209 0526'
+const SISTEBIT_CIUDAD = 'Irapuato Gto.'
+
+/** Texto plano (sin icono); pie PDF usa `drawContactoSistebitPdf`. */
+export const CONTACTO_SISTEBIT = `${SISTEBIT_DIRECCION} ${SISTEBIT_TEL} ${SISTEBIT_WHATSAPP} ${SISTEBIT_CIUDAD}`
+
+const WHATSAPP_ICON_MM = 2.6
+
+/** Icono WhatsApp pequeño (verde marca + burbuja blanca). */
+function drawWhatsappIconMini(pdf, x, yBaseline, sizeMm) {
+  const top = yBaseline - sizeMm * 0.82
+  const cx = x + sizeMm / 2
+  const cy = top + sizeMm / 2
+  const r = sizeMm * 0.48
+  pdf.setFillColor(37, 211, 102)
+  pdf.circle(cx, cy, r, 'F')
+  pdf.setFillColor(255, 255, 255)
+  const bw = sizeMm * 0.44
+  const bh = sizeMm * 0.5
+  const bx = cx - bw * 0.52
+  const by = cy - bh * 0.48
+  pdf.roundedRect(bx, by, bw, bh, bw * 0.32, bh * 0.32, 'F')
+  pdf.triangle(
+    bx + bw * 0.14,
+    by + bh * 0.9,
+    bx - bw * 0.2,
+    by + bh * 1.02,
+    bx + bw * 0.32,
+    by + bh * 0.86,
+    'F',
+  )
+}
 
 export function dashIfEmpty(v) {
   const s = String(v ?? '').trim()
@@ -139,6 +183,32 @@ export function anchoRecuadroCompacto(pdf, label, value, { min = 22, max = 52, p
 }
 
 /**
+ * Ancho de recuadro según contenido (p. ej. nombre de cliente).
+ * Si el texto es largo, usa hasta `maxW` y el valor hace salto de línea dentro de drawCampo.
+ */
+export function anchoRecuadroCampo(
+  pdf,
+  label,
+  value,
+  { min = 40, maxW = 180, pad = 12, labelFontSize = 7.2, valueFontSize = 10.5 } = {},
+) {
+  const val = dashIfEmpty(value)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(labelFontSize)
+  const wLabel = pdf.getTextWidth(String(label).toUpperCase())
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(valueFontSize)
+  const inner = Math.max(24, maxW - pad * 2)
+  const lines = pdf.splitTextToSize(val, inner)
+  let wVal = 0
+  for (const line of lines) {
+    wVal = Math.max(wVal, pdf.getTextWidth(line))
+  }
+  const w = Math.max(wLabel, wVal) + pad
+  return Math.min(Math.max(w, min), maxW)
+}
+
+/**
  * Encabezado estándar SISTEBIT + título del documento.
  * @param {{ scale?: number, subtitleSize?: number, titleSize?: number }} [opts]
  * @returns {number} nueva Y
@@ -162,6 +232,83 @@ export function drawEncabezadoSistebit(pdf, titulo, centerX, yStart, opts = {}) 
   pdf.setTextColor(25, 118, 210)
   pdf.text(titulo, centerX, y, { align: 'center' })
   return y + 10 * scale
+}
+
+/** Altura en mm del bloque de contacto (misma lógica que `drawContactoSistebitPdf`). */
+export function measureContactoSistebitPdf(pdf, contentW) {
+  const maxW = contentW - 6
+  const lineH = 3.6
+  const seg = '  '
+  const iconSize = WHATSAPP_ICON_MM
+  const iconGap = 0.55
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7.5)
+  const addrLines = pdf.splitTextToSize(SISTEBIT_DIRECCION, maxW)
+  let h = addrLines.length * lineH
+
+  const wTel = pdf.getTextWidth(SISTEBIT_TEL)
+  const wSeg = pdf.getTextWidth(seg)
+  pdf.setFont('helvetica', 'bold')
+  const wWa = pdf.getTextWidth(SISTEBIT_WHATSAPP)
+  pdf.setFont('helvetica', 'normal')
+  const wCiudad = pdf.getTextWidth(`${seg}${SISTEBIT_CIUDAD}`)
+  const filaW = wTel + wSeg + iconSize + iconGap + wWa + wCiudad
+  h += filaW <= maxW ? lineH : lineH * 2
+  return h
+}
+
+/** Datos de contacto SISTEBIT centrados (pie de PDF). */
+export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7.5)
+  pdf.setTextColor(21, 101, 192)
+  const maxW = contentW - 6
+  const lineH = 3.6
+  const iconSize = WHATSAPP_ICON_MM
+  const iconGap = 0.55
+  const seg = '  '
+
+  let yCur = y
+  const addrLines = pdf.splitTextToSize(SISTEBIT_DIRECCION, maxW)
+  pdf.text(addrLines, centerX, yCur, { align: 'center', maxWidth: maxW })
+  yCur += addrLines.length * lineH
+
+  const wTel = pdf.getTextWidth(SISTEBIT_TEL)
+  const wSeg = pdf.getTextWidth(seg)
+  pdf.setFont('helvetica', 'bold')
+  const wWa = pdf.getTextWidth(SISTEBIT_WHATSAPP)
+  pdf.setFont('helvetica', 'normal')
+  const ciudadText = `${seg}${SISTEBIT_CIUDAD}`
+  const wCiudad = pdf.getTextWidth(ciudadText)
+  const filaW = wTel + wSeg + iconSize + iconGap + wWa + wCiudad
+
+  if (filaW <= maxW) {
+    let x = centerX - filaW / 2
+    pdf.text(SISTEBIT_TEL, x, yCur)
+    x += wTel + wSeg
+    drawWhatsappIconMini(pdf, x, yCur, iconSize)
+    x += iconSize + iconGap
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(SISTEBIT_WHATSAPP, x, yCur)
+    pdf.setFont('helvetica', 'normal')
+    x += wWa
+    pdf.text(ciudadText, x, yCur)
+    return yCur - y + lineH
+  }
+
+  pdf.text(SISTEBIT_TEL, centerX, yCur, { align: 'center' })
+  yCur += lineH
+  const fila2W = iconSize + iconGap + wWa + wCiudad
+  let x2 = centerX - fila2W / 2
+  drawWhatsappIconMini(pdf, x2, yCur, iconSize)
+  x2 += iconSize + iconGap
+  pdf.setFont('helvetica', 'bold')
+  pdf.text(SISTEBIT_WHATSAPP, x2, yCur)
+  pdf.setFont('helvetica', 'normal')
+  x2 += wWa
+  pdf.text(ciudadText, x2, yCur)
+  return yCur - y + lineH
 }
 
 /**

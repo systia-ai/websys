@@ -1,21 +1,48 @@
 import { jsPDF } from 'jspdf'
+import { LEGAL_ORDEN_SERVICIO } from './ordenServicioPdf.js'
 import {
   RECIBO_PDF_FORMAT_MM,
+  RECIBO_PDF_ORIENTATION,
   TEMA,
-  COMPACT_CAMPO,
-  temaEstatus,
   drawCampo,
   anchoRecuadroCompacto,
+  anchoRecuadroCampo,
   drawEncabezadoSistebit,
+  drawContactoSistebitPdf,
+  measureContactoSistebitPdf,
   printSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 
-const MARGIN = 8
-const GAP_RECIBO = 2.5
+function newReciboPdf() {
+  return new jsPDF({
+    unit: 'mm',
+    format: RECIBO_PDF_FORMAT_MM,
+    /** Media carta: 8.5″ ancho × 5.5″ alto (jsPDF requiere landscape si ancho > alto). */
+    orientation: RECIBO_PDF_ORIENTATION,
+    compress: true,
+  })
+}
+
+function addReciboPage(pdf) {
+  pdf.addPage(RECIBO_PDF_FORMAT_MM, 'l')
+}
+
+/** Márgenes compactos para media carta (8.5″ × 5.5″). */
+const MARGIN = 6
+const GAP_RECIBO = 2
+const GAP_DESPUES_CLIENTE = 4
+const GAP_DETALLE_TABLA = 5.5
+const GAP_ANTES_TOTAL = 5
+const GAP_TOTAL_LEYENDA = 9
+const GAP_ANTES_LEYENDA = 2
+const TOTAL_BOX_H = 9
+const GAP_LEYENDA_CONTACTO = 2
 const FUENTE_TABLA = 7.2
 const FUENTE_TABLA_HDR = 6.2
+const FUENTE_LEGAL_RECIBO = 7.2
+const LINE_H_LEGAL = 3.5
 
-/** Columnas ajustadas al ancho de media hoja (216 mm). */
+/** Columnas ajustadas al ancho de media hoja carta. */
 const COLS = {
   cant: 11,
   fecha: 20,
@@ -37,24 +64,59 @@ function mapLineaRecibo(L) {
   }
 }
 
-/** Cliente, total y estatus (misma información que el comprobante HTML anterior). */
-function drawResumenRecibo(pdf, p, x, y, width) {
-  const { cliente = {}, total, estatus } = p
-  const clienteStr = [cliente.nombre, cliente.telefono].filter((s) => String(s ?? '').trim()).join(' — ') || '—'
+function measureLeyendaReciboHeight(pdf, contentW) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(FUENTE_LEGAL_RECIBO)
+  const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
+  return legalLines.length * LINE_H_LEGAL + GAP_LEYENDA_CONTACTO
+}
+
+function measurePieReciboHeight(pdf, contentW) {
+  return (
+    GAP_ANTES_LEYENDA +
+    measureLeyendaReciboHeight(pdf, contentW) +
+    measureContactoSistebitPdf(pdf, contentW)
+  )
+}
+
+/** Solo nombre del cliente (sin teléfono); ancho según el nombre. */
+function drawClienteRecibo(pdf, p, x, y, width) {
+  const nombre = String(p.cliente?.nombre ?? '').trim() || '—'
+  const wCliente = anchoRecuadroCampo(pdf, 'Cliente', nombre, {
+    min: 42,
+    maxW: width,
+    pad: 12,
+    labelFontSize: 6.8,
+    valueFontSize: CAMPO_RECIBO.valueFontSize,
+  })
+  return drawCampo(pdf, 'Cliente', nombre, x, y, wCliente, 10, TEMA.cliente, CAMPO_RECIBO) + GAP_RECIBO
+}
+
+/** Total debajo de la tabla (alineado a la derecha). @returns {number} altura del recuadro en mm */
+function drawTotalRecibo(pdf, total, x, y, width) {
   const totalStr = `$${total}`
-  let cy = y
+  const wTotal = Math.min(
+    width,
+    anchoRecuadroCompacto(pdf, 'Total', totalStr, { min: 28, max: 52, pad: 8 }),
+  )
+  const xTotal = x + width - wTotal
+  return drawCampo(pdf, 'Total', totalStr, xTotal, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+}
 
-  cy += drawCampo(pdf, 'Cliente', clienteStr, x, cy, width, 10, TEMA.cliente, CAMPO_RECIBO) + GAP_RECIBO
+function drawLeyendaRecibo(pdf, y, contentW, centerX) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(FUENTE_LEGAL_RECIBO)
+  pdf.setTextColor(55, 55, 55)
+  const legalLines = pdf.splitTextToSize(LEGAL_ORDEN_SERVICIO, contentW - 6)
+  pdf.text(legalLines, centerX, y, { align: 'center', maxWidth: contentW - 6 })
+  return legalLines.length * LINE_H_LEGAL + GAP_LEYENDA_CONTACTO
+}
 
-  const gap = 3
-  const wTotal = anchoRecuadroCompacto(pdf, 'Total', totalStr, { min: 24, max: 40, pad: 8 })
-  const wEst = Math.min(width - wTotal - gap, anchoRecuadroCompacto(pdf, 'Estatus', estatus, { min: 32, max: 85, pad: 7 }))
-  const hMin = 9
-  const hTotal = drawCampo(pdf, 'Total', totalStr, x, cy, wTotal, hMin, TEMA.orden, CAMPO_RECIBO)
-  const hEst = drawCampo(pdf, 'Estatus', estatus, x + wTotal + gap, cy, wEst, hMin, temaEstatus(estatus), CAMPO_RECIBO)
-  cy += Math.max(hTotal, hEst) + GAP_RECIBO
-
-  return cy - y
+/** Leyenda y contacto pegados al bloque superior. */
+function drawPieRecibo(pdf, y, contentW, centerX) {
+  const yLeyenda = y + GAP_ANTES_LEYENDA
+  const leyendaH = drawLeyendaRecibo(pdf, yLeyenda, contentW, centerX)
+  return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX)
 }
 
 function anchosTabla(contentW) {
@@ -138,13 +200,20 @@ function drawFilaTabla(pdf, row, x, y, contentW, idx) {
   return rowH
 }
 
-function drawTablaDetalle(pdf, lineas, x, yStart, contentW, pageH, margin) {
+/** @returns {number} posición Y final tras la tabla */
+function drawTablaDetalle(pdf, lineas, x, yStart, contentW, pageH) {
   let y = yStart
   y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
+  const maxY = pageH - MARGIN - 2
 
   const rows = (lineas ?? []).map(mapLineaRecibo)
   if (rows.length === 0) {
     const h = 8
+    if (y + h > maxY) {
+      addReciboPage(pdf)
+      y = MARGIN
+      y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
+    }
     pdf.setFillColor(248, 250, 252)
     pdf.setDrawColor(210, 218, 226)
     pdf.roundedRect(x, y, contentW, h, 1.5, 1.5, 'FD')
@@ -152,64 +221,70 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, pageH, margin) {
     pdf.setFontSize(FUENTE_TABLA)
     pdf.setTextColor(120, 130, 140)
     pdf.text('Sin movimientos registrados', x + contentW / 2, y + 5, { align: 'center' })
-    return y + h - yStart
+    return y + h
   }
 
   for (let i = 0; i < rows.length; i++) {
     const rowH = calcAlturaFila(pdf, rows[i], contentW)
-    if (y + rowH > pageH - margin - 4) {
-      pdf.addPage(RECIBO_PDF_FORMAT_MM, 'p')
-      y = margin
+    if (y + rowH > maxY) {
+      addReciboPage(pdf)
+      y = MARGIN
       y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
     }
     const h = drawFilaTabla(pdf, rows[i], x, y, contentW, i)
     y += h + 0.9
   }
 
-  return y - yStart
+  return y
 }
 
 /**
- * Genera el PDF del comprobante de cuenta (media hoja 216×140 mm).
+ * Genera el PDF del comprobante (media hoja carta: 8.5″ × 5.5″).
  * @param {{ cliente: { nombre?: string, telefono?: string }, total: string, estatus: string, lineas: object[] }} p
  */
 export function createReciboCuentaPdf(p) {
-  const pdf = new jsPDF({
-    unit: 'mm',
-    format: RECIBO_PDF_FORMAT_MM,
-    orientation: 'portrait',
-    compress: true,
-  })
+  const pdf = newReciboPdf()
 
   const W = pdf.internal.pageSize.getWidth()
   const H = pdf.internal.pageSize.getHeight()
   const contentW = W - 2 * MARGIN
   const centerX = W / 2
+  const pageBottom = H - MARGIN
 
-  let y = drawEncabezadoSistebit(pdf, 'COMPROBANTE', centerX, 5, {
-    scale: 0.55,
-    subtitleSize: 7.5,
-    titleSize: 11,
+  let y = drawEncabezadoSistebit(pdf, 'COMPROBANTE', centerX, 4, {
+    scale: 0.5,
+    subtitleSize: 7.2,
+    titleSize: 10.5,
   })
-  y += drawResumenRecibo(pdf, p, MARGIN, y, contentW) + 2
+  y += drawClienteRecibo(pdf, p, MARGIN, y, contentW) + GAP_DESPUES_CLIENTE
 
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(8)
+  pdf.setFontSize(7.8)
   pdf.setTextColor(25, 118, 210)
-  y += 3.5
-  pdf.text('DETALLE DE MOVIMIENTOS', MARGIN, y)
-  y += 5
+  pdf.text('DETALLE DE MOVIMIENTOS', MARGIN, y + 3.2)
+  y += GAP_DETALLE_TABLA + 3.2
 
-  drawTablaDetalle(pdf, p.lineas, MARGIN, y, contentW, H, MARGIN)
+  y = drawTablaDetalle(pdf, p.lineas, MARGIN, y, contentW, H)
+
+  const bloqueFinalH = GAP_ANTES_TOTAL + TOTAL_BOX_H + GAP_TOTAL_LEYENDA + measurePieReciboHeight(pdf, contentW)
+  if (y + bloqueFinalH > pageBottom) {
+    addReciboPage(pdf)
+    y = MARGIN
+  }
+
+  y += GAP_ANTES_TOTAL
+  const totalH = drawTotalRecibo(pdf, p.total, MARGIN, y, contentW)
+  y += totalH + GAP_TOTAL_LEYENDA
+  drawPieRecibo(pdf, y, contentW, centerX)
 
   return pdf
 }
 
-/** Genera el comprobante y abre el diálogo de impresión. */
+/** Genera el comprobante y abre el diálogo de impresión (papel media carta). */
 export async function printReciboCuentaPdf(p) {
   const pdf = createReciboCuentaPdf(p)
   return printSistebitPdfDocument(pdf, {
     timeoutMsg: 'Tiempo de espera al cargar el recibo para imprimir.',
-    iframeTitle: 'Imprimir recibo',
+    iframeTitle: 'Imprimir recibo (media carta)',
   })
 }
