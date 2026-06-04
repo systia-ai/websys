@@ -21,7 +21,9 @@ import {
   patchReparacionEntregada,
   formatFechaLegibleEsMx,
   aplicarCuentaPagadaActiva,
+  formatMontoCuenta,
   sincronizarEstatusCuentaPorSaldo,
+  totalesVisiblesCuenta,
   sumPagosCuenta,
   descripcionEquipoParaRecibo,
 } from './reparacionUtils.js'
@@ -292,10 +294,14 @@ export default function VentasCuentaScreen({
     () => calcularBalanceNeto(lineas, totalCargos),
     [lineas, totalCargos],
   )
-  const saldoPendiente = useMemo(() => Math.max(0, balanceNeto), [balanceNeto])
-  const totalStr = totalCargos.toFixed(2)
-  const saldoStr = saldoPendiente.toFixed(2)
-  const saldoAFavor = balanceNeto < -0.0001
+  const visiblesCuenta = useMemo(
+    () => totalesVisiblesCuenta(totalCargos, pagosDesdeLineas(lineas)),
+    [totalCargos, lineas],
+  )
+  const saldoPendiente = visiblesCuenta.saldoPendiente
+  const saldoAFavor = visiblesCuenta.saldoAFavor
+  const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
+  const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
@@ -1193,14 +1199,14 @@ export default function VentasCuentaScreen({
           <div
             className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--total${saldoAFavor ? ' ventas-cuenta-recuadro--saldo-favor' : ''}`}
           >
-            <span className="ventas-cuenta-recuadro-etiqueta">{saldoAFavor ? 'Total (a favor)' : 'Total'}</span>
-            <span className="ventas-cuenta-recuadro-monto">${totalStr}</span>
+            <span className="ventas-cuenta-recuadro-etiqueta">{saldoAFavor ? 'Total (anticipo)' : 'Total'}</span>
+            <span className="ventas-cuenta-recuadro-monto">{totalStr}</span>
           </div>
           <div
-            className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--saldo${saldoPendiente > 0.0001 ? ' ventas-cuenta-recuadro--saldo-pend' : ''}`}
+            className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--saldo${saldoPendiente > 0.0001 ? ' ventas-cuenta-recuadro--saldo-pend' : saldoAFavor ? ' ventas-cuenta-recuadro--saldo-cero' : ''}`}
           >
             <span className="ventas-cuenta-recuadro-etiqueta">Saldo</span>
-            <span className="ventas-cuenta-recuadro-monto">${saldoStr}</span>
+            <span className="ventas-cuenta-recuadro-monto">{saldoStr}</span>
           </div>
         </div>
 

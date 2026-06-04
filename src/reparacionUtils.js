@@ -381,11 +381,42 @@ export function totalCargosCuenta(cuenta, movsCuenta = []) {
   return Math.max(ct, cargosMovs)
 }
 
-/** Adeudo = total de la venta menos lo pagado (mínimo 0). */
-export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
+/** Balance neto = cargos − pagos (puede ser negativo = anticipo a favor). */
+export function balanceNetoCuenta(totalVenta, pagosCuenta = []) {
   const total = Number(totalVenta ?? 0)
   const pagado = sumPagosCuenta(pagosCuenta)
-  return Math.max(0, total - pagado)
+  return total - pagado
+}
+
+/** Adeudo = total de la venta menos lo pagado (mínimo 0). */
+export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
+  return Math.max(0, balanceNetoCuenta(totalVenta, pagosCuenta))
+}
+
+/** Monto con signo para UI/PDF (ej. -$300.00). */
+export function formatMontoCuenta(value) {
+  const v = Number(value)
+  if (!Number.isFinite(v)) return '$0.00'
+  const abs = Math.abs(v).toFixed(2)
+  if (v < -0.0001) return `-$${abs}`
+  return `$${abs}`
+}
+
+/**
+ * Total y saldo visibles en listados y ventas.
+ * Anticipo sin adeudo: Total negativo (anticipo a favor), Saldo $0.
+ */
+export function totalesVisiblesCuenta(totalCargos, pagosCuenta = []) {
+  const cargos = Number(totalCargos ?? 0)
+  const balanceNeto = balanceNetoCuenta(cargos, pagosCuenta)
+  const saldoAFavor = balanceNeto < -0.0001
+  return {
+    balanceNeto,
+    totalDisplay: saldoAFavor ? balanceNeto : cargos,
+    saldoDisplay: saldoAFavor ? 0 : Math.max(0, balanceNeto),
+    saldoAFavor,
+    saldoPendiente: Math.max(0, balanceNeto),
+  }
 }
 
 /** Saldo persistido en BD o calculado desde total y pagos. */

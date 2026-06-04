@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { saldoPendienteCuenta, totalCargosCuenta } from './reparacionUtils.js'
+import { formatMontoCuenta, totalCargosCuenta, totalesVisiblesCuenta } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 const LS_VISTA_CUENTAS_CLIENTE = 'sistefix_clientes_cuentas_vista'
@@ -82,8 +82,8 @@ export default function ClientesCuentasVentasPanel({
   const filas = useMemo(() => {
     return cuentas.map((cuenta) => {
       const pagosC = pagosPorCuenta.get(String(cuenta.id)) ?? []
-      const total = totalCargosCuenta(cuenta)
-      const saldo = saldoPendienteCuenta(total, pagosC)
+      const totalCargos = totalCargosCuenta(cuenta)
+      const vis = totalesVisiblesCuenta(totalCargos, pagosC)
       const estatus = String(cuenta.estatus ?? '—').trim() || '—'
       const estatusUpper = estatus.toUpperCase()
       const liquidada = estatusUpper === 'LIQUIDADA'
@@ -98,8 +98,11 @@ export default function ClientesCuentasVentasPanel({
         cuenta,
         idCuenta: cuenta.id != null ? String(cuenta.id) : '—',
         fechaCreacion: fmtFechaCuenta(cuenta.created_at ?? cuenta.createdAt),
-        total,
-        saldo,
+        totalCargos,
+        totalDisplay: vis.totalDisplay,
+        saldoDisplay: vis.saldoDisplay,
+        saldoAFavor: vis.saldoAFavor,
+        saldoPendiente: vis.saldoPendiente,
         estatus,
         liquidada,
         pagadaActiva,
@@ -216,11 +219,15 @@ export default function ClientesCuentasVentasPanel({
                     >
                       <td className="cuentas-cliente-tabla-orden">{f.idCuenta}</td>
                       <td className="cuentas-cliente-tabla-fecha">{f.fechaCreacion}</td>
-                      <td className="cuentas-cliente-tabla-total">${f.total.toFixed(2)}</td>
                       <td
-                        className={`cuentas-cliente-tabla-total${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-pend' : ''}`}
+                        className={`cuentas-cliente-tabla-total${f.saldoAFavor ? ' cuenta-tarjeta-saldo-favor' : ''}`}
                       >
-                        ${f.saldo.toFixed(2)}
+                        {formatMontoCuenta(f.totalDisplay)}
+                      </td>
+                      <td
+                        className={`cuentas-cliente-tabla-total${f.saldoPendiente > 0.0001 ? ' cuenta-tarjeta-saldo-pend' : ''}`}
+                      >
+                        {formatMontoCuenta(f.saldoDisplay)}
                       </td>
                       <td>
                         <span
@@ -273,13 +280,15 @@ export default function ClientesCuentasVentasPanel({
                       <span className="rep-activa-etiqueta">Creación:</span> {f.fechaCreacion}
                     </span>
                     <span className="cuenta-tarjeta-totales">
-                      <span className="cuenta-tarjeta-total-principal">
-                        Total: <strong>${f.total.toFixed(2)}</strong>
+                      <span
+                        className={`cuenta-tarjeta-total-principal${f.saldoAFavor ? ' cuenta-tarjeta-saldo-favor' : ''}`}
+                      >
+                        Total: <strong>{formatMontoCuenta(f.totalDisplay)}</strong>
                       </span>
                       <span
-                        className={`cuenta-tarjeta-saldo-linea${f.saldo > 0.0001 ? ' cuenta-tarjeta-saldo-linea--pend' : ''}`}
+                        className={`cuenta-tarjeta-saldo-linea${f.saldoPendiente > 0.0001 ? ' cuenta-tarjeta-saldo-linea--pend' : ''}`}
                       >
-                        Saldo: <strong>${f.saldo.toFixed(2)}</strong>
+                        Saldo: <strong>{formatMontoCuenta(f.saldoDisplay)}</strong>
                       </span>
                     </span>
                     <span className="rep-activa-dato">

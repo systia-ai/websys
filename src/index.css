@@ -6403,6 +6403,14 @@ input.full {
   color: #c62828;
 }
 
+.ventas-cuenta-recuadro--saldo-cero .ventas-cuenta-recuadro-monto {
+  color: #546e7a;
+}
+
+.cuenta-tarjeta-saldo-favor strong {
+  color: #1565c0;
+}
+
 .ventas-cuenta-recuadro-monto {
   font-size: 1.45rem;
   font-weight: 800;
