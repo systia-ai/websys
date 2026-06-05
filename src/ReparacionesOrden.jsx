@@ -794,13 +794,6 @@ export default function ReparacionesOrden({
     const patchExtra = {}
     if (estatusDirtyRef.current && estatusEsReparado(estatusActual)) {
       patchExtra.estatus = estatusActual
-      Object.assign(
-        patchExtra,
-        patchFechasHitosEstatus(estatusActual, {
-          fecha_revision: fechaRevisionOrden,
-          fecha_reparado: fechaReparadoOrden,
-        }),
-      )
     }
     try {
       if (supabase) {
@@ -810,7 +803,6 @@ export default function ReparacionesOrden({
         if (patchExtra.estatus) {
           estatusDirtyRef.current = false
           setEstatus(guardada?.estatus ?? estatusActual)
-          aplicarFechasDesdeReparacion(guardada)
         }
       } else {
         const patch = { ...patchVerificadoEntrega(true), ...patchExtra }
@@ -1786,7 +1778,8 @@ export default function ReparacionesOrden({
             ) : estatusPermiteVerificacionEntrega(estatus) ? (
               <>
                 <p className="rep-verificacion-entrega-ayuda muted small">
-                  Revise que la reparación quedó bien antes de entregar al cliente.
+                  El equipo ya está <strong>REPARADO</strong>. Revíselo una vez más antes de entregarlo al
+                  cliente; al verificar, quedará listo para marcar ENTREGADO.
                 </p>
                 {errorVerificacion ? (
                   <p className="rep-verificacion-entrega-error error" role="alert">

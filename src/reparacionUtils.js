@@ -137,42 +137,105 @@ function reducirPayloadReparacionTrasError(error, payload) {
   throw error
 }
 
+const MENSAJE_MIGRACION_VERIFICADO =
+  'No se pudo guardar la verificación: en Supabase faltan las columnas verificado_entrega y fecha_verificacion_entrega. En el SQL Editor ejecute supabase/migrations/20260603160000_reparaciones_verificado_entrega.sql, pulse Run y recargue esta página (F5).'
+
+const SELECT_VERIFICACION_CANDIDATOS = [
+  'id, verificado_entrega, fecha_verificacion_entrega, estatus',
+  'id, verificado_entrega, estatus',
+  'id, estatus',
+]
+
+function filaVerificacionDesdePayload(reparaId, payload, fechaFallback, dataParcial = null) {
+  return {
+    id: reparaId,
+    estatus: dataParcial?.estatus ?? payload.estatus ?? null,
+    verificado_entrega:
+      dataParcial?.verificado_entrega ??
+      ('verificado_entrega' in payload ? payload.verificado_entrega : false),
+    fecha_verificacion_entrega:
+      dataParcial?.fecha_verificacion_entrega ??
+      payload.fecha_verificacion_entrega ??
+      fechaFallback,
+  }
+}
+
+/**
+ * UPDATE + SELECT en una sola petición; prueba distintos SELECT si faltan columnas opcionales.
+ */
+async function actualizarVerificacionConSelect(supabase, reparaId, payload, fechaFallback) {
+  let lastColumnError = null
+  for (const cols of SELECT_VERIFICACION_CANDIDATOS) {
+    const { data, error } = await supabase
+      .from('reparaciones')
+      .update(payload)
+      .eq('id', reparaId)
+      .select(cols)
+      .maybeSingle()
+
+    if (!error) {
+      if (!data) {
+        return {
+          ok: false,
+          error: new Error(
+            `No se encontró la orden #${reparaId}. Compruebe el número de orden y su sesión en Supabase.`,
+          ),
+        }
+      }
+      return {
+        ok: true,
+        data: filaVerificacionDesdePayload(reparaId, payload, fechaFallback, data),
+      }
+    }
+
+    if (
+      esErrorColumnaDesconocida(error, 'fecha_verificacion_entrega') ||
+      esErrorColumnaDesconocida(error, 'verificado_entrega')
+    ) {
+      lastColumnError = error
+      continue
+    }
+
+    return { ok: false, reducePayload: true, error }
+  }
+
+  if (lastColumnError) {
+    return { ok: false, reducePayload: true, error: lastColumnError }
+  }
+
+  return { ok: false, error: new Error('No se pudo guardar la verificación.') }
+}
+
 /**
  * Marca o quita verificación de entrega y devuelve la fila guardada.
- * Usa UPDATE … RETURNING para detectar filas no actualizadas (permisos / ID inválido).
+ * Reintenta sin columnas opcionales si la BD aún no las tiene.
  */
 export async function guardarVerificacionEntregaSupabase(supabase, reparaId, verificado, patchExtra = {}) {
   let payload = { ...patchVerificadoEntrega(verificado), ...patchExtra }
   const queriaVerificacion =
     'verificado_entrega' in payload || 'fecha_verificacion_entrega' in payload
+  const fechaFallback = verificado ? payload.fecha_verificacion_entrega ?? null : null
 
   for (let intento = 0; intento < 6; intento += 1) {
-    const { data, error } = await supabase
-      .from('reparaciones')
-      .update(payload)
-      .eq('id', reparaId)
-      .select('id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_reparado')
-      .maybeSingle()
+    if (
+      queriaVerificacion &&
+      !('verificado_entrega' in payload) &&
+      !('fecha_verificacion_entrega' in payload)
+    ) {
+      throw new Error(MENSAJE_MIGRACION_VERIFICADO)
+    }
 
-    if (!error) {
-      if (!data) {
-        throw new Error(
-          `No se pudo actualizar la orden #${reparaId}. Compruebe que existe y que inició sesión en Supabase.`,
-        )
-      }
-      if (
-        queriaVerificacion &&
-        !('verificado_entrega' in payload) &&
-        !('fecha_verificacion_entrega' in payload)
-      ) {
-        throw new Error(
-          'No se pudo guardar la verificación: falta la columna verificado_entrega en Supabase. Ejecute la migración 20260603160000_reparaciones_verificado_entrega.sql.',
-        )
-      }
+    const resultado = await actualizarVerificacionConSelect(
+      supabase,
+      reparaId,
+      payload,
+      fechaFallback,
+    )
+
+    if (resultado.ok) {
+      const data = resultado.data
       if (verificado && !estaVerificadoEntrega(data)) {
-        throw new Error(
-          'La verificación no quedó guardada en la base de datos. Revise que la migración verificado_entrega esté aplicada en Supabase.',
-        )
+        throw new Error(MENSAJE_MIGRACION_VERIFICADO)
       }
       if (!verificado && estaVerificadoEntrega(data)) {
         throw new Error('No se pudo quitar la verificación en la base de datos.')
@@ -180,7 +243,12 @@ export async function guardarVerificacionEntregaSupabase(supabase, reparaId, ver
       return data
     }
 
-    payload = reducirPayloadReparacionTrasError(error, payload)
+    if (resultado.reducePayload) {
+      payload = reducirPayloadReparacionTrasError(resultado.error, payload)
+      continue
+    }
+
+    throw resultado.error
   }
 
   throw new Error('No se pudo guardar la verificación tras varios intentos.')
