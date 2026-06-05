@@ -76,19 +76,6 @@ export function patchVerificadoEntrega(verificado = true) {
   }
 }
 
-export function clienteFueNotificado(rep) {
-  return rep?.cliente_notificado === true || rep?.cliente_notificado === 1
-}
-
-export function patchNotificacionCliente(notificado = true) {
-  const now = new Date().toISOString()
-  return {
-    cliente_notificado: !!notificado,
-    fecha_notificacion_cliente: notificado ? now : null,
-    updated_at: now,
-  }
-}
-
 /**
  * Date en calendario local. Las cadenas `YYYY-MM-DD` no se parsean como UTC
  * (evita mostrar un día menos en México).
@@ -422,20 +409,6 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
     }
     if ('fecha_verificacion_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_verificacion_entrega')) {
       const { fecha_verificacion_entrega: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('cliente_notificado' in payload && esErrorColumnaDesconocida(error, 'cliente_notificado')) {
-      const { cliente_notificado: _c, fecha_notificacion_cliente: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('fecha_notificacion_cliente' in payload && esErrorColumnaDesconocida(error, 'fecha_notificacion_cliente')) {
-      const { fecha_notificacion_cliente: _f, ...rest } = payload
       if (Object.keys(rest).length > 0) {
         payload = rest
         continue
@@ -843,11 +816,6 @@ export async function insertarReparacionSupabase(supabase, row) {
     }
     if ('verificado_entrega' in payload && esErrorColumnaDesconocida(first.error, 'verificado_entrega')) {
       const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
-      payload = rest
-      continue
-    }
-    if ('cliente_notificado' in payload && esErrorColumnaDesconocida(first.error, 'cliente_notificado')) {
-      const { cliente_notificado: _c, fecha_notificacion_cliente: _f, ...rest } = payload
       payload = rest
       continue
     }

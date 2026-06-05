@@ -3,6 +3,7 @@ import {
   SISTEBIT_PDF_FORMAT,
   TEMA,
   drawCampo,
+  anchoRecuadroCampo,
   anchoRecuadroCompacto,
   drawEncabezadoSistebit,
   printSistebitPdfDocument,
@@ -17,6 +18,16 @@ import {
 
 const CAMPO = { compact: true, valueFontSize: 8 }
 
+function anchoCampoResumenPdf(pdf, label, value, maxW) {
+  return anchoRecuadroCampo(pdf, label, value, {
+    min: 38,
+    maxW,
+    pad: 10,
+    labelFontSize: 6.8,
+    valueFontSize: CAMPO.valueFontSize,
+  })
+}
+
 const COLS_DETALLE = [
   { key: 'concepto', label: 'CONCEPTO', flex: 1 },
   { key: 'cliente', label: 'CLIENTE', width: 34 },
@@ -30,7 +41,7 @@ function drawResumenCorte(pdf, p, x, y, width) {
   const { periodoTxt, resumen, etiquetaTotal } = p
   let cy = y
 
-  cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, width, 9, TEMA.fecha, CAMPO) + PDF_GAP
+  cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
 
   cy +=
     drawCamposCompactosFila(

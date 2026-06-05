@@ -3,6 +3,7 @@ import {
   SISTEBIT_PDF_FORMAT,
   TEMA,
   drawCampo,
+  anchoRecuadroCampo,
   anchoRecuadroCompacto,
   drawEncabezadoSistebit,
   printSistebitPdfDocument,
@@ -16,6 +17,16 @@ import {
 } from './sistebitPdfTabla.js'
 
 const CAMPO = { compact: true, valueFontSize: 8 }
+
+function anchoCampoResumenPdf(pdf, label, value, maxW) {
+  return anchoRecuadroCampo(pdf, label, value, {
+    min: 38,
+    maxW,
+    pad: 10,
+    labelFontSize: 6.8,
+    valueFontSize: CAMPO.valueFontSize,
+  })
+}
 
 const COLS_DETALLE = [
   { key: 'orden', label: 'NO.', width: 11 },
@@ -31,10 +42,20 @@ function drawResumenReporte(pdf, p, x, y, width, pageH) {
   const { periodoTxt, estatusFiltro, resumen, porEstatus } = p
   let cy = y
 
-  cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, width, 9, TEMA.fecha, CAMPO) + PDF_GAP
+  cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
+  const filtroVal = estatusFiltro || 'Todos'
   cy +=
-    drawCampo(pdf, 'Filtro estatus', estatusFiltro || 'Todos', x, cy, width, 9, TEMA.descripcion, CAMPO) +
-    PDF_GAP
+    drawCampo(
+      pdf,
+      'Filtro estatus',
+      filtroVal,
+      x,
+      cy,
+      anchoCampoResumenPdf(pdf, 'Filtro estatus', filtroVal, width),
+      9,
+      TEMA.descripcion,
+      CAMPO,
+    ) + PDF_GAP
 
   cy +=
     drawCamposCompactosFila(
