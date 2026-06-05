@@ -30,13 +30,28 @@ export function addMediaCartaPage(pdf) {
   pdf.addPage(RECIBO_PAGE_FORMAT, 'p')
 }
 
+/** Y máximo de contenido (mm desde arriba) en media hoja carta. */
+export function mediaCartaZonaMaxY(margin = 5) {
+  return RECIBO_MM_H - margin
+}
+
+/** Mitad inferior de la hoja carta en blanco (para volver a imprimir al reverso). */
+export function fillMediaCartaMitadInferiorBlanca(pdf) {
+  const W = pdf.internal.pageSize.getWidth()
+  const fullH = pdf.internal.pageSize.getHeight()
+  if (fullH <= RECIBO_MM_H + 0.5) return
+  pdf.setFillColor(255, 255, 255)
+  pdf.setDrawColor(255, 255, 255)
+  pdf.rect(0, RECIBO_MM_H, W, fullH - RECIBO_MM_H + 1, 'F')
+}
+
 /** Línea guía al corte de media hoja (5.5″ desde el borde superior). */
 export function drawGuiaMediaCartaPdf(pdf, contentW, margin) {
   const y = RECIBO_MM_H
-  pdf.setDrawColor(190, 198, 208)
-  pdf.setLineWidth(0.25)
+  pdf.setDrawColor(180, 188, 198)
+  pdf.setLineWidth(0.2)
   if (typeof pdf.setLineDashPattern === 'function') {
-    pdf.setLineDashPattern([1.5, 1.5], 0)
+    pdf.setLineDashPattern([1.2, 1.2], 0)
   }
   pdf.line(margin, y, margin + contentW, y)
   if (typeof pdf.setLineDashPattern === 'function') {
@@ -45,9 +60,15 @@ export function drawGuiaMediaCartaPdf(pdf, contentW, margin) {
 }
 
 export function stampGuiaMediaCartaTodasPaginas(pdf, contentW, margin) {
+  finalizarPaginasMediaCarta(pdf, contentW, margin)
+}
+
+/** Blanco en mitad inferior + guía de corte en cada página (impresión 2-up volteando hoja). */
+export function finalizarPaginasMediaCarta(pdf, contentW, margin) {
   const n = pdf.getNumberOfPages()
   for (let i = 1; i <= n; i++) {
     pdf.setPage(i)
+    fillMediaCartaMitadInferiorBlanca(pdf)
     drawGuiaMediaCartaPdf(pdf, contentW, margin)
   }
 }
@@ -269,23 +290,28 @@ export function drawEncabezadoSistebit(pdf, titulo, centerX, yStart, opts = {}) 
   pdf.setFontSize(titleSize)
   pdf.setTextColor(25, 118, 210)
   pdf.text(titulo, centerX, y, { align: 'center' })
-  return y + 10 * scale
+  return y + (opts.compactFooter ? 6 : 7) * scale
 }
 
 /** Altura en mm del bloque de contacto (misma lógica que `drawContactoSistebitPdf`). */
-export function measureContactoSistebitPdf(pdf, contentW) {
+export function measureContactoSistebitPdf(pdf, contentW, { compact = false } = {}) {
+  const fontSize = compact ? 6.8 : 7.5
+  const lineH = compact ? 3.15 : 3.6
   const maxW = contentW - 6
-  const lineH = 3.6
   const seg = '  '
 
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(7.5)
+  pdf.setFontSize(fontSize)
   const addrLines = pdf.splitTextToSize(SISTEBIT_DIRECCION, maxW)
   let h = addrLines.length * lineH
 
+  pdf.setFontSize(fontSize)
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(fontSize)
   const wWa = measureWhatsappBloqueWidth(pdf)
+  pdf.setFont('helvetica', 'normal')
   const wCiudad = pdf.getTextWidth(`${seg}${SISTEBIT_CIUDAD}`)
   const filaW = wTel + wSeg + wWa + wCiudad
   h += filaW <= maxW ? lineH : lineH * 2
@@ -293,12 +319,14 @@ export function measureContactoSistebitPdf(pdf, contentW) {
 }
 
 /** Datos de contacto SISTEBIT centrados (pie de PDF). */
-export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
+export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = false } = {}) {
+  const fontSize = compact ? 6.8 : 7.5
+  const lineH = compact ? 3.15 : 3.6
+  const iconMm = compact ? 3.2 : WHATSAPP_ICON_MM
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(7.5)
+  pdf.setFontSize(fontSize)
   pdf.setTextColor(21, 101, 192)
   const maxW = contentW - 6
-  const lineH = 3.6
   const seg = '  '
 
   let yCur = y
@@ -307,9 +335,14 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
   yCur += addrLines.length * lineH
 
   pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(fontSize)
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
-  const wWa = measureWhatsappBloqueWidth(pdf)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(fontSize)
+  const waText = `${WHATSAPP_LABEL} ${SISTEBIT_WHATSAPP}`
+  const wWa = iconMm + WHATSAPP_ICON_GAP + pdf.getTextWidth(waText)
+  pdf.setFont('helvetica', 'normal')
   const ciudadText = `${seg}${SISTEBIT_CIUDAD}`
   const wCiudad = pdf.getTextWidth(ciudadText)
   const filaW = wTel + wSeg + wWa + wCiudad
@@ -318,8 +351,12 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
     let x = centerX - filaW / 2
     pdf.text(SISTEBIT_TEL, x, yCur)
     x += wTel + wSeg
-    drawWhatsappBloque(pdf, x, yCur)
+    const top = yCur - iconMm * 0.88
+    pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, iconMm, iconMm, undefined, 'FAST')
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(waText, x + iconMm + WHATSAPP_ICON_GAP, yCur)
     x += wWa
+    pdf.setFont('helvetica', 'normal')
     pdf.text(ciudadText, x, yCur)
     return yCur - y + lineH
   }
@@ -328,8 +365,12 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX) {
   yCur += lineH
   const fila2W = wWa + wCiudad
   let x2 = centerX - fila2W / 2
-  drawWhatsappBloque(pdf, x2, yCur)
+  const top2 = yCur - iconMm * 0.88
+  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x2, top2, iconMm, iconMm, undefined, 'FAST')
+  pdf.setFont('helvetica', 'bold')
+  pdf.text(waText, x2 + iconMm + WHATSAPP_ICON_GAP, yCur)
   x2 += wWa
+  pdf.setFont('helvetica', 'normal')
   pdf.text(ciudadText, x2, yCur)
   return yCur - y + lineH
 }

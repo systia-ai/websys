@@ -43,29 +43,23 @@ function drawResumenCorte(pdf, p, x, y, width) {
 
   cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
 
-  cy +=
-    drawCamposCompactosFila(
-      pdf,
-      [
-        { label: etiquetaTotal, value: `$${resumen.totalIngresos.toFixed(2)}`, theme: TEMA.pago, minW: 36 },
-        { label: 'Cantidad pagos', value: String(resumen.cantidadPagos), theme: TEMA.orden, minW: 30 },
-      ],
-      drawCampo,
-      anchoRecuadroCompacto,
-      CAMPO,
-      { x, y: cy, width },
-    ) + PDF_GAP
-
-  const formas = [
-    { label: 'Efectivo', value: `$${resumen.porForma.EFECTIVO.toFixed(2)}`, theme: TEMA.pago },
-    { label: 'Transferencia', value: `$${resumen.porForma.TRANSFERENCIA.toFixed(2)}`, theme: TEMA.fecha },
-    { label: 'Tarjeta', value: `$${resumen.porForma.TARJETA.toFixed(2)}`, theme: TEMA.tipo },
+  const camposResumen = [
+    { label: etiquetaTotal, value: `$${resumen.totalIngresos.toFixed(2)}`, theme: TEMA.pago, minW: 36 },
+    { label: 'Cantidad pagos', value: String(resumen.cantidadPagos), theme: TEMA.orden, minW: 30 },
+    { label: 'Efectivo', value: `$${resumen.porForma.EFECTIVO.toFixed(2)}`, theme: TEMA.pago, minW: 28 },
+    { label: 'Transferencia', value: `$${resumen.porForma.TRANSFERENCIA.toFixed(2)}`, theme: TEMA.fecha, minW: 32 },
+    { label: 'Tarjeta', value: `$${resumen.porForma.TARJETA.toFixed(2)}`, theme: TEMA.tipo, minW: 26 },
   ]
   if (resumen.porForma.OTRO > 0.0001) {
-    formas.push({ label: 'Otras formas', value: `$${resumen.porForma.OTRO.toFixed(2)}`, theme: TEMA.problema })
+    camposResumen.push({
+      label: 'Otras formas',
+      value: `$${resumen.porForma.OTRO.toFixed(2)}`,
+      theme: TEMA.problema,
+      minW: 30,
+    })
   }
 
-  cy += drawCamposCompactosFila(pdf, formas, drawCampo, anchoRecuadroCompacto, CAMPO, { x, y: cy, width })
+  cy += drawCamposCompactosFila(pdf, camposResumen, drawCampo, anchoRecuadroCompacto, CAMPO, { x, y: cy, width })
 
   return cy - y
 }

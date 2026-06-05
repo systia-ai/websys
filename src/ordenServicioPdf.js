@@ -1,6 +1,5 @@
 import { claveCanonicaTipoServicio, formatFechaLegibleEsMx } from './reparacionUtils.js'
 import {
-  RECIBO_MM_H,
   RECIBO_PAGE_FORMAT,
   TEMA,
   COMPACT_CAMPO,
@@ -13,7 +12,8 @@ import {
   measureContactoSistebitPdf,
   createMediaCartaPdf,
   addMediaCartaPage,
-  stampGuiaMediaCartaTodasPaginas,
+  finalizarPaginasMediaCarta,
+  mediaCartaZonaMaxY,
   printSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 
@@ -23,13 +23,15 @@ export const ORDEN_PDF_FORMAT = RECIBO_PAGE_FORMAT
 export const LEGAL_ORDEN_SERVICIO =
   'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
 
-const MARGIN = 6
-const GAP_ORDEN_CAMPOS = 3
-const GAP_ANTES_PIE = 4
-const GAP_ANTES_LEYENDA = 2
-const GAP_LEYENDA_CONTACTO = 2
-const FUENTE_LEGAL_ORDEN = 7.2
-const LINE_H_LEGAL = 3.5
+const MARGIN = 5
+const GAP_ORDEN_CAMPOS = 2.5
+const GAP_ANTES_PIE = 2.5
+const GAP_ANTES_LEYENDA = 1.5
+const GAP_LEYENDA_CONTACTO = 1.5
+const FUENTE_LEGAL_ORDEN = 6.5
+const LINE_H_LEGAL = 3.15
+const ENCABEZADO_MEDIA = { scale: 0.42, subtitleSize: 6.8, titleSize: 9.2, compactFooter: true }
+const PIE_COMPACT = { compact: true }
 
 export function buildOrdenServicioPdfFilename(orden) {
   const safe = String(orden ?? 'orden').replace(/[^\w.-]+/g, '_')
@@ -48,7 +50,7 @@ function measureLeyendaOrdenHeight(pdf, contentW) {
 }
 
 function measurePieOrdenHeight(pdf, contentW) {
-  return GAP_ANTES_LEYENDA + measureLeyendaOrdenHeight(pdf, contentW) + measureContactoSistebitPdf(pdf, contentW)
+  return GAP_ANTES_LEYENDA + measureLeyendaOrdenHeight(pdf, contentW) + measureContactoSistebitPdf(pdf, contentW, PIE_COMPACT)
 }
 
 function drawLeyendaOrden(pdf, y, contentW, centerX) {
@@ -63,7 +65,7 @@ function drawLeyendaOrden(pdf, y, contentW, centerX) {
 function drawPieOrden(pdf, y, contentW, centerX) {
   const yLeyenda = y + GAP_ANTES_LEYENDA
   const leyendaH = drawLeyendaOrden(pdf, yLeyenda, contentW, centerX)
-  return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX)
+  return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX, PIE_COMPACT)
 }
 
 function labelTipoServicioPdf(raw) {
@@ -76,7 +78,7 @@ function labelTipoServicioPdf(raw) {
 /** Cliente, no. de orden y tipo de servicio a la izquierda; fecha al final derecho. */
 function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, tipoServicio, x, y, totalW) {
   const gap = 3
-  const hMin = 10
+  const hMin = 9
   const nombre = dashIfEmpty(clienteNombre)
   const ordenStr = String(orden ?? '—')
   const fechaStr = dashIfEmpty(fecha)
@@ -158,8 +160,8 @@ function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, tipoServici
 
 /** Serie, tipo y descripción en una fila (recuadros compactos). */
 function drawFilaSerieTipoDescripcion(pdf, equipo, x, y, totalW) {
-  const gap = 3.5
-  const hMin = 10
+  const gap = 3
+  const hMin = 9
   const items = [
     { label: 'Serie del Equipo', value: dashIfEmpty(equipo.serie), theme: TEMA.serie, min: 30, max: 56 },
     { label: 'Tipo de Equipo', value: dashIfEmpty(equipo.tipo), theme: TEMA.tipo, min: 28, max: 46 },
@@ -221,9 +223,9 @@ function drawCamposOrden(pdf, p, x, y, width, maxY) {
   cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + gap
 
   ensureSpace(14)
-  cy += drawCampo(pdf, 'Problema Reportado', dashIfEmpty(servicio.problemas), x, cy, width, 12, TEMA.problema, {
+  cy += drawCampo(pdf, 'Problema Reportado', dashIfEmpty(servicio.problemas), x, cy, width, 10, TEMA.problema, {
     ...COMPACT_CAMPO,
-    valueFontSize: 8.5,
+    valueFontSize: 8,
   })
 
   return cy - y
@@ -238,13 +240,9 @@ export function createOrdenServicioPdf(p) {
   const W = pdf.internal.pageSize.getWidth()
   const contentW = W - 2 * MARGIN
   const centerX = W / 2
-  const zonaBottom = RECIBO_MM_H - MARGIN
+  const zonaBottom = mediaCartaZonaMaxY(MARGIN)
 
-  let y = drawEncabezadoSistebit(pdf, 'ORDEN DE SERVICIO', centerX, 4, {
-    scale: 0.5,
-    subtitleSize: 7.2,
-    titleSize: 10.5,
-  })
+  let y = drawEncabezadoSistebit(pdf, 'ORDEN DE SERVICIO', centerX, 3, ENCABEZADO_MEDIA)
 
   y += drawCamposOrden(pdf, p, MARGIN, y, contentW, zonaBottom) + GAP_ANTES_PIE
 
@@ -256,7 +254,7 @@ export function createOrdenServicioPdf(p) {
 
   drawPieOrden(pdf, y, contentW, centerX)
 
-  stampGuiaMediaCartaTodasPaginas(pdf, contentW, MARGIN)
+  finalizarPaginasMediaCarta(pdf, contentW, MARGIN)
 
   return pdf
 }
@@ -282,7 +280,7 @@ export async function printOrdenServicioPdf(p) {
 }
 
 export const ORDEN_PRINT_HINT =
-  'Impresión: papel Carta, orientación Vertical, escala 100 %. La orden sale en la mitad superior (5.5″); puede cortar o usar media hoja precortada.'
+  'Impresión: papel Carta, vertical, escala 100 %, márgenes mínimos o ninguno. Cada documento ocupa la mitad superior (5.5″). Para dos en una hoja: imprima uno, voltee la hoja (borde largo) y vuelva a imprimir en la misma orientación.'
 
 /** Descarga el PDF y abre el diálogo de impresión (un solo documento generado). */
 export async function downloadAndPrintOrdenServicioPdf(p) {
