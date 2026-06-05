@@ -5567,18 +5567,94 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-weight: 700;
 }
 
-.rep-block--bitacora textarea {
+.rep-bitacora-panel {
   background: #fff8e1;
   border: 2px solid #ffb300;
-  font-size: 1.05rem;
-  line-height: 1.45;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   min-height: 5.5rem;
 }
 
-.rep-block--bitacora textarea:focus {
+.rep-bitacora-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.rep-bitacora-entrada {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 10.5rem) 1fr;
+  gap: 10px;
+  align-items: start;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 179, 0, 0.35);
+}
+
+.rep-bitacora-entrada:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.rep-bitacora-fecha {
+  color: #e65100;
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.rep-bitacora-texto {
+  color: #37474f;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rep-bitacora-vacia {
+  margin: 0;
+  color: #8d6e63;
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.rep-bitacora-nueva {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 179, 0, 0.55);
+}
+
+.rep-bitacora-nueva textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #ffcc80;
+  border-radius: 6px;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 3rem;
+}
+
+.rep-bitacora-nueva textarea:focus {
   outline: none;
   border-color: #ff8f00;
   box-shadow: 0 0 0 3px rgba(255, 179, 0, 0.28);
+}
+
+.rep-bitacora-agregar {
+  align-self: flex-start;
+  font-size: 0.92rem;
 }
 
 .rep-subtitle {

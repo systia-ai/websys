@@ -32,11 +32,14 @@ import {
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
+  agregarEntradaBitacora,
   corregirEntregadaIndebidaSiAplica,
   fechasHitosOrdenLegibles,
+  formatFechaBitacora,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   liquidarCuentaPagadaAlEntregarOrden,
+  parseBitacora,
   patchFechasHitosEstatus,
   patchVerificadoEntrega,
   registrarOrdenCreadaEnSesion,
@@ -185,6 +188,8 @@ export default function ReparacionesOrden({
   const [nivelClight, setNivelClight] = useState('')
   const [descripcionSolucion, setDescripcionSolucion] = useState('')
   const [bitacora, setBitacora] = useState('')
+  const [bitacoraNueva, setBitacoraNueva] = useState('')
+  const [guardandoBitacora, setGuardandoBitacora] = useState(false)
   const [verificadoEntrega, setVerificadoEntrega] = useState(false)
   const [fechaVerificacionEntrega, setFechaVerificacionEntrega] = useState(null)
   const [marcandoVerificacion, setMarcandoVerificacion] = useState(false)
@@ -232,6 +237,8 @@ export default function ReparacionesOrden({
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
+
+  const entradasBitacora = useMemo(() => parseBitacora(bitacora), [bitacora])
 
   const puedeEnviarPagoTotalWa = puedeEnviarPagoTotalWhatsApp(cuentaOrden, estatus)
 
@@ -816,6 +823,37 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function agregarNotaBitacora() {
+    const texto = bitacoraNueva.trim()
+    if (!texto) return
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) {
+      onError?.('No hay número de orden cargado.')
+      return
+    }
+    const bitacoraActualizada = agregarEntradaBitacora(bitacora, texto)
+    setGuardandoBitacora(true)
+    const patch = { bitacora: bitacoraActualizada, updated_at: new Date().toISOString() }
+    try {
+      if (supabase) {
+        await actualizarReparacionSupabase(supabase, id, patch)
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        )
+      }
+      setBitacora(bitacoraActualizada ?? '')
+      setBitacoraNueva('')
+      onNotice?.('Nota agregada a la bitácora.')
+    } catch (e) {
+      onError?.(`No se pudo guardar la bitácora: ${e.message}`)
+    } finally {
+      setGuardandoBitacora(false)
+    }
+  }
+
   async function actualizarOrden() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
@@ -842,13 +880,19 @@ export default function ReparacionesOrden({
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
     }
+    let bitacoraGuardar = bitacora.trim() ? bitacora : null
+    if (bitacoraNueva.trim()) {
+      bitacoraGuardar = agregarEntradaBitacora(bitacoraGuardar, bitacoraNueva)
+      setBitacora(bitacoraGuardar ?? '')
+      setBitacoraNueva('')
+    }
     const patch = {
       estatus: estatusGuardar,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
       descripcion_equipo: descripcionEquipo || null,
       problemas_reportados: problemasReportados || null,
       descripcion_solucion: descripcionSolucion ? descripcionSolucion.toUpperCase() : null,
-      bitacora: bitacora.trim() || null,
+      bitacora: bitacoraGuardar,
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
@@ -1774,12 +1818,43 @@ export default function ReparacionesOrden({
         {(esOrdenExistente || idReparacion != null) && (
           <div className="rep-block rep-block--bitacora">
             <label>Bitácora</label>
-            <textarea
-              rows={4}
-              value={bitacora}
-              onChange={(e) => setBitacora(e.target.value)}
-              placeholder="Notas internas de seguimiento (taller)"
-            />
+            <div className="rep-bitacora-panel">
+              {entradasBitacora.length > 0 ? (
+                <ul className="rep-bitacora-lista">
+                  {entradasBitacora.map((entrada, idx) => (
+                    <li key={`${entrada.fecha ?? 's'}-${idx}`} className="rep-bitacora-entrada">
+                      <span className="rep-bitacora-fecha">{formatFechaBitacora(entrada.fecha)}</span>
+                      <span className="rep-bitacora-texto">{entrada.texto}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rep-bitacora-vacia">Sin notas registradas.</p>
+              )}
+              <div className="rep-bitacora-nueva">
+                <textarea
+                  rows={2}
+                  value={bitacoraNueva}
+                  disabled={guardandoBitacora}
+                  onChange={(e) => setBitacoraNueva(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault()
+                      void agregarNotaBitacora()
+                    }
+                  }}
+                  placeholder="Escriba una nota de seguimiento…"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary rep-bitacora-agregar"
+                  disabled={guardandoBitacora || !bitacoraNueva.trim()}
+                  onClick={() => void agregarNotaBitacora()}
+                >
+                  {guardandoBitacora ? 'Guardando…' : 'Agregar nota'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

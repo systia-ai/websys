@@ -128,6 +128,51 @@ export function formatFechaLegibleEsMx(
   return d.toLocaleDateString('es-MX', opts)
 }
 
+const BITACORA_LINE_RE = /^(\d{4}-\d{2}-\d{2})\t(.+)$/
+
+/** Entradas de bitácora (fecha YYYY-MM-DD + texto). */
+export function parseBitacora(raw) {
+  const s = String(raw ?? '').trim()
+  if (!s) return []
+  return s
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      if (!trimmed) return null
+      const m = trimmed.match(BITACORA_LINE_RE)
+      if (m) return { fecha: m[1], texto: m[2].trim() }
+      return { fecha: null, texto: trimmed }
+    })
+    .filter(Boolean)
+}
+
+export function serializarBitacora(entradas) {
+  if (!entradas?.length) return null
+  const lines = entradas
+    .map((e) => {
+      const texto = String(e?.texto ?? '').trim()
+      if (!texto) return null
+      const fecha = e.fecha || ymdHoyLocal()
+      return `${fecha}\t${texto}`
+    })
+    .filter(Boolean)
+  return lines.length ? lines.join('\n') : null
+}
+
+/** Agrega una nota con la fecha de hoy (calendario local). */
+export function agregarEntradaBitacora(raw, texto) {
+  const t = String(texto ?? '').trim()
+  if (!t) return raw ?? null
+  const entradas = parseBitacora(raw)
+  entradas.push({ fecha: ymdHoyLocal(), texto: t })
+  return serializarBitacora(entradas)
+}
+
+export function formatFechaBitacora(ymd) {
+  if (!ymd) return '—'
+  return formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 /** Fecha de ingreso al taller. */
 export function fechaIngresoYmd(rep) {
   const raw =
