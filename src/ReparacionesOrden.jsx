@@ -26,6 +26,7 @@ import {
   estatusEsEntregado,
   estatusPermiteVerificacionEntrega,
   estatusEsReparado,
+  clienteFueNotificado,
   ejecutarInsercionOrdenUnica,
   estaVerificadoEntrega,
   formatFechaLegibleEsMx,
@@ -38,6 +39,7 @@ import {
   leerOrdenRecienCreadaEnSesion,
   liquidarCuentaPagadaAlEntregarOrden,
   patchFechasHitosEstatus,
+  patchNotificacionCliente,
   patchVerificadoEntrega,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
@@ -188,6 +190,9 @@ export default function ReparacionesOrden({
   const [verificadoEntrega, setVerificadoEntrega] = useState(false)
   const [fechaVerificacionEntrega, setFechaVerificacionEntrega] = useState(null)
   const [marcandoVerificacion, setMarcandoVerificacion] = useState(false)
+  const [clienteNotificado, setClienteNotificado] = useState(false)
+  const [fechaNotificacionCliente, setFechaNotificacionCliente] = useState(null)
+  const [guardandoNotificacion, setGuardandoNotificacion] = useState(false)
   const [ordenRegistrada, setOrdenRegistrada] = useState(() => repIdStrEsOrdenExistente(repIdStr))
   const [idReparacion, setIdReparacion] = useState(() => {
     if (!repIdStrEsOrdenExistente(repIdStr)) return null
@@ -243,6 +248,22 @@ export default function ReparacionesOrden({
   const aplicarVerificacionDesdeReparacion = useCallback((data) => {
     setVerificadoEntrega(estaVerificadoEntrega(data))
     setFechaVerificacionEntrega(data?.fecha_verificacion_entrega ?? null)
+  }, [])
+
+  const aplicarNotificacionDesdeReparacion = useCallback((data) => {
+    setClienteNotificado(clienteFueNotificado(data))
+    setFechaNotificacionCliente(data?.fecha_notificacion_cliente ?? null)
+  }, [])
+
+  const fmtNotificacionCliente = useCallback((raw) => {
+    if (!raw) return ''
+    return formatFechaLegibleEsMx(raw, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }, [])
 
   const fechasHitosBanner = useMemo(() => {
@@ -396,6 +417,7 @@ export default function ReparacionesOrden({
         setDescripcionSolucion(data.descripcion_solucion ?? '')
         setBitacora(data.bitacora ?? '')
         aplicarVerificacionDesdeReparacion(data)
+        aplicarNotificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -448,6 +470,7 @@ export default function ReparacionesOrden({
         setDescripcionSolucion(data.descripcion_solucion ?? '')
         setBitacora(data.bitacora ?? '')
         aplicarVerificacionDesdeReparacion(data)
+        aplicarNotificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -485,7 +508,7 @@ export default function ReparacionesOrden({
     } catch (e) {
       onError(`Error al cargar orden: ${e.message}`)
     }
-  }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, aplicarVerificacionDesdeReparacion, cargarCuentaYEntregaAux])
+  }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, aplicarVerificacionDesdeReparacion, aplicarNotificacionDesdeReparacion, cargarCuentaYEntregaAux])
 
   const cargarReparacionRef = useRef(cargarReparacion)
   cargarReparacionRef.current = cargarReparacion
@@ -816,6 +839,34 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function toggleNotificacionCliente(marcar) {
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) {
+      onError?.('No hay número de orden cargado.')
+      return
+    }
+    setGuardandoNotificacion(true)
+    const patch = patchNotificacionCliente(marcar)
+    try {
+      if (supabase) {
+        await actualizarReparacionSupabase(supabase, id, patch)
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        )
+      }
+      setClienteNotificado(!!marcar)
+      setFechaNotificacionCliente(marcar ? patch.fecha_notificacion_cliente : null)
+      onNotice?.(marcar ? 'Cliente marcado como notificado.' : 'Notificación al cliente quitada.')
+    } catch (e) {
+      onError?.(`No se pudo guardar la notificación: ${e.message}`)
+    } finally {
+      setGuardandoNotificacion(false)
+    }
+  }
+
   async function actualizarOrden() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
@@ -863,6 +914,8 @@ export default function ReparacionesOrden({
         : estatusEsReparado(estatusGuardar) && verificadoEntrega
           ? fechaVerificacionEntrega || now
           : null,
+      cliente_notificado: clienteNotificado,
+      fecha_notificacion_cliente: clienteNotificado ? fechaNotificacionCliente || now : null,
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
@@ -1731,6 +1784,30 @@ export default function ReparacionesOrden({
                   })}`
                 : ''}
             </p>
+          </div>
+        ) : null}
+
+        {(esOrdenExistente || idReparacion != null) ? (
+          <div
+            className={`rep-notificacion-cliente${clienteNotificado ? ' rep-notificacion-cliente--ok' : ''}`}
+          >
+            <label className="rep-notificacion-cliente-check">
+              <input
+                type="checkbox"
+                checked={clienteNotificado}
+                disabled={guardandoNotificacion}
+                onChange={(e) => void toggleNotificacionCliente(e.target.checked)}
+              />
+              <span className="rep-notificacion-cliente-paloma" aria-hidden="true">
+                ✓
+              </span>
+              <span className="rep-notificacion-cliente-texto">Se notificó al cliente</span>
+            </label>
+            {clienteNotificado && fechaNotificacionCliente ? (
+              <p className="rep-notificacion-cliente-fecha">
+                Notificado el {fmtNotificacionCliente(fechaNotificacionCliente)}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
