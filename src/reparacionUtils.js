@@ -59,7 +59,17 @@ export function estatusEsReparado(estatus) {
 
 /** Marca de verificación previa a entrega (no es un estatus). */
 export function estaVerificadoEntrega(rep) {
-  return rep?.verificado_entrega === true || rep?.verificado_entrega === 1
+  const v = rep?.verificado_entrega
+  if (v === true || v === 1) return true
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase()
+    return s === 'true' || s === '1'
+  }
+  return false
+}
+
+export function fechaVerificacionEntregaYmd(rep) {
+  return aYmdLocalDesdeRaw(rep?.fecha_verificacion_entrega ?? rep?.fechaVerificacionEntrega)
 }
 
 /** Solo en REPARADO se puede marcar verificación antes de ENTREGADO. */
@@ -365,7 +375,7 @@ export function repEnRangoFechasMonitor(
 /**
  * ¿La orden cumple el filtro del monitor?
  * - `modoFecha` 'ingreso' | 'entrega': usa el rango superior y omite estatus.
- * - `modoFecha` 'verificadas': órdenes verificadas y aún no entregadas.
+ * - `modoFecha` 'verificadas': órdenes verificadas y aún no entregadas; el rango aplica a fecha_verificacion_entrega.
  * - Sin `modoFecha`: filtra por estatus y, si hay rango, por ingreso o entrega (ambas).
  */
 export function repCoincideFiltroMonitor(
@@ -390,9 +400,13 @@ export function repCoincideFiltroMonitor(
   }
 
   if (modoFecha === 'verificadas') {
-    if (!estaVerificadoEntrega(rep) || estatusEsEntregado(rep?.estatus)) return false
+    if (!repEsVerificadaListaEntrega(rep)) return false
     if (!hayRango) return true
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
+    const ymdVer = fechaVerificacionEntregaYmd(rep)
+    if (ymdVer) return ymdEnRango(ymdVer, d, h)
+    const ymdAct = aYmdLocalDesdeRaw(rep?.updated_at)
+    if (ymdAct) return ymdEnRango(ymdAct, d, h)
+    return true
   }
 
   const sel = estatusSeleccionados
@@ -428,9 +442,22 @@ function esErrorColumnaDesconocida(error, nombreColumna) {
 /** UPDATE en reparaciones; reintenta sin columnas opcionales si la BD aún no las tiene. */
 export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
   let payload = { ...patch }
+  const queriaVerificacion =
+    'verificado_entrega' in patch || 'fecha_verificacion_entrega' in patch
   for (let intento = 0; intento < 6; intento += 1) {
     const { error } = await supabase.from('reparaciones').update(payload).eq('id', reparaId)
-    if (!error) return
+    if (!error) {
+      if (
+        queriaVerificacion &&
+        !('verificado_entrega' in payload) &&
+        !('fecha_verificacion_entrega' in payload)
+      ) {
+        throw new Error(
+          'No se pudo guardar la verificación: falta la columna verificado_entrega en Supabase. Ejecute la migración 20260603160000_reparaciones_verificado_entrega.sql.',
+        )
+      }
+      return
+    }
     const msg = String(error.message ?? '').toLowerCase()
     if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
       throw new Error(

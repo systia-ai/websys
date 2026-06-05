@@ -832,7 +832,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoVerificadas()
                   }}
-                  title="Solo órdenes verificadas listas para entrega al cliente"
+                  title="Solo órdenes verificadas listas para entrega. El rango Desde/Hasta filtra por fecha de verificación."
                 >
                   Solo
                 </button>

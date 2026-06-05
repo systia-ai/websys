@@ -783,15 +783,28 @@ export default function ReparacionesOrden({
     try {
       if (supabase) {
         await actualizarReparacionSupabase(supabase, id, patch)
+        const { data: guardada, error: eVer } = await supabase
+          .from('reparaciones')
+          .select('verificado_entrega, fecha_verificacion_entrega')
+          .eq('id', id)
+          .maybeSingle()
+        if (eVer) throw eVer
+        if (!estaVerificadoEntrega(guardada)) {
+          throw new Error(
+            'La verificación no quedó guardada en la base de datos. Revise que la migración verificado_entrega esté aplicada en Supabase.',
+          )
+        }
+        setVerificadoEntrega(true)
+        setFechaVerificacionEntrega(guardada?.fecha_verificacion_entrega ?? patch.fecha_verificacion_entrega)
       } else {
         const all = readLs(LS_REP, [])
         writeLs(
           LS_REP,
           all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         )
+        setVerificadoEntrega(true)
+        setFechaVerificacionEntrega(patch.fecha_verificacion_entrega)
       }
-      setVerificadoEntrega(true)
-      setFechaVerificacionEntrega(patch.fecha_verificacion_entrega)
       onNotice?.('Equipo verificado. Ya puede marcar la orden como ENTREGADO.')
     } catch (e) {
       onError?.(`No se pudo guardar la verificación: ${e.message}`)
@@ -899,16 +912,13 @@ export default function ReparacionesOrden({
       niveles_tinta: niveles,
       updated_at: now,
       ...patchFechasHitosEstatus(estatusGuardar, repActual),
-      verificado_entrega: estatusEsEntregado(estatusGuardar)
-        ? true
-        : estatusEsReparado(estatusGuardar)
-          ? verificadoEntrega
-          : false,
-      fecha_verificacion_entrega: estatusEsEntregado(estatusGuardar)
-        ? fechaVerificacionEntrega || now
-        : estatusEsReparado(estatusGuardar) && verificadoEntrega
-          ? fechaVerificacionEntrega || now
-          : null,
+    }
+    if (estatusEsEntregado(estatusGuardar)) {
+      patch.verificado_entrega = true
+      patch.fecha_verificacion_entrega = fechaVerificacionEntrega || now
+    } else if (!estatusEsReparado(estatusGuardar)) {
+      patch.verificado_entrega = false
+      patch.fecha_verificacion_entrega = null
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
@@ -922,11 +932,14 @@ export default function ReparacionesOrden({
         await actualizarReparacionSupabase(supabase, id, patch)
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
-          .select('fecha_entrega, fecha_revision, fecha_reparado, estatus, updated_at')
+          .select(
+            'fecha_entrega, fecha_revision, fecha_reparado, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
+          )
           .eq('id', id)
           .maybeSingle()
         if (!eVer && guardada) {
           aplicarFechasDesdeReparacion(guardada)
+          aplicarVerificacionDesdeReparacion(guardada)
           if (
             estatusEsEntregado(estatusGuardar) &&
             !aYmdLocalDesdeRaw(guardada.fecha_entrega)
