@@ -24,7 +24,11 @@ import {
   aYmdLocalDesdeRaw,
   esOrdenDuplicada,
   estatusEsEntregado,
+  estatusPermiteVerificacionEntrega,
+  estatusEsReparado,
   ejecutarInsercionOrdenUnica,
+  estaVerificadoEntrega,
+  formatFechaLegibleEsMx,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
@@ -34,6 +38,7 @@ import {
   leerOrdenRecienCreadaEnSesion,
   liquidarCuentaPagadaAlEntregarOrden,
   patchFechasHitosEstatus,
+  patchVerificadoEntrega,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -180,6 +185,9 @@ export default function ReparacionesOrden({
   const [nivelClight, setNivelClight] = useState('')
   const [descripcionSolucion, setDescripcionSolucion] = useState('')
   const [bitacora, setBitacora] = useState('')
+  const [verificadoEntrega, setVerificadoEntrega] = useState(false)
+  const [fechaVerificacionEntrega, setFechaVerificacionEntrega] = useState(null)
+  const [marcandoVerificacion, setMarcandoVerificacion] = useState(false)
   const [ordenRegistrada, setOrdenRegistrada] = useState(() => repIdStrEsOrdenExistente(repIdStr))
   const [idReparacion, setIdReparacion] = useState(() => {
     if (!repIdStrEsOrdenExistente(repIdStr)) return null
@@ -226,6 +234,16 @@ export default function ReparacionesOrden({
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
 
   const puedeEnviarPagoTotalWa = puedeEnviarPagoTotalWhatsApp(cuentaOrden, estatus)
+
+  const puedeVerificarEntrega =
+    (esOrdenExistente || idReparacion != null) &&
+    estatusPermiteVerificacionEntrega(estatus) &&
+    !verificadoEntrega
+
+  const aplicarVerificacionDesdeReparacion = useCallback((data) => {
+    setVerificadoEntrega(estaVerificadoEntrega(data))
+    setFechaVerificacionEntrega(data?.fecha_verificacion_entrega ?? null)
+  }, [])
 
   const fechasHitosBanner = useMemo(() => {
     const rep = {
@@ -377,6 +395,7 @@ export default function ReparacionesOrden({
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
         setBitacora(data.bitacora ?? '')
+        aplicarVerificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -428,6 +447,7 @@ export default function ReparacionesOrden({
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
         setBitacora(data.bitacora ?? '')
+        aplicarVerificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -465,7 +485,7 @@ export default function ReparacionesOrden({
     } catch (e) {
       onError(`Error al cargar orden: ${e.message}`)
     }
-  }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, cargarCuentaYEntregaAux])
+  }, [repIdStr, supabase, onError, aplicarFechasDesdeReparacion, aplicarVerificacionDesdeReparacion, cargarCuentaYEntregaAux])
 
   const cargarReparacionRef = useRef(cargarReparacion)
   cargarReparacionRef.current = cargarReparacion
@@ -737,6 +757,65 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function marcarVerificadoEntrega() {
+    if (!estatusPermiteVerificacionEntrega(estatus)) {
+      onError?.('Solo puede verificar equipos con estatus REPARADO.')
+      return
+    }
+    if (verificadoEntrega) return
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) {
+      onError?.('No hay número de orden cargado.')
+      return
+    }
+    setMarcandoVerificacion(true)
+    const patch = patchVerificadoEntrega(true)
+    try {
+      if (supabase) {
+        await actualizarReparacionSupabase(supabase, id, patch)
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        )
+      }
+      setVerificadoEntrega(true)
+      setFechaVerificacionEntrega(patch.fecha_verificacion_entrega)
+      onNotice?.('Equipo verificado. Ya puede marcar la orden como ENTREGADO.')
+    } catch (e) {
+      onError?.(`No se pudo guardar la verificación: ${e.message}`)
+    } finally {
+      setMarcandoVerificacion(false)
+    }
+  }
+
+  async function quitarVerificacionEntrega() {
+    if (estatusEsEntregado(estatus)) return
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) return
+    setMarcandoVerificacion(true)
+    const patch = patchVerificadoEntrega(false)
+    try {
+      if (supabase) {
+        await actualizarReparacionSupabase(supabase, id, patch)
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        )
+      }
+      setVerificadoEntrega(false)
+      setFechaVerificacionEntrega(null)
+      onNotice?.('Verificación de entrega quitada.')
+    } catch (e) {
+      onError?.(`No se pudo quitar la verificación: ${e.message}`)
+    } finally {
+      setMarcandoVerificacion(false)
+    }
+  }
+
   async function actualizarOrden() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
@@ -749,6 +828,14 @@ export default function ReparacionesOrden({
     actualizandoRef.current = true
     setActualizandoOrden(true)
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
+    if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
+      onError?.(
+        'Debe verificar el equipo (botón «Verificar listo para entrega») antes de marcar la orden como ENTREGADO.',
+      )
+      actualizandoRef.current = false
+      setActualizandoOrden(false)
+      return
+    }
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const repActual = {
@@ -766,6 +853,16 @@ export default function ReparacionesOrden({
       niveles_tinta: niveles,
       updated_at: now,
       ...patchFechasHitosEstatus(estatusGuardar, repActual),
+      verificado_entrega: estatusEsEntregado(estatusGuardar)
+        ? true
+        : estatusEsReparado(estatusGuardar)
+          ? verificadoEntrega
+          : false,
+      fecha_verificacion_entrega: estatusEsEntregado(estatusGuardar)
+        ? fechaVerificacionEntrega || now
+        : estatusEsReparado(estatusGuardar) && verificadoEntrega
+          ? fechaVerificacionEntrega || now
+          : null,
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
@@ -1537,12 +1634,22 @@ export default function ReparacionesOrden({
               onChange={(e) => {
                 const v = e.target.value
                 if (!v) return
+                if (estatusEsEntregado(v) && !verificadoEntrega) {
+                  onError?.(
+                    'Primero verifique el equipo con el botón «Verificar listo para entrega».',
+                  )
+                  return
+                }
                 estatusDirtyRef.current = true
                 setEstatus(v)
                 if (!estatusEsEntregado(v)) {
                   setFechaEntregaOrden(null)
                   setCuentaOrden(null)
                   setYmdEntregaDesdePagos(null)
+                }
+                if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
+                  setVerificadoEntrega(false)
+                  setFechaVerificacionEntrega(null)
                 }
               }}
             >
@@ -1555,6 +1662,77 @@ export default function ReparacionesOrden({
             </select>
           </div>
         </div>
+
+        {(esOrdenExistente || idReparacion != null) && !estatusEsEntregado(estatus) ? (
+          <div
+            className={`rep-verificacion-entrega${verificadoEntrega ? ' rep-verificacion-entrega--ok' : ''}`}
+            role="status"
+            aria-live="polite"
+          >
+            {verificadoEntrega ? (
+              <>
+                <p className="rep-verificacion-entrega-msg">
+                  ✓ Equipo verificado — listo para entrega al cliente
+                  {fechaVerificacionEntrega
+                    ? ` · ${formatFechaLegibleEsMx(fechaVerificacionEntrega, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}`
+                    : ''}
+                </p>
+                {estatusPermiteVerificacionEntrega(estatus) ? (
+                  <button
+                    type="button"
+                    className="secondary rep-verificacion-entrega-quitar"
+                    disabled={marcandoVerificacion}
+                    onClick={() => void quitarVerificacionEntrega()}
+                  >
+                    Quitar verificación
+                  </button>
+                ) : null}
+              </>
+            ) : estatusPermiteVerificacionEntrega(estatus) ? (
+              <>
+                <p className="rep-verificacion-entrega-ayuda muted small">
+                  Revise que la reparación quedó bien antes de entregar al cliente.
+                </p>
+                <button
+                  type="button"
+                  className="btn-verificar-entrega wide"
+                  disabled={marcandoVerificacion}
+                  onClick={() => void marcarVerificadoEntrega()}
+                >
+                  {marcandoVerificacion ? 'Guardando…' : '✓ Verificar listo para entrega'}
+                </button>
+              </>
+            ) : (
+              <p className="rep-verificacion-entrega-pendiente muted small">
+                Cuando el estatus sea <strong>REPARADO</strong>, podrá verificar el equipo antes de marcarlo
+                ENTREGADO.
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        {(esOrdenExistente || idReparacion != null) && estatusEsEntregado(estatus) && verificadoEntrega ? (
+          <div className="rep-verificacion-entrega rep-verificacion-entrega--ok" role="status">
+            <p className="rep-verificacion-entrega-msg">
+              ✓ Equipo verificado antes de la entrega
+              {fechaVerificacionEntrega
+                ? ` · ${formatFechaLegibleEsMx(fechaVerificacionEntrega, {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}`
+                : ''}
+            </p>
+          </div>
+        ) : null}
 
         <div className="rep-block tecnicos-row">
           <label>Técnico(s) asignado(s)</label>

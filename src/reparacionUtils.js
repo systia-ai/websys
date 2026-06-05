@@ -57,6 +57,25 @@ export function estatusEsReparado(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'REPARADO'
 }
 
+/** Marca de verificación previa a entrega (no es un estatus). */
+export function estaVerificadoEntrega(rep) {
+  return rep?.verificado_entrega === true || rep?.verificado_entrega === 1
+}
+
+/** Solo en REPARADO se puede marcar verificación antes de ENTREGADO. */
+export function estatusPermiteVerificacionEntrega(estatus) {
+  return estatusEsReparado(estatus)
+}
+
+export function patchVerificadoEntrega(verificado = true) {
+  const now = new Date().toISOString()
+  return {
+    verificado_entrega: !!verificado,
+    fecha_verificacion_entrega: verificado ? now : null,
+    updated_at: now,
+  }
+}
+
 /**
  * Date en calendario local. Las cadenas `YYYY-MM-DD` no se parsean como UTC
  * (evita mostrar un día menos en México).
@@ -376,6 +395,20 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
     }
     if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
       const { bitacora: _b, ...rest } = payload
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
+    }
+    if ('verificado_entrega' in payload && esErrorColumnaDesconocida(error, 'verificado_entrega')) {
+      const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
+    }
+    if ('fecha_verificacion_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_verificacion_entrega')) {
+      const { fecha_verificacion_entrega: _f, ...rest } = payload
       if (Object.keys(rest).length > 0) {
         payload = rest
         continue
@@ -778,6 +811,11 @@ export async function insertarReparacionSupabase(supabase, row) {
     }
     if ('bitacora' in payload && esErrorColumnaDesconocida(first.error, 'bitacora')) {
       const { bitacora: _b, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('verificado_entrega' in payload && esErrorColumnaDesconocida(first.error, 'verificado_entrega')) {
+      const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
       payload = rest
       continue
     }
