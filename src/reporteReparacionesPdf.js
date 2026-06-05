@@ -45,22 +45,10 @@ function drawResumenReporte(pdf, p, x, y, width, pageH) {
   cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
   const filtroVal = estatusFiltro || 'Todos'
   cy +=
-    drawCampo(
-      pdf,
-      'Filtro estatus',
-      filtroVal,
-      x,
-      cy,
-      anchoCampoResumenPdf(pdf, 'Filtro estatus', filtroVal, width),
-      9,
-      TEMA.descripcion,
-      CAMPO,
-    ) + PDF_GAP
-
-  cy +=
     drawCamposCompactosFila(
       pdf,
       [
+        { label: 'Filtro estatus', value: filtroVal, theme: TEMA.descripcion, minW: 32 },
         { label: 'Total órdenes', value: String(resumen.total), theme: TEMA.orden, minW: 28 },
         { label: 'Activas', value: String(resumen.activas), theme: TEMA.problema, minW: 22 },
         { label: 'Entregadas', value: String(resumen.entregadas), theme: TEMA.pago, minW: 26 },
