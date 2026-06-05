@@ -99,6 +99,93 @@ export function patchVerificadoEntrega(verificado = true) {
   }
 }
 
+function reducirPayloadReparacionTrasError(error, payload) {
+  const msg = String(error?.message ?? error ?? '').toLowerCase()
+  if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
+    throw new Error(
+      'No tiene permiso para actualizar esta orden en la base de datos. Revise la sesión de Supabase o las políticas RLS del proyecto.',
+    )
+  }
+  if ('fecha_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
+    const { fecha_entrega: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('fecha_revision' in payload && esErrorColumnaDesconocida(error, 'fecha_revision')) {
+    const { fecha_revision: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('fecha_reparado' in payload && esErrorColumnaDesconocida(error, 'fecha_reparado')) {
+    const { fecha_reparado: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
+    const { bitacora: _b, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('verificado_entrega' in payload && esErrorColumnaDesconocida(error, 'verificado_entrega')) {
+    const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('fecha_verificacion_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_verificacion_entrega')) {
+    const { fecha_verificacion_entrega: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if (payload.es_orden_duplicada != null && esErrorColumnaDesconocida(error, 'es_orden_duplicada')) {
+    const { es_orden_duplicada: _d, ...rest } = payload
+    return rest
+  }
+  throw error
+}
+
+/**
+ * Marca o quita verificación de entrega y devuelve la fila guardada.
+ * Usa UPDATE … RETURNING para detectar filas no actualizadas (permisos / ID inválido).
+ */
+export async function guardarVerificacionEntregaSupabase(supabase, reparaId, verificado, patchExtra = {}) {
+  let payload = { ...patchVerificadoEntrega(verificado), ...patchExtra }
+  const queriaVerificacion =
+    'verificado_entrega' in payload || 'fecha_verificacion_entrega' in payload
+
+  for (let intento = 0; intento < 6; intento += 1) {
+    const { data, error } = await supabase
+      .from('reparaciones')
+      .update(payload)
+      .eq('id', reparaId)
+      .select('id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_reparado')
+      .maybeSingle()
+
+    if (!error) {
+      if (!data) {
+        throw new Error(
+          `No se pudo actualizar la orden #${reparaId}. Compruebe que existe y que inició sesión en Supabase.`,
+        )
+      }
+      if (
+        queriaVerificacion &&
+        !('verificado_entrega' in payload) &&
+        !('fecha_verificacion_entrega' in payload)
+      ) {
+        throw new Error(
+          'No se pudo guardar la verificación: falta la columna verificado_entrega en Supabase. Ejecute la migración 20260603160000_reparaciones_verificado_entrega.sql.',
+        )
+      }
+      if (verificado && !estaVerificadoEntrega(data)) {
+        throw new Error(
+          'La verificación no quedó guardada en la base de datos. Revise que la migración verificado_entrega esté aplicada en Supabase.',
+        )
+      }
+      if (!verificado && estaVerificadoEntrega(data)) {
+        throw new Error('No se pudo quitar la verificación en la base de datos.')
+      }
+      return data
+    }
+
+    payload = reducirPayloadReparacionTrasError(error, payload)
+  }
+
+  throw new Error('No se pudo guardar la verificación tras varios intentos.')
+}
+
 /**
  * Date en calendario local. Las cadenas `YYYY-MM-DD` no se parsean como UTC
  * (evita mostrar un día menos en México).
@@ -458,60 +545,7 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
       }
       return
     }
-    const msg = String(error.message ?? '').toLowerCase()
-    if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
-      throw new Error(
-        'No tiene permiso para actualizar esta orden en la base de datos. Revise la sesión de Supabase o las políticas RLS del proyecto.',
-      )
-    }
-    if ('fecha_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
-      const { fecha_entrega: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('fecha_revision' in payload && esErrorColumnaDesconocida(error, 'fecha_revision')) {
-      const { fecha_revision: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('fecha_reparado' in payload && esErrorColumnaDesconocida(error, 'fecha_reparado')) {
-      const { fecha_reparado: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
-      const { bitacora: _b, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('verificado_entrega' in payload && esErrorColumnaDesconocida(error, 'verificado_entrega')) {
-      const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if ('fecha_verificacion_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_verificacion_entrega')) {
-      const { fecha_verificacion_entrega: _f, ...rest } = payload
-      if (Object.keys(rest).length > 0) {
-        payload = rest
-        continue
-      }
-    }
-    if (payload.es_orden_duplicada != null && esErrorColumnaDesconocida(error, 'es_orden_duplicada')) {
-      const { es_orden_duplicada: _d, ...rest } = payload
-      payload = rest
-      continue
-    }
-    throw error
+    payload = reducirPayloadReparacionTrasError(error, payload)
   }
   throw new Error('No se pudo actualizar la orden tras varios intentos.')
 }

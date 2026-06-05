@@ -32,6 +32,7 @@ import {
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
+  guardarVerificacionEntregaSupabase,
   agregarEntradaBitacora,
   bloqueaEntregaSinVerificacion,
   corregirEntregadaIndebidaSiAplica,
@@ -195,6 +196,7 @@ export default function ReparacionesOrden({
   const [verificadoEntrega, setVerificadoEntrega] = useState(false)
   const [fechaVerificacionEntrega, setFechaVerificacionEntrega] = useState(null)
   const [marcandoVerificacion, setMarcandoVerificacion] = useState(false)
+  const [errorVerificacion, setErrorVerificacion] = useState('')
   const [ordenRegistrada, setOrdenRegistrada] = useState(() => repIdStrEsOrdenExistente(repIdStr))
   const [idReparacion, setIdReparacion] = useState(() => {
     if (!repIdStrEsOrdenExistente(repIdStr)) return null
@@ -253,6 +255,7 @@ export default function ReparacionesOrden({
   const aplicarVerificacionDesdeReparacion = useCallback((data) => {
     setVerificadoEntrega(estaVerificadoEntrega(data))
     setFechaVerificacionEntrega(data?.fecha_verificacion_entrega ?? null)
+    setErrorVerificacion('')
   }, [])
 
   const fechasHitosBanner = useMemo(() => {
@@ -768,35 +771,49 @@ export default function ReparacionesOrden({
   }
 
   async function marcarVerificadoEntrega() {
-    if (!estatusPermiteVerificacionEntrega(estatus)) {
-      onError?.('Solo puede verificar equipos con estatus REPARADO.')
+    const estatusActual = estatusRef.current ?? estatus
+    setErrorVerificacion('')
+    if (!estatusPermiteVerificacionEntrega(estatusActual)) {
+      const msg = 'Solo puede verificar equipos con estatus REPARADO. Guarde la orden con estatus REPARADO e intente de nuevo.'
+      setErrorVerificacion(msg)
+      onError?.(msg)
       return
     }
-    if (verificadoEntrega) return
+    if (verificadoEntrega) {
+      onNotice?.('Esta orden ya está verificada.')
+      return
+    }
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) {
-      onError?.('No hay número de orden cargado.')
+      const msg = 'No hay número de orden cargado.'
+      setErrorVerificacion(msg)
+      onError?.(msg)
       return
     }
     setMarcandoVerificacion(true)
-    const patch = patchVerificadoEntrega(true)
+    const patchExtra = {}
+    if (estatusDirtyRef.current && estatusEsReparado(estatusActual)) {
+      patchExtra.estatus = estatusActual
+      Object.assign(
+        patchExtra,
+        patchFechasHitosEstatus(estatusActual, {
+          fecha_revision: fechaRevisionOrden,
+          fecha_reparado: fechaReparadoOrden,
+        }),
+      )
+    }
     try {
       if (supabase) {
-        await actualizarReparacionSupabase(supabase, id, patch)
-        const { data: guardada, error: eVer } = await supabase
-          .from('reparaciones')
-          .select('verificado_entrega, fecha_verificacion_entrega')
-          .eq('id', id)
-          .maybeSingle()
-        if (eVer) throw eVer
-        if (!estaVerificadoEntrega(guardada)) {
-          throw new Error(
-            'La verificación no quedó guardada en la base de datos. Revise que la migración verificado_entrega esté aplicada en Supabase.',
-          )
-        }
+        const guardada = await guardarVerificacionEntregaSupabase(supabase, id, true, patchExtra)
         setVerificadoEntrega(true)
-        setFechaVerificacionEntrega(guardada?.fecha_verificacion_entrega ?? patch.fecha_verificacion_entrega)
+        setFechaVerificacionEntrega(guardada?.fecha_verificacion_entrega ?? null)
+        if (patchExtra.estatus) {
+          estatusDirtyRef.current = false
+          setEstatus(guardada?.estatus ?? estatusActual)
+          aplicarFechasDesdeReparacion(guardada)
+        }
       } else {
+        const patch = { ...patchVerificadoEntrega(true), ...patchExtra }
         const all = readLs(LS_REP, [])
         writeLs(
           LS_REP,
@@ -804,10 +821,16 @@ export default function ReparacionesOrden({
         )
         setVerificadoEntrega(true)
         setFechaVerificacionEntrega(patch.fecha_verificacion_entrega)
+        if (patchExtra.estatus) {
+          estatusDirtyRef.current = false
+          setEstatus(patchExtra.estatus)
+        }
       }
       onNotice?.('Equipo verificado. Ya puede marcar la orden como ENTREGADO.')
     } catch (e) {
-      onError?.(`No se pudo guardar la verificación: ${e.message}`)
+      const msg = `No se pudo guardar la verificación: ${e.message}`
+      setErrorVerificacion(msg)
+      onError?.(msg)
     } finally {
       setMarcandoVerificacion(false)
     }
@@ -817,23 +840,28 @@ export default function ReparacionesOrden({
     if (estatusEsEntregado(estatus)) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) return
+    setErrorVerificacion('')
     setMarcandoVerificacion(true)
-    const patch = patchVerificadoEntrega(false)
     try {
       if (supabase) {
-        await actualizarReparacionSupabase(supabase, id, patch)
+        const guardada = await guardarVerificacionEntregaSupabase(supabase, id, false)
+        setVerificadoEntrega(false)
+        setFechaVerificacionEntrega(guardada?.fecha_verificacion_entrega ?? null)
       } else {
+        const patch = patchVerificadoEntrega(false)
         const all = readLs(LS_REP, [])
         writeLs(
           LS_REP,
           all.map((r) => (r.id === id ? { ...r, ...patch } : r)),
         )
+        setVerificadoEntrega(false)
+        setFechaVerificacionEntrega(null)
       }
-      setVerificadoEntrega(false)
-      setFechaVerificacionEntrega(null)
       onNotice?.('Verificación de entrega quitada.')
     } catch (e) {
-      onError?.(`No se pudo quitar la verificación: ${e.message}`)
+      const msg = `No se pudo quitar la verificación: ${e.message}`
+      setErrorVerificacion(msg)
+      onError?.(msg)
     } finally {
       setMarcandoVerificacion(false)
     }
@@ -1760,6 +1788,11 @@ export default function ReparacionesOrden({
                 <p className="rep-verificacion-entrega-ayuda muted small">
                   Revise que la reparación quedó bien antes de entregar al cliente.
                 </p>
+                {errorVerificacion ? (
+                  <p className="rep-verificacion-entrega-error error" role="alert">
+                    {errorVerificacion}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className="btn-verificar-entrega wide"
