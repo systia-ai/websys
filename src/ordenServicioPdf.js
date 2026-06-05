@@ -1,4 +1,4 @@
-import { formatFechaLegibleEsMx } from './reparacionUtils.js'
+import { claveCanonicaTipoServicio, formatFechaLegibleEsMx } from './reparacionUtils.js'
 import {
   RECIBO_MM_H,
   RECIBO_PAGE_FORMAT,
@@ -66,26 +66,55 @@ function drawPieOrden(pdf, y, contentW, centerX) {
   return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX)
 }
 
-/** Cliente, no. de orden y fecha en un mismo renglón (recuadros compactos). */
-function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, x, y, totalW) {
-  const gap = 3.5
+function labelTipoServicioPdf(raw) {
+  const canon = claveCanonicaTipoServicio(raw)
+  if (canon) return canon
+  const t = String(raw ?? '').trim()
+  return t || '—'
+}
+
+/** Cliente, no. de orden y tipo de servicio a la izquierda; fecha al final derecho. */
+function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, tipoServicio, x, y, totalW) {
+  const gap = 3
   const hMin = 10
   const nombre = dashIfEmpty(clienteNombre)
   const ordenStr = String(orden ?? '—')
   const fechaStr = dashIfEmpty(fecha)
+  const tipoStr = labelTipoServicioPdf(tipoServicio)
 
-  const blocks = [
-    { label: 'Cliente', value: nombre, theme: TEMA.cliente, min: 24, campo: true },
-    { label: 'No. de Orden', value: ordenStr, theme: TEMA.orden, min: 22, max: 30, campo: false },
-    { label: 'Fecha', value: fechaStr, theme: TEMA.fecha, min: 34, max: 54, campo: false },
+  const blocksLeft = [
+    { label: 'Cliente', value: nombre, theme: TEMA.cliente, min: 20, campo: true },
+    { label: 'No. de Orden', value: ordenStr, theme: TEMA.orden, min: 20, max: 28, campo: false },
+    { label: 'Tipo servicio', value: tipoStr, theme: TEMA.servicio, min: 22, max: 38, campo: false },
   ]
+  const blockFecha = {
+    label: 'Fecha',
+    value: fechaStr,
+    theme: TEMA.fecha,
+    min: 26,
+    max: 46,
+    campo: false,
+  }
 
-  const gapsTotal = gap * (blocks.length - 1)
-  let widths = blocks.map((b) => {
+  const wFecha = Math.min(
+    blockFecha.max,
+    Math.max(
+      blockFecha.min,
+      anchoRecuadroCompacto(pdf, blockFecha.label, blockFecha.value, {
+        min: blockFecha.min,
+        max: blockFecha.max,
+        pad: 7,
+      }),
+    ),
+  )
+  const anchoIzq = totalW - wFecha - gap
+
+  const gapsLeft = gap * (blocksLeft.length - 1)
+  let widthsLeft = blocksLeft.map((b) => {
     if (b.campo) {
       const w = anchoRecuadroCampo(pdf, b.label, b.value, {
         min: b.min,
-        maxW: totalW,
+        maxW: anchoIzq,
         pad: 10,
         labelFontSize: 6.8,
         valueFontSize: 9,
@@ -98,27 +127,33 @@ function drawFilaClienteOrdenFecha(pdf, clienteNombre, orden, fecha, x, y, total
     )
   })
 
-  const sumW = widths.reduce((s, w) => s + w, 0)
-  if (sumW > totalW - gapsTotal) {
-    const scale = (totalW - gapsTotal) / sumW
-    widths = widths.map((w, i) => Math.max(blocks[i].min, w * scale))
-    const sum2 = widths.reduce((s, w) => s + w, 0)
-    if (sum2 > totalW - gapsTotal) {
-      const extra = (sum2 - (totalW - gapsTotal)) / blocks.length
-      widths = widths.map((w) => w - extra)
+  const sumLeft = widthsLeft.reduce((s, w) => s + w, 0)
+  if (sumLeft > anchoIzq - gapsLeft) {
+    const scale = (anchoIzq - gapsLeft) / sumLeft
+    widthsLeft = widthsLeft.map((w, i) => Math.max(blocksLeft[i].min * 0.85, w * scale))
+    const sum2 = widthsLeft.reduce((s, w) => s + w, 0)
+    if (sum2 > anchoIzq - gapsLeft) {
+      const extra = (sum2 - (anchoIzq - gapsLeft)) / blocksLeft.length
+      widthsLeft = widthsLeft.map((w) => w - extra)
     }
   }
 
   let cx = x
   let maxH = 0
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i]
+  for (let i = 0; i < blocksLeft.length; i++) {
+    const b = blocksLeft[i]
     const opts = b.campo ? { ...COMPACT_CAMPO, padX: 2.4 } : { ...COMPACT_CAMPO, padX: 3.2 }
-    const h = drawCampo(pdf, b.label, b.value, cx, y, widths[i], hMin, b.theme, opts)
+    const h = drawCampo(pdf, b.label, b.value, cx, y, widthsLeft[i], hMin, b.theme, opts)
     maxH = Math.max(maxH, h)
-    cx += widths[i] + gap
+    cx += widthsLeft[i] + gap
   }
-  return maxH
+
+  const xFecha = x + totalW - wFecha
+  const hFecha = drawCampo(pdf, blockFecha.label, blockFecha.value, xFecha, y, wFecha, hMin, blockFecha.theme, {
+    ...COMPACT_CAMPO,
+    padX: 3.2,
+  })
+  return Math.max(maxH, hFecha)
 }
 
 /** Serie, tipo y descripción en una fila (recuadros compactos). */
@@ -179,7 +214,8 @@ function drawCamposOrden(pdf, p, x, y, width, maxY) {
   }
 
   ensureSpace(11 + gap)
-  cy += drawFilaClienteOrdenFecha(pdf, cliente.nombre, orden, fecha, x, cy, width) + gap
+  const tipoServ = servicio.tipoReparacion ?? servicio.tipo ?? p.tipoReparacion
+  cy += drawFilaClienteOrdenFecha(pdf, cliente.nombre, orden, fecha, tipoServ, x, cy, width) + gap
 
   ensureSpace(11 + gap)
   cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + gap

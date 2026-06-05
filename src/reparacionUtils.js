@@ -49,6 +49,14 @@ export function estatusEsEntregado(estatus) {
   return /ENTREGAD[OA]\b/i.test(String(estatus ?? '').trim())
 }
 
+export function estatusEsEnRevision(estatus) {
+  return String(estatus ?? '').trim().toUpperCase() === 'EN REVISION'
+}
+
+export function estatusEsReparado(estatus) {
+  return String(estatus ?? '').trim().toUpperCase() === 'REPARADO'
+}
+
 /**
  * Date en calendario local. Las cadenas `YYYY-MM-DD` no se parsean como UTC
  * (evita mostrar un día menos en México).
@@ -146,6 +154,48 @@ export function ymdFechaEntregaParaGuardar(fechaEntregaExistente) {
   return aYmdLocalDesdeRaw(fechaEntregaExistente) || ymdHoyLocal()
 }
 
+/** Fecha en que la orden pasó a EN REVISION. */
+export function fechaRevisionYmd(rep) {
+  return aYmdLocalDesdeRaw(rep?.fecha_revision ?? rep?.fechaRevision)
+}
+
+/** Fecha en que la orden pasó a REPARADO. */
+export function fechaReparadoYmd(rep) {
+  return aYmdLocalDesdeRaw(rep?.fecha_reparado ?? rep?.fechaReparado)
+}
+
+/**
+ * Graba fecha_revision / fecha_reparado la primera vez que entra a ese estatus.
+ * No borra fechas históricas al cambiar a otro estatus.
+ */
+export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
+  const patch = {}
+  const hoy = ymdFechaEntregaParaGuardar(null)
+  if (estatusEsEnRevision(estatusNuevo) && !fechaRevisionYmd(repActual)) {
+    patch.fecha_revision = hoy
+  }
+  if (estatusEsReparado(estatusNuevo) && !fechaReparadoYmd(repActual)) {
+    patch.fecha_reparado = hoy
+  }
+  return patch
+}
+
+/** Hitos de fechas legibles para UI (ingreso, revisión, reparado, entrega). */
+export function fechasHitosOrdenLegibles(rep, { cuentaVinculada = null, ymdDesdePagos = null } = {}) {
+  const fmt = (ymd) =>
+    ymd ? formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  const hitos = []
+  const ing = fechaIngresoYmd(rep)
+  if (ing) hitos.push({ clave: 'ingreso', etiqueta: 'Ingreso', texto: fmt(ing) })
+  const rev = fechaRevisionYmd(rep)
+  if (rev) hitos.push({ clave: 'revision', etiqueta: 'En revisión', texto: fmt(rev) })
+  const repa = fechaReparadoYmd(rep)
+  if (repa) hitos.push({ clave: 'reparado', etiqueta: 'Reparado', texto: fmt(repa) })
+  const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
+  if (ent) hitos.push({ clave: 'entrega', etiqueta: 'Entrega', texto: fmt(ent) })
+  return hitos
+}
+
 function ymdEnRango(ymd, desde, hasta) {
   if (!ymd) return false
   const d = String(desde ?? '').trim()
@@ -187,9 +237,13 @@ function normalizarEstatusOrden(st) {
 export function fechasRangoMonitor(rep, cuentaVinculada = null, ymdDesdePagos = null) {
   const ing = fechaIngresoYmd(rep)
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
+  const rev = fechaRevisionYmd(rep)
+  const repa = fechaReparadoYmd(rep)
   const st = normalizarEstatusOrden(rep?.estatus)
   const fechas = []
   if (ing) fechas.push(ing)
+  if (rev) fechas.push(rev)
+  if (repa) fechas.push(repa)
   if (ent) fechas.push(ent)
   if (ESTATUS_RANGO_USA_ACTUALIZACION.has(st)) {
     const act = aYmdLocalDesdeRaw(rep?.updated_at)
@@ -301,6 +355,27 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
     }
     if ('fecha_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
       const { fecha_entrega: _f, ...rest } = payload
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
+    }
+    if ('fecha_revision' in payload && esErrorColumnaDesconocida(error, 'fecha_revision')) {
+      const { fecha_revision: _f, ...rest } = payload
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
+    }
+    if ('fecha_reparado' in payload && esErrorColumnaDesconocida(error, 'fecha_reparado')) {
+      const { fecha_reparado: _f, ...rest } = payload
+      if (Object.keys(rest).length > 0) {
+        payload = rest
+        continue
+      }
+    }
+    if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
+      const { bitacora: _b, ...rest } = payload
       if (Object.keys(rest).length > 0) {
         payload = rest
         continue
@@ -683,15 +758,32 @@ export function filaReparacionSinCampoDuplicada(row) {
  * Inserta en `reparaciones`. Si la columna es_orden_duplicada no existe, reintenta sin ese campo.
  */
 export async function insertarReparacionSupabase(supabase, row) {
-  const first = await supabase.from('reparaciones').insert(row).select('id').single()
-  if (!first.error) return first.data
-  if (esErrorColumnaEsOrdenDuplicada(first.error)) {
-    const sinDup = filaReparacionSinCampoDuplicada(row)
-    const retry = await supabase.from('reparaciones').insert(sinDup).select('id').single()
-    if (!retry.error) return retry.data
-    throw retry.error
+  let payload = { ...row }
+  for (let intento = 0; intento < 6; intento += 1) {
+    const first = await supabase.from('reparaciones').insert(payload).select('id').single()
+    if (!first.error) return first.data
+    if (esErrorColumnaEsOrdenDuplicada(first.error)) {
+      payload = filaReparacionSinCampoDuplicada(payload)
+      continue
+    }
+    if ('fecha_revision' in payload && esErrorColumnaDesconocida(first.error, 'fecha_revision')) {
+      const { fecha_revision: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('fecha_reparado' in payload && esErrorColumnaDesconocida(first.error, 'fecha_reparado')) {
+      const { fecha_reparado: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('bitacora' in payload && esErrorColumnaDesconocida(first.error, 'bitacora')) {
+      const { bitacora: _b, ...rest } = payload
+      payload = rest
+      continue
+    }
+    throw first.error
   }
-  throw first.error
+  throw new Error('No se pudo insertar la orden tras varios intentos.')
 }
 
 const LS_INSERT_LOCK = 'sistefix_rep_insert_lock'

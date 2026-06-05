@@ -25,15 +25,15 @@ import {
   esOrdenDuplicada,
   estatusEsEntregado,
   ejecutarInsercionOrdenUnica,
-  fechaEntregaYmd,
-  fechaIngresoYmd,
   finalizarBloqueoInsercionPestana,
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
   corregirEntregadaIndebidaSiAplica,
+  fechasHitosOrdenLegibles,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   liquidarCuentaPagadaAlEntregarOrden,
+  patchFechasHitosEstatus,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -179,6 +179,7 @@ export default function ReparacionesOrden({
   const [nivelMlight, setNivelMlight] = useState('')
   const [nivelClight, setNivelClight] = useState('')
   const [descripcionSolucion, setDescripcionSolucion] = useState('')
+  const [bitacora, setBitacora] = useState('')
   const [ordenRegistrada, setOrdenRegistrada] = useState(() => repIdStrEsOrdenExistente(repIdStr))
   const [idReparacion, setIdReparacion] = useState(() => {
     if (!repIdStrEsOrdenExistente(repIdStr)) return null
@@ -216,6 +217,8 @@ export default function ReparacionesOrden({
   /** ISO de `fecha_creacion` de la reparación (mensaje WhatsApp y PDF). */
   const [fechaCreacionOrden, setFechaCreacionOrden] = useState(null)
   const [fechaIngresoOrden, setFechaIngresoOrden] = useState(null)
+  const [fechaRevisionOrden, setFechaRevisionOrden] = useState(null)
+  const [fechaReparadoOrden, setFechaReparadoOrden] = useState(null)
   const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
   const [cuentaOrden, setCuentaOrden] = useState(null)
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
@@ -224,24 +227,25 @@ export default function ReparacionesOrden({
 
   const puedeEnviarPagoTotalWa = puedeEnviarPagoTotalWhatsApp(cuentaOrden, estatus)
 
-  const fechasEntregaBanner = useMemo(() => {
-    if (!estatusEsEntregado(estatus)) return null
+  const fechasHitosBanner = useMemo(() => {
     const rep = {
       estatus,
       fecha_ingreso: fechaIngresoOrden,
       fecha_creacion: fechaCreacionOrden,
+      fecha_revision: fechaRevisionOrden,
+      fecha_reparado: fechaReparadoOrden,
       fecha_entrega: fechaEntregaOrden,
     }
-    const ymdIng = fechaIngresoYmd(rep)
-    const ymdEnt = fechaEntregaYmd(rep, cuentaOrden, ymdEntregaDesdePagos)
-    return {
-      ingreso: ymdIng ? formatFechaOrdenMensaje(ymdIng) : '—',
-      entrega: ymdEnt ? formatFechaOrdenMensaje(ymdEnt) : '—',
-    }
+    return fechasHitosOrdenLegibles(rep, {
+      cuentaVinculada: cuentaOrden,
+      ymdDesdePagos: ymdEntregaDesdePagos,
+    })
   }, [
     estatus,
     fechaIngresoOrden,
     fechaCreacionOrden,
+    fechaRevisionOrden,
+    fechaReparadoOrden,
     fechaEntregaOrden,
     cuentaOrden,
     ymdEntregaDesdePagos,
@@ -250,6 +254,12 @@ export default function ReparacionesOrden({
   const aplicarFechasDesdeReparacion = useCallback((data) => {
     setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
     setFechaIngresoOrden(data.fecha_ingreso ?? data.fechaIngreso ?? null)
+    setFechaRevisionOrden(
+      aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null),
+    )
+    setFechaReparadoOrden(
+      aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null),
+    )
     setFechaEntregaOrden(
       aYmdLocalDesdeRaw(
         data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
@@ -366,6 +376,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setBitacora(data.bitacora ?? '')
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -416,6 +427,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setBitacora(data.bitacora ?? '')
         aplicarFechasDesdeReparacion(data)
         const [t1, t2] = separarTecnicos(data.tecnico)
         setTecnico1(t1)
@@ -654,6 +666,7 @@ export default function ReparacionesOrden({
         fecha_creacion: now,
         updated_at: now,
         tipo_reparacion: tipoReparacion || null,
+        ...patchFechasHitosEstatus(estatus, {}),
       }
 
       existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
@@ -738,15 +751,21 @@ export default function ReparacionesOrden({
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
+    const repActual = {
+      fecha_revision: fechaRevisionOrden,
+      fecha_reparado: fechaReparadoOrden,
+    }
     const patch = {
       estatus: estatusGuardar,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
       descripcion_equipo: descripcionEquipo || null,
       problemas_reportados: problemasReportados || null,
       descripcion_solucion: descripcionSolucion ? descripcionSolucion.toUpperCase() : null,
+      bitacora: bitacora.trim() || null,
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
+      ...patchFechasHitosEstatus(estatusGuardar, repActual),
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
@@ -760,7 +779,7 @@ export default function ReparacionesOrden({
         await actualizarReparacionSupabase(supabase, id, patch)
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
-          .select('fecha_entrega, estatus, updated_at')
+          .select('fecha_entrega, fecha_revision, fecha_reparado, estatus, updated_at')
           .eq('id', id)
           .maybeSingle()
         if (!eVer && guardada) {
@@ -1334,9 +1353,13 @@ export default function ReparacionesOrden({
       ) : null}
 
       <div className="rep-scroll">
-        {fechasEntregaBanner ? (
-          <div className="rep-orden-fechas-entrega-banner" role="status" aria-live="polite">
-            Ingresada ({fechasEntregaBanner.ingreso}) &amp; entregada ({fechasEntregaBanner.entrega})
+        {fechasHitosBanner.length > 0 ? (
+          <div className="rep-orden-fechas-hitos-banner" role="status" aria-live="polite">
+            {fechasHitosBanner.map((h) => (
+              <span key={h.clave} className="rep-orden-fecha-hito">
+                {h.etiqueta}: <strong>{h.texto}</strong>
+              </span>
+            ))}
           </div>
         ) : null}
         <div className="rep-block highlight">
@@ -1566,6 +1589,18 @@ export default function ReparacionesOrden({
               onChange={(e) => setDescripcionSolucion(e.target.value)}
               placeholder="Descripcion de la solucion"
               style={{ textTransform: 'uppercase' }}
+            />
+          </div>
+        )}
+
+        {(esOrdenExistente || idReparacion != null) && (
+          <div className="rep-block rep-block--bitacora">
+            <label>Bitácora</label>
+            <textarea
+              rows={4}
+              value={bitacora}
+              onChange={(e) => setBitacora(e.target.value)}
+              placeholder="Notas internas de seguimiento (taller)"
             />
           </div>
         )}

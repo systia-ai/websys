@@ -9,6 +9,8 @@ import {
   estatusEsEntregado,
   fechaEntregaYmd,
   fechaIngresoYmd,
+  fechaReparadoYmd,
+  fechaRevisionYmd,
   repCoincideFiltroMonitor,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
@@ -364,11 +366,15 @@ export default function MonitorOrdenesModulo({
       const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
       const ymdIng = fechaIngresoYmd(r)
       const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
+      const ymdRev = fechaRevisionYmd(r)
+      const ymdRep = fechaReparadoYmd(r)
       const t = fechaIngresoTime(r)
       return {
         rep: r,
         t,
         ymd: ymdIng,
+        ymdRevision: ymdRev,
+        ymdReparado: ymdRep,
         ymdEntrega: ymdEnt,
         dias: diasEnTaller(r),
         cuenta,
@@ -397,7 +403,14 @@ export default function MonitorOrdenesModulo({
       if (ta !== tb) return ordenFecha === 'asc' ? ta - tb : tb - ta
       return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
     })
-    return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({ rep, ymd, ymdEntrega, dias }))
+    return conTiempo.map(({ rep, ymd, ymdRevision, ymdReparado, ymdEntrega, dias }) => ({
+      rep,
+      ymd,
+      ymdRevision,
+      ymdReparado,
+      ymdEntrega,
+      dias,
+    }))
   }, [
     reparaciones,
     estatusSeleccionados,
@@ -853,6 +866,8 @@ export default function MonitorOrdenesModulo({
                     <thead>
                       <tr>
                         <th>Fecha ingreso</th>
+                        <th>En revisión</th>
+                        <th>Reparado</th>
                         <th>Fecha entrega</th>
                         <th>Días</th>
                         <th>No. orden</th>
@@ -867,7 +882,7 @@ export default function MonitorOrdenesModulo({
                       </tr>
                     </thead>
                     <tbody>
-                      {filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
+                      {filasOrdenadas.map(({ rep, ymd, ymdRevision, ymdReparado, ymdEntrega, dias }) => {
                         const { tipo, desc } = datosEquipo(rep)
                         const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
                         const tech = String(rep.tecnico ?? '').trim()
@@ -889,6 +904,12 @@ export default function MonitorOrdenesModulo({
                           >
                             <td className="monitor-ordenes-fecha-ingreso cuentas-cliente-tabla-fecha">
                               {formatearFechaMostrar(ymd)}
+                            </td>
+                            <td className="monitor-ordenes-fecha-revision cuentas-cliente-tabla-fecha">
+                              {ymdRevision ? formatearFechaMostrar(ymdRevision) : '—'}
+                            </td>
+                            <td className="monitor-ordenes-fecha-reparado cuentas-cliente-tabla-fecha">
+                              {ymdReparado ? formatearFechaMostrar(ymdReparado) : '—'}
                             </td>
                             <td
                               className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${ent && ymdEntrega ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}

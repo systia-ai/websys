@@ -63,6 +63,7 @@ export const TEMA = {
   tipo: { fill: [224, 247, 250], border: [0, 151, 167], label: [0, 121, 137] },
   descripcion: { fill: [240, 248, 255], border: [100, 181, 246], label: [30, 136, 229] },
   problema: { fill: [255, 248, 225], border: [255, 167, 38], label: [230, 126, 34] },
+  servicio: { fill: [243, 229, 245], border: [142, 36, 170], label: [123, 31, 162] },
   pago: { fill: [232, 245, 233], border: [56, 142, 60], label: [27, 94, 32] },
 }
 

@@ -1087,7 +1087,7 @@ export default function VentasCuentaScreen({
         cliente: { nombre: cliente.nombre, telefono: cliente.telefono },
         orden: reciboOrdenEquipo?.orden ?? reparaIdCuenta ?? null,
         descripcionEquipo: reciboOrdenEquipo?.descripcionEquipo ?? '',
-        total: totalStr,
+        total: totalCargos.toFixed(2),
         saldo: balanceNeto.toFixed(2),
         estatus: cuentaEstatus || '—',
         lineas,

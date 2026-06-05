@@ -130,9 +130,24 @@ function drawFilaClienteOrdenEquipo(pdf, p, x, y, totalW) {
 
 const GAP_TOTAL_SALDO = 2.5
 
+function parseMontoRecibo(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const s = String(value ?? '')
+    .trim()
+    .replace(/[$,\s]/g, '')
+  const v = Number(s)
+  return Number.isFinite(v) ? v : 0
+}
+
+function totalCargosDesdeLineasRecibo(lineas) {
+  return (lineas ?? [])
+    .filter((l) => l.tipo !== 'pago')
+    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+}
+
 /** Formato moneda; negativo = anticipo / saldo a favor (ej. -$200.00). */
 function formatMontoRecibo(value) {
-  const v = Number(value)
+  const v = parseMontoRecibo(value)
   if (!Number.isFinite(v)) return '$0.00'
   const abs = Math.abs(v).toFixed(2)
   if (v < -0.0001) return `-$${abs}`
@@ -142,7 +157,7 @@ function formatMontoRecibo(value) {
 /** Total y saldo debajo de la tabla (alineados a la derecha). @returns {number} altura en mm */
 function drawTotalesRecibo(pdf, total, saldo, x, y, width) {
   const totalVal = formatMontoRecibo(total)
-  const saldoNum = Number(saldo)
+  const saldoNum = parseMontoRecibo(saldo)
   const saldoVal = formatMontoRecibo(saldoNum)
   const wTotal = Math.min(
     width * 0.5,
@@ -333,7 +348,13 @@ export function createReciboCuentaPdf(p) {
   }
 
   y += GAP_ANTES_TOTAL
-  const totalesH = drawTotalesRecibo(pdf, p.total, p.saldo ?? 0, MARGIN, y, contentW)
+  let totalRecibo = parseMontoRecibo(p.total)
+  const saldoRecibo = parseMontoRecibo(p.saldo ?? 0)
+  const cargosLineas = totalCargosDesdeLineasRecibo(p.lineas)
+  if (cargosLineas > 0.0001 && Math.abs(totalRecibo) < 0.0001) {
+    totalRecibo = cargosLineas
+  }
+  const totalesH = drawTotalesRecibo(pdf, totalRecibo, saldoRecibo, MARGIN, y, contentW)
   y += totalesH + GAP_TOTAL_LEYENDA
   drawPieRecibo(pdf, y, contentW, centerX)
 

@@ -111,10 +111,9 @@ export function createEtiquetaPdf(p) {
   const boxX = rightColLeft
   const boxY = contentY + (contentH - boxH) / 2
 
-  pdf.setFillColor(227, 242, 253)
-  pdf.setDrawColor(25, 118, 210)
-  pdf.setLineWidth(0.4)
-  pdf.roundedRect(boxX, boxY, boxW, boxH, 1.1, 1.1, 'FD')
+  pdf.setDrawColor(0, 0, 0)
+  pdf.setLineWidth(0.35)
+  pdf.roundedRect(boxX, boxY, boxW, boxH, 1.1, 1.1, 'S')
 
   const maxNumW = boxW - boxPad * 2
   const labelOrd = 'ORD.'
@@ -144,10 +143,9 @@ export function createEtiquetaPdf(p) {
   const yNum = yLabel + gapLabelNum + numLineMm * 0.9
   const cx = boxX + boxW / 2
 
-  pdf.setTextColor(13, 71, 161)
+  pdf.setTextColor(0, 0, 0)
   pdf.setFontSize(labelPt)
   pdf.text(labelOrd, cx, yLabel, { align: 'center' })
-  pdf.setTextColor(21, 101, 192)
   pdf.setFontSize(numPt)
   pdf.text(ordStr, cx, yNum, { align: 'center' })
 

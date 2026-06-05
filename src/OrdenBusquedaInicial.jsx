@@ -279,15 +279,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
           <h2 className="orden-busqueda-titulo">Buscar orden de servicio</h2>
         </header>
 
-        <div className="orden-busqueda-tip orden-busqueda-tip--lector">
-          <span className="orden-busqueda-tip-ico" aria-hidden="true">
-            📷
-          </span>
-          <p>
-            <strong>Lector óptico</strong>: escanee en el campo de búsqueda (los saltos de línea se normalizan al buscar).
-          </p>
-        </div>
-
         <label className="orden-busqueda-campo">
           <span className="orden-busqueda-campo-label">
             <span className="orden-busqueda-campo-ico" aria-hidden="true">

@@ -518,18 +518,23 @@ td {
   color: #4b5563;
 }
 
-.rep-card-fechas {
+.rep-card .rep-card-fechas {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 4px;
+  align-items: center;
+  gap: 10px 28px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #dbeafe;
 }
 
-.rep-card-fechas span {
-  display: inline;
+.rep-card .rep-card-fechas > span {
+  display: inline-flex;
+  align-items: center;
   font-size: 0.84rem;
   color: #1e40af;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .modal-footer {
@@ -4839,11 +4844,6 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
-.orden-busqueda-tip--lector {
-  border-color: #90caf9;
-  background: linear-gradient(180deg, #ffffff 0%, #e3f2fd 100%);
-}
-
 .orden-busqueda-tip--ayuda {
   border-color: #81d4fa;
   background: linear-gradient(180deg, #f0f9ff 0%, #e1f5fe 100%);
@@ -5488,6 +5488,26 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   text-align: center;
 }
 
+.rep-orden-fechas-hitos-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 20px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #90caf9;
+  background: linear-gradient(180deg, #e3f2fd 0%, #f5fbff 100%);
+  color: #0d47a1;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.rep-orden-fecha-hito strong {
+  font-weight: 800;
+}
+
 .rep-block {
   display: flex;
   flex-direction: column;
@@ -5539,6 +5559,26 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 .rep-block.highlight label {
   color: #1976d2;
   font-size: 1rem;
+}
+
+.rep-block--bitacora label {
+  color: #e65100;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.rep-block--bitacora textarea {
+  background: #fff8e1;
+  border: 2px solid #ffb300;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  min-height: 5.5rem;
+}
+
+.rep-block--bitacora textarea:focus {
+  outline: none;
+  border-color: #ff8f00;
+  box-shadow: 0 0 0 3px rgba(255, 179, 0, 0.28);
 }
 
 .rep-subtitle {

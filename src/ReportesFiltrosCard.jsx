@@ -71,13 +71,6 @@ export default function ReportesFiltrosCard({
         </span>
         <h2 className="corte-caja-hero-titulo">Filtros del reporte</h2>
       </header>
-      <p className="corte-caja-hero-tip">
-        <span className="corte-caja-hero-tip-ico" aria-hidden="true">
-          💡
-        </span>
-        Rango de fechas y estatus a incluir (puede elegir varios). Use «Fecha ingresado» o «Fecha entrega» para
-        filtrar solo por esa fecha en el rango, como en el monitor de órdenes.
-      </p>
 
       <div className="corte-caja-fechas-grid reportes-filtros-fechas">
         <label className="corte-caja-fecha-campo">

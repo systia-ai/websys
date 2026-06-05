@@ -7,7 +7,7 @@ import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares, buscarEquiposPorSerieExacta } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
-import { fechaEntregaYmd, fechaIngresoYmd, formatFechaLegibleEsMx } from './reparacionUtils.js'
+import { fechasHitosOrdenLegibles } from './reparacionUtils.js'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -36,12 +36,7 @@ function writeLs(key, val) {
 }
 
 function fechasReparacionEtiquetas(rep) {
-  const fmt = (ymd) =>
-    ymd ? formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
-  return {
-    ingreso: fmt(fechaIngresoYmd(rep)),
-    entrega: fmt(fechaEntregaYmd(rep)),
-  }
+  return fechasHitosOrdenLegibles(rep)
 }
 
 function snapshotEquipoRetorno(eq) {
@@ -1141,8 +1136,11 @@ export default function ServiciosEquipos({
                     {rep.descripcion_equipo ? <span>{rep.descripcion_equipo}</span> : null}
                     {rep.problemas_reportados ? <span>{rep.problemas_reportados}</span> : null}
                     <span className="rep-card-fechas">
-                      <span>Ingreso: {fechas.ingreso}</span>
-                      <span>Entrega: {fechas.entrega}</span>
+                      {fechas.map((f) => (
+                        <span key={f.clave}>
+                          {f.etiqueta}: {f.texto}
+                        </span>
+                      ))}
                     </span>
                     <span className={`estatus estatus-${String(rep.estatus ?? '').replace(/\s+/g, '_')}`}>
                       Estado: {rep.estatus ?? 'Sin estado'}
