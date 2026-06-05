@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react'
-import { ESTATUS_ORDEN } from './catalogos.js'
+import { useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
@@ -129,11 +128,10 @@ async function cargarTablas(supabase) {
 
 /**
  * Primera pantalla de Orden de servicio (como OrdenesScreen.kt antes de `ordenSeleccionada`):
- * No de orden, estatus, buscar; sin número → diálogo de rango de fechas (Android); lista y al elegir → sesión para ReparacionesOrden.
+ * No de orden, buscar; sin número → diálogo de rango de fechas (Android); lista y al elegir → sesión para ReparacionesOrden.
  */
 export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onError }) {
   const [numeroOrden, setNumeroOrden] = useState('')
-  const [estatus, setEstatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [modalFechas, setModalFechas] = useState(false)
   const [fechaIni, setFechaIni] = useState(todayDdMmYyyy)
@@ -142,8 +140,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
   const [tituloResultados, setTituloResultados] = useState('')
   const [subtituloResultados, setSubtituloResultados] = useState('')
   const [resultados, setResultados] = useState([])
-
-  const estatusLista = useMemo(() => ESTATUS_ORDEN, [])
 
   function abrirBuscar() {
     const raw = numeroOrden.replace(/\r/g, '').replace(/\n/g, ' ')
@@ -158,7 +154,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
   }
 
   async function ejecutarBusquedaPorNumero(no) {
-    const st = estatus.trim()
     setLoading(true)
     try {
       const { reps, clientes, equipos } = await cargarTablas(supabase)
@@ -169,15 +164,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
       if (esSoloEntero) {
         const rep = reps.find((r) => sameId(r.id, asInt))
         if (!rep) {
-          onError?.(
-            st
-              ? `No se encontró orden con ID: ${no} y estatus: ${st}`
-              : `No se encontró orden con ID: ${no}`,
-          )
-          return
-        }
-        if (st && String(rep.estatus ?? '').toUpperCase() !== st.toUpperCase()) {
-          onError?.(`No se encontró orden con ID: ${no} y estatus: ${st}`)
+          onError?.(`No se encontró orden con ID: ${no}`)
           return
         }
         lista = [mapConClienteRow(rep, clientes, equipos)]
@@ -187,25 +174,16 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
         lista = reps
           .filter((r) => repCoincideBusquedaTexto(r, no, clientes, equipos))
           .map((r) => mapConClienteRow(r, clientes, equipos))
-        if (st) {
-          lista = lista.filter((row) => String(row.rep.estatus ?? '').toUpperCase() === st.toUpperCase())
-        }
         setTituloResultados(`Órdenes Encontradas (${lista.length})`)
         setSubtituloResultados(
           lista.length
             ? 'Selecciona una orden para cargar sus datos:'
-            : st
-              ? `No se encontraron órdenes con '${no}' y estatus '${st}'`
-              : `No se encontraron órdenes con: ${no}`,
+            : `No se encontraron órdenes con: ${no}`,
         )
       }
 
       if (!lista.length) {
-        onError?.(
-          st
-            ? `No se encontraron órdenes con '${no}' y estatus '${st}'`
-            : `No se encontraron órdenes con: ${no}`,
-        )
+        onError?.(`No se encontraron órdenes con: ${no}`)
         return
       }
       setResultados(lista)
@@ -218,7 +196,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
   }
 
   async function ejecutarBusquedaPorFechas() {
-    const st = estatus.trim()
     const ymdIni = ddMmYyyyToYmd(fechaIni)
     const ymdFin = ddMmYyyyToYmd(fechaFin)
     if (!ymdIni || !ymdFin) {
@@ -237,22 +214,16 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
         .filter((r) => {
           const ymd = fechaReparacionYmd(r)
           if (!ymd) return false
-          if (ymd < ymdIni || ymd > ymdFin) return false
-          if (st) return String(r.estatus ?? '').toUpperCase() === st.toUpperCase()
-          return true
+          return ymd >= ymdIni && ymd <= ymdFin
         })
         .map((r) => mapConClienteRow(r, clientes, equipos))
 
-      setTituloResultados(
-        st
-          ? `Órdenes ${st} (${fechaIni} - ${fechaFin}) (${lista.length})`
-          : `Órdenes en rango (${fechaIni} - ${fechaFin}) (${lista.length})`,
-      )
+      setTituloResultados(`Órdenes en rango (${fechaIni} - ${fechaFin}) (${lista.length})`)
       setSubtituloResultados(
-        lista.length ? 'Selecciona una orden para cargar sus datos:' : 'No se encontraron órdenes en el rango y estatus seleccionados.',
+        lista.length ? 'Selecciona una orden para cargar sus datos:' : 'No se encontraron órdenes en el rango seleccionado.',
       )
       if (!lista.length) {
-        onError?.('No se encontraron órdenes en el rango de fechas y estatus seleccionados')
+        onError?.('No se encontraron órdenes en el rango de fechas seleccionado')
         return
       }
       setResultados(lista)
@@ -297,27 +268,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
           </div>
         </label>
 
-        <label className="orden-busqueda-campo">
-          <span className="orden-busqueda-campo-label">
-            <span className="orden-busqueda-campo-ico" aria-hidden="true">
-              📌
-            </span>
-            Estatus
-          </span>
-          <div className="orden-busqueda-input-wrap">
-            <input
-              value={estatus}
-              onChange={(e) => setEstatus(e.target.value.toUpperCase())}
-              placeholder="Opcional — ej. ENTREGADO"
-              list="estatus-orden-busqueda"
-            />
-          </div>
-          <datalist id="estatus-orden-busqueda">
-            {estatusLista.map((x) => (
-              <option key={x} value={x} />
-            ))}
-          </datalist>
-        </label>
         <button type="button" className="btn-buscar-orden" disabled={loading} onClick={abrirBuscar}>
           {loading ? '⏳ Buscando…' : '🔍 Buscar orden de servicio'}
         </button>

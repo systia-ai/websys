@@ -9,8 +9,6 @@ import {
   estatusEsEntregado,
   fechaEntregaYmd,
   fechaIngresoYmd,
-  fechaReparadoYmd,
-  fechaRevisionYmd,
   repCoincideFiltroMonitor,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
@@ -165,12 +163,14 @@ export default function MonitorOrdenesModulo({
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
   /** Rango de fechas (arriba); lo usan los modos «Fecha ingresado» / «Fecha entrega». */
-  const [fechaDesde, setFechaDesde] = useState('')
-  const [fechaHasta, setFechaHasta] = useState('')
+  const [fechaDesde, setFechaDesde] = useState(() => ymdHoyLocal() ?? '')
+  const [fechaHasta, setFechaHasta] = useState(() => ymdHoyLocal() ?? '')
   /** Activo: filtra por ingreso en el rango superior (ignora estatus). */
   const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
   /** Activo: filtra por entrega en el rango superior (ignora estatus). */
   const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
+  /** Activo: órdenes verificadas listas para entrega (ignora estatus). */
+  const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(false)
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
   const [busqueda, setBusqueda] = useState('')
 
@@ -297,9 +297,13 @@ export default function MonitorOrdenesModulo({
     ? 'ingreso'
     : filtroModoFechaEntrega
       ? 'entrega'
-      : null
+      : filtroModoVerificadas
+        ? 'verificadas'
+        : null
   const filtroRangoSuperiorActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
-  const modoFechaSinRango = Boolean(modoFechaActivo && !filtroRangoSuperiorActivo)
+  const modoFechaSinRango = Boolean(
+    (filtroModoFechaIngreso || filtroModoFechaEntrega) && !filtroRangoSuperiorActivo,
+  )
 
   const filasOrdenadas = useMemo(() => {
     if (hayRangoFechaInvalido || modoFechaSinRango) return []
@@ -366,15 +370,11 @@ export default function MonitorOrdenesModulo({
       const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
       const ymdIng = fechaIngresoYmd(r)
       const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
-      const ymdRev = fechaRevisionYmd(r)
-      const ymdRep = fechaReparadoYmd(r)
       const t = fechaIngresoTime(r)
       return {
         rep: r,
         t,
         ymd: ymdIng,
-        ymdRevision: ymdRev,
-        ymdReparado: ymdRep,
         ymdEntrega: ymdEnt,
         dias: diasEnTaller(r),
         cuenta,
@@ -403,11 +403,9 @@ export default function MonitorOrdenesModulo({
       if (ta !== tb) return ordenFecha === 'asc' ? ta - tb : tb - ta
       return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
     })
-    return conTiempo.map(({ rep, ymd, ymdRevision, ymdReparado, ymdEntrega, dias }) => ({
+    return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({
       rep,
       ymd,
-      ymdRevision,
-      ymdReparado,
       ymdEntrega,
       dias,
     }))
@@ -421,6 +419,7 @@ export default function MonitorOrdenesModulo({
     fechaHasta,
     filtroModoFechaIngreso,
     filtroModoFechaEntrega,
+    filtroModoVerificadas,
     modoFechaActivo,
     busqueda,
     clientes,
@@ -444,13 +443,20 @@ export default function MonitorOrdenesModulo({
   function seleccionarSolo(est) {
     setFiltroModoFechaIngreso(false)
     setFiltroModoFechaEntrega(false)
+    setFiltroModoVerificadas(false)
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
+  }
+
+  function desactivarModosFechaEspeciales(excepto = null) {
+    if (excepto !== 'ingreso') setFiltroModoFechaIngreso(false)
+    if (excepto !== 'entrega') setFiltroModoFechaEntrega(false)
+    if (excepto !== 'verificadas') setFiltroModoVerificadas(false)
   }
 
   function toggleModoFechaIngreso() {
     setFiltroModoFechaIngreso((prev) => {
       const next = !prev
-      if (next) setFiltroModoFechaEntrega(false)
+      if (next) desactivarModosFechaEspeciales('ingreso')
       return next
     })
   }
@@ -458,19 +464,32 @@ export default function MonitorOrdenesModulo({
   function toggleModoFechaEntrega() {
     setFiltroModoFechaEntrega((prev) => {
       const next = !prev
-      if (next) setFiltroModoFechaIngreso(false)
+      if (next) desactivarModosFechaEspeciales('entrega')
+      return next
+    })
+  }
+
+  function toggleModoVerificadas() {
+    setFiltroModoVerificadas((prev) => {
+      const next = !prev
+      if (next) desactivarModosFechaEspeciales('verificadas')
       return next
     })
   }
 
   function soloModoFechaIngreso() {
-    setFiltroModoFechaEntrega(false)
+    desactivarModosFechaEspeciales('ingreso')
     setFiltroModoFechaIngreso(true)
   }
 
   function soloModoFechaEntrega() {
-    setFiltroModoFechaIngreso(false)
+    desactivarModosFechaEspeciales('entrega')
     setFiltroModoFechaEntrega(true)
+  }
+
+  function soloModoVerificadas() {
+    desactivarModosFechaEspeciales('verificadas')
+    setFiltroModoVerificadas(true)
   }
 
   function toggleTipoServicio(tipo) {
@@ -545,6 +564,7 @@ export default function MonitorOrdenesModulo({
   const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
   const filtroIngresoActivo = filtroModoFechaIngreso
   const filtroEntregaActivo = filtroModoFechaEntrega
+  const filtroVerificadasActivo = filtroModoVerificadas
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
 
   function badgeEstatus(rep) {
@@ -794,6 +814,29 @@ export default function MonitorOrdenesModulo({
                   Solo
                 </button>
               </label>
+              <label
+                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip monitor-ordenes-tile--verificadas${tileActive(filtroVerificadasActivo)}`}
+              >
+                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                <input
+                  type="checkbox"
+                  className="monitor-ordenes-check-input"
+                  checked={filtroModoVerificadas}
+                  onChange={() => toggleModoVerificadas()}
+                />
+                <span className="monitor-ordenes-check-text">Verificadas</span>
+                <button
+                  type="button"
+                  className="monitor-ordenes-solo"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    soloModoVerificadas()
+                  }}
+                  title="Solo órdenes verificadas listas para entrega al cliente"
+                >
+                  Solo
+                </button>
+              </label>
             </div>
             {modoFechaSinRango ? (
               <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="alert">
@@ -866,8 +909,6 @@ export default function MonitorOrdenesModulo({
                     <thead>
                       <tr>
                         <th>Fecha ingreso</th>
-                        <th>En revisión</th>
-                        <th>Reparado</th>
                         <th>Fecha entrega</th>
                         <th>Días</th>
                         <th>No. orden</th>
@@ -882,7 +923,7 @@ export default function MonitorOrdenesModulo({
                       </tr>
                     </thead>
                     <tbody>
-                      {filasOrdenadas.map(({ rep, ymd, ymdRevision, ymdReparado, ymdEntrega, dias }) => {
+                      {filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
                         const { tipo, desc } = datosEquipo(rep)
                         const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
                         const tech = String(rep.tecnico ?? '').trim()
@@ -904,12 +945,6 @@ export default function MonitorOrdenesModulo({
                           >
                             <td className="monitor-ordenes-fecha-ingreso cuentas-cliente-tabla-fecha">
                               {formatearFechaMostrar(ymd)}
-                            </td>
-                            <td className="monitor-ordenes-fecha-revision cuentas-cliente-tabla-fecha">
-                              {ymdRevision ? formatearFechaMostrar(ymdRevision) : '—'}
-                            </td>
-                            <td className="monitor-ordenes-fecha-reparado cuentas-cliente-tabla-fecha">
-                              {ymdReparado ? formatearFechaMostrar(ymdReparado) : '—'}
                             </td>
                             <td
                               className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${ent && ymdEntrega ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}

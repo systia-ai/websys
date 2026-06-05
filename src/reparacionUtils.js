@@ -67,6 +67,14 @@ export function estatusPermiteVerificacionEntrega(estatus) {
   return estatusEsReparado(estatus)
 }
 
+export const MENSAJE_VERIFICAR_ANTES_ENTREGADO =
+  'Debe verificar el equipo antes de marcar la orden como ENTREGADO. Use el botón «Verificar listo para entrega».'
+
+/** Bloquea ENTREGADO si la orden está REPARADA y aún no se verificó el equipo. */
+export function bloqueaEntregaSinVerificacion(estatusActual, verificado) {
+  return estatusEsReparado(estatusActual) && !verificado
+}
+
 export function patchVerificadoEntrega(verificado = true) {
   const now = new Date().toISOString()
   return {
@@ -352,6 +360,7 @@ export function repEnRangoFechasMonitor(
 /**
  * ¿La orden cumple el filtro del monitor?
  * - `modoFecha` 'ingreso' | 'entrega': usa el rango superior y omite estatus.
+ * - `modoFecha` 'verificadas': órdenes verificadas y aún no entregadas.
  * - Sin `modoFecha`: filtra por estatus y, si hay rango, por ingreso o entrega (ambas).
  */
 export function repCoincideFiltroMonitor(
@@ -373,6 +382,12 @@ export function repCoincideFiltroMonitor(
   if (modoFecha === 'ingreso' || modoFecha === 'entrega') {
     if (!hayRango) return false
     return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)
+  }
+
+  if (modoFecha === 'verificadas') {
+    if (!estaVerificadoEntrega(rep) || estatusEsEntregado(rep?.estatus)) return false
+    if (!hayRango) return true
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ambas')
   }
 
   const sel = estatusSeleccionados

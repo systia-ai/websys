@@ -33,12 +33,14 @@ import {
   iniciarBloqueoInsercionPestana,
   actualizarReparacionSupabase,
   agregarEntradaBitacora,
+  bloqueaEntregaSinVerificacion,
   corregirEntregadaIndebidaSiAplica,
   fechasHitosOrdenLegibles,
   formatFechaBitacora,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
   liquidarCuentaPagadaAlEntregarOrden,
+  MENSAJE_VERIFICAR_ANTES_ENTREGADO,
   parseBitacora,
   patchFechasHitosEstatus,
   patchVerificadoEntrega,
@@ -206,6 +208,7 @@ export default function ReparacionesOrden({
   const [msgExito, setMsgExito] = useState('')
 
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
+  const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
@@ -867,9 +870,8 @@ export default function ReparacionesOrden({
     setActualizandoOrden(true)
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
     if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
-      onError?.(
-        'Debe verificar el equipo (botón «Verificar listo para entrega») antes de marcar la orden como ENTREGADO.',
-      )
+      setAlertaVerificarEntregaAbierto(true)
+      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
       actualizandoRef.current = false
       setActualizandoOrden(false)
       return
@@ -1678,10 +1680,12 @@ export default function ReparacionesOrden({
               onChange={(e) => {
                 const v = e.target.value
                 if (!v) return
-                if (estatusEsEntregado(v) && !verificadoEntrega) {
-                  onError?.(
-                    'Primero verifique el equipo con el botón «Verificar listo para entrega».',
-                  )
+                if (
+                  estatusEsEntregado(v) &&
+                  bloqueaEntregaSinVerificacion(estatus, verificadoEntrega)
+                ) {
+                  setAlertaVerificarEntregaAbierto(true)
+                  onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
                   return
                 }
                 estatusDirtyRef.current = true
@@ -1987,6 +1991,28 @@ export default function ReparacionesOrden({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {alertaVerificarEntregaAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setAlertaVerificarEntregaAbierto(false)}
+        >
+          <div className="modal" role="alertdialog" aria-labelledby="alerta-verificar-entrega-titulo" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 id="alerta-verificar-entrega-titulo">Verificación requerida</h3>
+            </div>
+            <div className="modal-body">
+              <p>{MENSAJE_VERIFICAR_ANTES_ENTREGADO}</p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" onClick={() => setAlertaVerificarEntregaAbierto(false)}>
+                Entendido
+              </button>
+            </div>
           </div>
         </div>
       )}
