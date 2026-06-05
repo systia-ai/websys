@@ -75,6 +75,11 @@ export function bloqueaEntregaSinVerificacion(estatusActual, verificado) {
   return estatusEsReparado(estatusActual) && !verificado
 }
 
+/** Verificada y pendiente de entrega al cliente (misma lógica que filtro del monitor). */
+export function repEsVerificadaListaEntrega(rep) {
+  return estaVerificadoEntrega(rep) && !estatusEsEntregado(rep?.estatus)
+}
+
 export function patchVerificadoEntrega(verificado = true) {
   const now = new Date().toISOString()
   return {

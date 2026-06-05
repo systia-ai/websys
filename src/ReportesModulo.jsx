@@ -7,6 +7,7 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import {
   aYmdLocalDesdeRaw,
   formatFechaLegibleEsMx,
+  repEsVerificadaListaEntrega,
   TIPOS_SERVICIO_CANONICOS,
   tipoServicioDeRep,
   ymdHoyLocal,
@@ -356,7 +357,9 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   const resumen = useMemo(() => {
     const total = reparaciones.length
     const entregadas = reparaciones.filter(esEntregada).length
+    const verificadas = reparaciones.filter(repEsVerificadaListaEntrega).length
     const activas = total - entregadas
+    const enProceso = Math.max(0, activas - verificadas)
     const totalPagos = totalPagosEnLista(pagosPeriodo)
     const totalCosto = reparaciones.reduce((s, r) => s + Number(r.costo_reparacion ?? 0), 0)
     const porEstatus = {}
@@ -364,7 +367,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
       const k = normalizarLabelEstatus(r.estatus)
       porEstatus[k] = (porEstatus[k] ?? 0) + 1
     }
-    return { total, entregadas, activas, totalPagos, totalCosto, porEstatus }
+    return { total, entregadas, activas, verificadas, enProceso, totalPagos, totalCosto, porEstatus }
   }, [reparaciones, pagosPeriodo])
 
   const equipoPorId = useMemo(() => {
@@ -624,6 +627,12 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
                 <span aria-hidden="true">✅</span> Entregadas
               </span>
               <strong>{resumen.entregadas}</strong>
+            </div>
+            <div className="corte-caja-stat reportes-stat--verificadas">
+              <span className="label">
+                <span aria-hidden="true">✓</span> Verificadas
+              </span>
+              <strong>{resumen.verificadas}</strong>
             </div>
             <div className="corte-caja-stat corte-caja-stat--tarjeta">
               <span className="label">

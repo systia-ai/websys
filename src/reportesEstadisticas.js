@@ -1,6 +1,6 @@
 /** Utilidades para gráficas del reporte de reparaciones. */
 
-import { aYmdLocalDesdeRaw, ymdLocalDesdeDate } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, estaVerificadoEntrega, ymdLocalDesdeDate } from './reparacionUtils.js'
 import { extractFechaPagoYmd } from './pagosClientesUtils.js'
 
 export { extractFechaPagoYmd }
@@ -43,6 +43,10 @@ export function extractDateYmdReporte(row) {
     aYmdLocalDesdeRaw(row?.updated_at) ??
     aYmdLocalDesdeRaw(row?.date)
   )
+}
+
+export function extractFechaVerificacionYmd(row) {
+  return aYmdLocalDesdeRaw(row?.fecha_verificacion_entrega)
 }
 
 function llenarRangoDias(ini, fin) {
@@ -172,6 +176,23 @@ export function serieOrdenesAgrupada(reparaciones, periodo, agrupacion = 'dia') 
   return serieDesdeMapa(map, periodo, agrupacion, false)
 }
 
+function agregarSeriesVerificadas(conteoMap, reparaciones, agrupacion) {
+  for (const r of reparaciones) {
+    if (!estaVerificadoEntrega(r)) continue
+    const y = extractFechaVerificacionYmd(r)
+    if (!y) continue
+    const key = claveAgrupacion(y, agrupacion)
+    conteoMap.set(key, (conteoMap.get(key) ?? 0) + 1)
+  }
+}
+
+/** Verificaciones agrupadas por fecha de verificación (fecha_verificacion_entrega). */
+export function serieVerificadasAgrupada(reparaciones, periodo, agrupacion = 'dia') {
+  const map = new Map()
+  agregarSeriesVerificadas(map, reparaciones, agrupacion)
+  return serieDesdeMapa(map, periodo, agrupacion, false)
+}
+
 /** @deprecated Use seriePagosAgrupadaDesdePagos con registros de pagosclientes. */
 export function seriePagosAgrupada(reparaciones, periodo, agrupacion = 'dia') {
   const map = new Map()
@@ -283,6 +304,13 @@ export function tituloAgrupacionPagos(agrupacion) {
   return 'Ingresos por día (pagos)'
 }
 
+export function tituloAgrupacionVerificadas(agrupacion) {
+  if (agrupacion === 'anio') return 'Verificaciones por año'
+  if (agrupacion === 'mes') return 'Verificaciones por mes'
+  if (agrupacion === 'semana') return 'Verificaciones por semana'
+  return 'Verificaciones por día'
+}
+
 export function normalizarLabelEstatus(label) {
   const u = String(label ?? '').trim().toUpperCase()
   if (u === 'ENTREGADA') return 'ENTREGADO'
@@ -330,6 +358,15 @@ export function serieTieneDatos(series) {
 export function serieEntregadasActivas(entregadas, activas) {
   const items = []
   if (activas > 0) items.push({ label: 'Activas', value: activas, color: '#ff9800' })
+  if (entregadas > 0) items.push({ label: 'Entregadas', value: entregadas, color: '#43a047' })
+  return items
+}
+
+/** Donut: en taller, verificadas listas para entrega y entregadas. */
+export function serieDistribucionOrdenes({ entregadas = 0, verificadas = 0, enProceso = 0 }) {
+  const items = []
+  if (enProceso > 0) items.push({ label: 'En taller', value: enProceso, color: '#ff9800' })
+  if (verificadas > 0) items.push({ label: 'Verificadas', value: verificadas, color: '#00897b' })
   if (entregadas > 0) items.push({ label: 'Entregadas', value: entregadas, color: '#43a047' })
   return items
 }

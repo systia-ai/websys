@@ -1657,6 +1657,16 @@ td {
   background: linear-gradient(180deg, #e8f5e9 0%, #fff 100%);
 }
 
+.reportes-stat--verificadas {
+  border-color: #80cbc4;
+  background: linear-gradient(180deg, #e0f2f1 0%, #fff 100%);
+}
+
+.reportes-kpi--verificadas {
+  border-color: #80cbc4;
+  background: linear-gradient(180deg, #e0f2f1 0%, #fff 100%);
+}
+
 .reportes-card {
   border-color: #90caf9;
   background: linear-gradient(180deg, #f5fbff 0%, #fff 100%);
@@ -1818,7 +1828,13 @@ td {
 
 @media (min-width: 520px) {
   .reportes-kpi-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 720px) {
+  .reportes-kpi-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 

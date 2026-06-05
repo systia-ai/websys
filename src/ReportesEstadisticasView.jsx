@@ -11,14 +11,16 @@ import {
   reparacionesEnRango,
   segmentosAnioEnPeriodo,
   segmentosMesEnPeriodo,
-  serieEntregadasActivas,
+  serieDistribucionOrdenes,
   serieEstatus,
   serieOrdenesAgrupada,
   serieOrdenesPorDia,
   seriePagosAgrupadaDesdePagos,
   serieTieneDatos,
+  serieVerificadasAgrupada,
   tituloAgrupacionOrdenes,
   tituloAgrupacionPagos,
+  tituloAgrupacionVerificadas,
 } from './reportesEstadisticas.js'
 
 const W = 640
@@ -351,6 +353,10 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
     () => seriePagosAgrupadaDesdePagos(pagosPeriodo, periodo, agrupacion),
     [pagosPeriodo, periodo, agrupacion],
   )
+  const verificadasSerie = useMemo(
+    () => serieVerificadasAgrupada(reparaciones, periodo, agrupacion),
+    [reparaciones, periodo, agrupacion],
+  )
 
   const mesesDetalle = useMemo(
     () => (agrupacion === 'mes' ? segmentosMesEnPeriodo(periodo) : []),
@@ -364,7 +370,9 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
 
   const tituloOrdenes = tituloAgrupacionOrdenes(agrupacion)
   const tituloPagos = tituloAgrupacionPagos(agrupacion)
+  const tituloVerificadas = tituloAgrupacionVerificadas(agrupacion)
   const usarBarras = agrupacion === 'semana' || agrupacion === 'mes' || agrupacion === 'anio'
+  const colorVerificadas = ['#00695c', '#00897b', '#26a69a', '#4db6ac', '#80cbc4']
 
   return (
     <>
@@ -379,6 +387,12 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
             formatXLabel={fmtX}
             colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784', '#a5d6a7']}
           />
+          <SvgBarChart
+            title={tituloVerificadas}
+            series={verificadasSerie}
+            formatXLabel={fmtX}
+            colorCycle={colorVerificadas}
+          />
         </>
       ) : (
         <>
@@ -389,6 +403,7 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
             formatY={formatPagoEje}
             formatXLabel={fmtX}
           />
+          <SvgLineChart title={tituloVerificadas} series={verificadasSerie} formatXLabel={fmtX} />
         </>
       )}
 
@@ -405,7 +420,8 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
             const pagosMes = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesDia = serieOrdenesPorDia(repMes, { ini: seg.ini, fin: seg.fin })
             const pagosDia = seriePagosAgrupadaDesdePagos(pagosMes, { ini: seg.ini, fin: seg.fin }, 'dia')
-            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(pagosDia)) return null
+            const verificadasDia = serieVerificadasAgrupada(repMes, { ini: seg.ini, fin: seg.fin }, 'dia')
+            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(pagosDia) && !serieTieneDatos(verificadasDia)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
@@ -414,6 +430,11 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
                   title={`Ingresos (pagos) — ${seg.label}`}
                   series={pagosDia}
                   formatY={formatPagoEje}
+                  formatXLabel={labelDiaCorta}
+                />
+                <SvgLineChart
+                  title={`Verificaciones — ${seg.label}`}
+                  series={verificadasDia}
                   formatXLabel={labelDiaCorta}
                 />
               </div>
@@ -435,7 +456,8 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
             const pagosAnio = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesMes = serieOrdenesAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
             const pagosMes = seriePagosAgrupadaDesdePagos(pagosAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(pagosMes)) return null
+            const verificadasMes = serieVerificadasAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
+            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(pagosMes) && !serieTieneDatos(verificadasMes)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
@@ -447,6 +469,12 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
                   formatBarValue={formatPagoEje}
                   formatXLabel={fmtMes}
                   colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784']}
+                />
+                <SvgBarChart
+                  title={`Verificaciones por mes — ${seg.label}`}
+                  series={verificadasMes}
+                  formatXLabel={fmtMes}
+                  colorCycle={colorVerificadas}
                 />
               </div>
             )
@@ -480,9 +508,14 @@ export default function ReportesEstadisticasView({
 
   const conFecha = useMemo(() => hayDatosConFecha(reparaciones), [reparaciones])
   const estatusSerie = useMemo(() => serieEstatus(resumen.porEstatus), [resumen.porEstatus])
-  const entregadasSerie = useMemo(
-    () => serieEntregadasActivas(resumen.entregadas, resumen.activas),
-    [resumen.entregadas, resumen.activas],
+  const distribucionSerie = useMemo(
+    () =>
+      serieDistribucionOrdenes({
+        entregadas: resumen.entregadas,
+        verificadas: resumen.verificadas,
+        enProceso: resumen.enProceso,
+      }),
+    [resumen.entregadas, resumen.verificadas, resumen.enProceso],
   )
 
   const periodoTxt = periodoAplicado
@@ -576,6 +609,12 @@ export default function ReportesEstadisticasView({
               </span>
               <strong>{resumen.entregadas}</strong>
             </div>
+            <div className="reportes-kpi reportes-kpi--verificadas">
+              <span className="label">
+                <span aria-hidden="true">✓</span> Verificadas
+              </span>
+              <strong>{resumen.verificadas}</strong>
+            </div>
           </section>
         ) : null}
 
@@ -602,8 +641,8 @@ export default function ReportesEstadisticasView({
           />
         ) : null}
 
-        {!loading && entregadasSerie.length > 0 ? (
-          <SvgDonutChart title="Entregadas vs activas" series={entregadasSerie} />
+        {!loading && distribucionSerie.length > 0 ? (
+          <SvgDonutChart title="En taller, verificadas y entregadas" series={distribucionSerie} />
         ) : null}
 
         <button type="button" className="btn-agregar-equipo btn-volver-reporte" onClick={onVolver}>
