@@ -1318,7 +1318,7 @@ export default function VentasCuentaScreen({
 
       {modalEstatusPagoCero && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalEstatusPagoCero(false)}>
-          <div className="modal modal-confirmar-datos" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-confirmar-datos modal-alerta modal-alerta--info" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header confirmar-datos-header">
               <span className="confirmar-datos-header-ico" aria-hidden="true">
                 💰

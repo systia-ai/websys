@@ -27,7 +27,7 @@ export default function ConfirmarDatosModal({
       onClick={() => !confirmando && onClose?.()}
     >
       <div
-        className="modal modal-confirmar-datos"
+        className="modal modal-alerta modal-alerta--info modal-confirmar-datos"
         role="dialog"
         aria-labelledby="confirmar-datos-heading"
         aria-describedby="confirmar-datos-desc"

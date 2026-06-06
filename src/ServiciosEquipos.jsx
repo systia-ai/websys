@@ -1184,14 +1184,23 @@ export default function ServiciosEquipos({
 
       {eliminarEquipo && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEliminarEquipo(null)}>
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-alerta modal-alerta--warning" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-danger">Confirmar Eliminación</h3>
+              <h3>
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ⚠
+                </span>
+                Confirmar eliminación
+              </h3>
             </div>
             <div className="modal-body">
-              <p>¿Eliminar este equipo?</p>
-              <p className="muted">Serie: {eliminarEquipo.serie}</p>
-              <p className="small-warn">No se puede eliminar un equipo usado en reparaciones existentes.</p>
+              <p className="modal-alerta-mensaje">¿Eliminar este equipo?</p>
+              <p className="modal-alerta-sugerencia">
+                Serie: <strong>{eliminarEquipo.serie}</strong>
+              </p>
+              <p className="modal-alerta-sugerencia">
+                No se puede eliminar un equipo usado en reparaciones existentes.
+              </p>
             </div>
             <div className="modal-footer">
               <button type="button" className="secondary" onClick={() => setEliminarEquipo(null)}>

@@ -5,6 +5,7 @@ import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
+import ModalAlerta from './ModalAlerta.jsx'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
@@ -36,7 +37,10 @@ import {
   agregarEntradaBitacora,
   bloqueaEntregaSinVerificacion,
   corregirEntregadaIndebidaSiAplica,
-  fechasHitosOrdenLegibles,
+  estatusSiguienteEnFlujo,
+  validarTransicionEstatus,
+  validarTransicionEstatusAlGuardar,
+  fechasHitosOrdenConVerificacion,
   formatFechaBitacora,
   insertarReparacionSupabase,
   leerOrdenRecienCreadaEnSesion,
@@ -45,6 +49,7 @@ import {
   parseBitacora,
   patchFechasHitosEstatus,
   patchVerificadoEntrega,
+  normalizarEstatusOrden,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -210,7 +215,9 @@ export default function ReparacionesOrden({
   const [msgExito, setMsgExito] = useState('')
 
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
+  const [confirmActualizarAbierto, setConfirmActualizarAbierto] = useState(false)
   const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
+  const [modalEstatus, setModalEstatus] = useState(null)
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
@@ -219,6 +226,8 @@ export default function ReparacionesOrden({
   const estatusDirtyRef = useRef(false)
   const estatusRef = useRef(estatus)
   estatusRef.current = estatus
+  /** Estatus guardado en BD (validación de secuencia al actualizar). */
+  const estatusPersistidoRef = useRef('INGRESADO')
   /** Evita doble INSERT si el usuario confirma dos veces antes de que React actualice `ordenRegistrada`. */
   const ordenRegistradaRef = useRef(repIdStrEsOrdenExistente(repIdStr))
   const [actualizandoOrden, setActualizandoOrden] = useState(false)
@@ -258,6 +267,11 @@ export default function ReparacionesOrden({
     setErrorVerificacion('')
   }, [])
 
+  const estatusOpcionesCambio = useMemo(() => {
+    const actual = normalizarEstatusOrden(estatus)
+    return ESTATUS_ORDEN.filter((st) => normalizarEstatusOrden(st) !== actual)
+  }, [estatus])
+
   const fechasHitosBanner = useMemo(() => {
     const rep = {
       estatus,
@@ -267,9 +281,11 @@ export default function ReparacionesOrden({
       fecha_reparado: fechaReparadoOrden,
       fecha_entrega: fechaEntregaOrden,
     }
-    return fechasHitosOrdenLegibles(rep, {
+    return fechasHitosOrdenConVerificacion(rep, {
       cuentaVinculada: cuentaOrden,
       ymdDesdePagos: ymdEntregaDesdePagos,
+      verificado: verificadoEntrega,
+      fechaVerificacion: fechaVerificacionEntrega,
     })
   }, [
     estatus,
@@ -280,6 +296,8 @@ export default function ReparacionesOrden({
     fechaEntregaOrden,
     cuentaOrden,
     ymdEntregaDesdePagos,
+    verificadoEntrega,
+    fechaVerificacionEntrega,
   ])
 
   const aplicarFechasDesdeReparacion = useCallback((data) => {
@@ -403,6 +421,7 @@ export default function ReparacionesOrden({
         setTipoReparacion(data.tipo_reparacion ?? '')
         if (!estatusDirtyRef.current) {
           setEstatus(data.estatus ?? 'INGRESADO')
+          estatusPersistidoRef.current = data.estatus ?? 'INGRESADO'
         }
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
@@ -455,6 +474,7 @@ export default function ReparacionesOrden({
         setTipoReparacion(data.tipo_reparacion ?? '')
         if (!estatusDirtyRef.current) {
           setEstatus(data.estatus ?? 'INGRESADO')
+          estatusPersistidoRef.current = data.estatus ?? 'INGRESADO'
         }
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
@@ -505,6 +525,7 @@ export default function ReparacionesOrden({
 
   useEffect(() => {
     estatusDirtyRef.current = false
+    estatusPersistidoRef.current = 'INGRESADO'
     if (repIdStrEsOrdenExistente(repIdStr)) {
       void cargarReparacionRef.current()
       return
@@ -698,6 +719,7 @@ export default function ReparacionesOrden({
         costo_reparacion: null,
         fecha_creacion: now,
         updated_at: now,
+        fecha_ingreso: ymdFechaEntregaParaGuardar(null),
         tipo_reparacion: tipoReparacion || null,
         ...patchFechasHitosEstatus(estatus, {}),
       }
@@ -751,6 +773,8 @@ export default function ReparacionesOrden({
       setOrdenRegistrada(true)
       setClienteIdNum(cid)
       setFechaCreacionOrden(now)
+      setFechaIngresoOrden(ymdFechaEntregaParaGuardar(null))
+      estatusPersistidoRef.current = estatus
       registrarOrdenCreadaEnSesion(newId)
       const msgDuplicadoEvitado = existenteId
         ? `Ya existía la orden #${newId} con los mismos datos (se evitó un duplicado).`
@@ -768,6 +792,68 @@ export default function ReparacionesOrden({
       setGuardandoOrden(false)
       finalizarBloqueoInsercionPestana()
     }
+  }
+
+  function aplicarCambioEstatusLocal(v) {
+    estatusDirtyRef.current = true
+    setEstatus(v)
+    const repActual = {
+      fecha_ingreso: fechaIngresoOrden,
+      fecha_revision: fechaRevisionOrden,
+      fecha_reparado: fechaReparadoOrden,
+    }
+    const patchF = patchFechasHitosEstatus(v, repActual)
+    if (patchF.fecha_ingreso) setFechaIngresoOrden(patchF.fecha_ingreso)
+    if (patchF.fecha_revision) setFechaRevisionOrden(patchF.fecha_revision)
+    if (patchF.fecha_reparado) setFechaReparadoOrden(patchF.fecha_reparado)
+    if (estatusEsEntregado(v)) {
+      setFechaEntregaOrden(ymdFechaEntregaParaGuardar(fechaEntregaOrden))
+    } else {
+      setFechaEntregaOrden(null)
+      setCuentaOrden(null)
+      setYmdEntregaDesdePagos(null)
+    }
+    if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
+      setVerificadoEntrega(false)
+      setFechaVerificacionEntrega(null)
+    }
+  }
+
+  function solicitarCambioEstatus(v) {
+    if (!v) return
+    const actual = estatusRef.current ?? estatus
+    const validacion = validarTransicionEstatus(actual, v)
+    if (!validacion.ok) {
+      setModalEstatus({
+        tipo: 'invalido',
+        mensaje: validacion.mensaje,
+        estatusActual: actual,
+        estatusIntentado: v,
+        estatusSiguiente: validacion.estatusSiguiente ?? validacion.estatusSugerido,
+      })
+      onError?.(validacion.mensaje)
+      return
+    }
+    if (estatusEsEntregado(v) && bloqueaEntregaSinVerificacion(actual, verificadoEntrega)) {
+      setAlertaVerificarEntregaAbierto(true)
+      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
+      return
+    }
+    setModalEstatus({
+      tipo: 'confirmar',
+      estatusActual: actual,
+      estatusNuevo: v,
+      estatusSiguiente: estatusSiguienteEnFlujo(v),
+    })
+  }
+
+  function confirmarCambioEstatusModal() {
+    if (!modalEstatus || modalEstatus.tipo !== 'confirmar') return
+    aplicarCambioEstatusLocal(modalEstatus.estatusNuevo)
+    setModalEstatus(null)
+    onNotice?.(
+      `Estatus cambiado a ${modalEstatus.estatusNuevo}. Pulse «Actualizar orden» para guardar en la base de datos.`,
+    )
   }
 
   async function marcarVerificadoEntrega() {
@@ -890,7 +976,40 @@ export default function ReparacionesOrden({
     }
   }
 
-  async function actualizarOrden() {
+  function solicitarActualizarOrden() {
+    if (actualizandoRef.current) return
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) {
+      onError(
+        'No hay número de orden cargado. Abra la orden desde Clientes, Equipos o el Monitor (✏️), o búsquela en «Orden de servicio».',
+      )
+      return
+    }
+    const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
+    const validacionSecuencia = validarTransicionEstatusAlGuardar(
+      estatusPersistidoRef.current,
+      estatusGuardar,
+    )
+    if (!validacionSecuencia.ok) {
+      setModalEstatus({
+        tipo: 'invalido',
+        mensaje: validacionSecuencia.mensaje,
+        estatusActual: estatusPersistidoRef.current,
+        estatusIntentado: estatusGuardar,
+        estatusSiguiente: validacionSecuencia.estatusSiguiente ?? validacionSecuencia.estatusSugerido,
+      })
+      onError?.(validacionSecuencia.mensaje)
+      return
+    }
+    if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
+      setAlertaVerificarEntregaAbierto(true)
+      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
+      return
+    }
+    setConfirmActualizarAbierto(true)
+  }
+
+  async function actualizarOrdenCore() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) {
@@ -902,6 +1021,23 @@ export default function ReparacionesOrden({
     actualizandoRef.current = true
     setActualizandoOrden(true)
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
+    const validacionSecuencia = validarTransicionEstatusAlGuardar(
+      estatusPersistidoRef.current,
+      estatusGuardar,
+    )
+    if (!validacionSecuencia.ok) {
+      setModalEstatus({
+        tipo: 'invalido',
+        mensaje: validacionSecuencia.mensaje,
+        estatusActual: estatusPersistidoRef.current,
+        estatusIntentado: estatusGuardar,
+        estatusSiguiente: validacionSecuencia.estatusSiguiente ?? validacionSecuencia.estatusSugerido,
+      })
+      onError?.(validacionSecuencia.mensaje)
+      actualizandoRef.current = false
+      setActualizandoOrden(false)
+      return
+    }
     if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
       setAlertaVerificarEntregaAbierto(true)
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
@@ -912,6 +1048,7 @@ export default function ReparacionesOrden({
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const repActual = {
+      fecha_ingreso: fechaIngresoOrden,
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
     }
@@ -953,7 +1090,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_revision, fecha_reparado, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -1017,7 +1154,11 @@ export default function ReparacionesOrden({
       }
 
       estatusDirtyRef.current = false
+      estatusPersistidoRef.current = estatusGuardar
       setEstatus(estatusGuardar)
+      if (patch.fecha_ingreso) setFechaIngresoOrden(patch.fecha_ingreso)
+      if (patch.fecha_revision) setFechaRevisionOrden(patch.fecha_revision)
+      if (patch.fecha_reparado) setFechaReparadoOrden(patch.fecha_reparado)
       if (estatusEsEntregado(estatusGuardar)) {
         await cargarCuentaYEntregaAux(id)
         if (supabase) {
@@ -1052,12 +1193,87 @@ export default function ReparacionesOrden({
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
       setDialogExito(true)
+      setConfirmActualizarAbierto(false)
     } catch (e) {
       onError(`Error al actualizar: ${e.message}`)
     } finally {
       actualizandoRef.current = false
       setActualizandoOrden(false)
     }
+  }
+
+  function renderResumenOrdenConfirmacion({ incluirNumeroOrden = false } = {}) {
+    return (
+      <div className="resumen-orden resumen-orden--confirmar">
+        <div className="resumen-orden-grupo">
+          <h4>👥 Cliente</h4>
+          <p>
+            <strong>Nombre:</strong> {nombreClienteUi || '—'}
+          </p>
+          <p>
+            <strong>Teléfono:</strong> {telClienteUi || '—'}
+          </p>
+          {domClienteUi ? (
+            <p>
+              <strong>Domicilio:</strong> {domClienteUi}
+            </p>
+          ) : null}
+          {correoClienteUi ? (
+            <p>
+              <strong>Correo:</strong> {correoClienteUi}
+            </p>
+          ) : null}
+        </div>
+        <div className="resumen-orden-grupo">
+          <h4>🖨️ Equipo</h4>
+          <p>
+            <strong>Serie:</strong> {serieEquipo || '—'}
+          </p>
+          <p>
+            <strong>Tipo:</strong> {tipoEquipo || '—'}
+          </p>
+          {descripcionEquipo ? (
+            <p>
+              <strong>Descripción:</strong> {descripcionEquipo}
+            </p>
+          ) : null}
+          <p>
+            <strong>Tipo de reparación:</strong> {tipoReparacion || '—'}
+          </p>
+        </div>
+        <div className="resumen-orden-grupo">
+          <h4>{incluirNumeroOrden ? `📋 Orden #${idReparacion ?? numeroOrden ?? '—'}` : '📋 Orden'}</h4>
+          <p>
+            <strong>Estatus:</strong> {estatus || '—'}
+          </p>
+          <p>
+            <strong>Técnico(s):</strong> {combinarTecnicos(tecnico1, tecnico2) || '— (sin asignar)'}
+          </p>
+          <p>
+            <strong>Problemas reportados:</strong> {problemasReportados || '— (vacío)'}
+          </p>
+          {descripcionSolucion ? (
+            <p>
+              <strong>Descripción de solución:</strong> {descripcionSolucion}
+            </p>
+          ) : null}
+          <p>
+            <strong>Niveles de tinta (B/Y/M/C/ML/CL):</strong>{' '}
+            {combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) || '— (sin definir)'}
+          </p>
+          {verificadoEntrega ? (
+            <p>
+              <strong>Verificado para entrega:</strong> Sí
+            </p>
+          ) : null}
+          {bitacoraNueva.trim() ? (
+            <p>
+              <strong>Nota nueva en bitácora:</strong> {bitacoraNueva.trim()}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    )
   }
 
   async function eliminarOrden() {
@@ -1707,40 +1923,24 @@ export default function ReparacionesOrden({
               aria-readonly="true"
               tabIndex={-1}
             />
-            <select
-              className="estatus-select"
-              value=""
-              onChange={(e) => {
-                const v = e.target.value
-                if (!v) return
-                if (
-                  estatusEsEntregado(v) &&
-                  bloqueaEntregaSinVerificacion(estatus, verificadoEntrega)
-                ) {
-                  setAlertaVerificarEntregaAbierto(true)
-                  onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
-                  return
-                }
-                estatusDirtyRef.current = true
-                setEstatus(v)
-                if (!estatusEsEntregado(v)) {
-                  setFechaEntregaOrden(null)
-                  setCuentaOrden(null)
-                  setYmdEntregaDesdePagos(null)
-                }
-                if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
-                  setVerificadoEntrega(false)
-                  setFechaVerificacionEntrega(null)
-                }
-              }}
-            >
-              <option value="">Seleccionar</option>
-              {ESTATUS_ORDEN.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
+            {!estatusEsEntregado(estatus) ? (
+              <select
+                className="estatus-select"
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value
+                  e.target.value = ''
+                  solicitarCambioEstatus(v)
+                }}
+              >
+                <option value="">Cambiar estatus →</option>
+                {estatusOpcionesCambio.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
         </div>
 
@@ -1926,7 +2126,7 @@ export default function ReparacionesOrden({
               type="button"
               className="btn-secondary wide btn-actualizar-orden"
               disabled={actualizandoOrden}
-              onClick={() => void actualizarOrden()}
+              onClick={() => solicitarActualizarOrden()}
             >
               {actualizandoOrden ? 'Guardando…' : 'Actualizar orden'}
             </button>
@@ -1971,7 +2171,11 @@ export default function ReparacionesOrden({
           role="presentation"
           onClick={() => cerrarMenuWhatsApp()}
         >
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`modal${waExitoVisible ? ' modal-alerta modal-alerta--success' : ''}`}
+            role="dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <h3>📲 Enviar por WhatsApp</h3>
             </div>
@@ -2034,45 +2238,89 @@ export default function ReparacionesOrden({
         </div>
       )}
 
-      {alertaVerificarEntregaAbierto && (
+      {modalEstatus?.tipo === 'confirmar' ? (
         <div
           className="modal-backdrop"
           role="presentation"
-          onClick={() => setAlertaVerificarEntregaAbierto(false)}
+          onClick={() => setModalEstatus(null)}
         >
-          <div className="modal" role="alertdialog" aria-labelledby="alerta-verificar-entrega-titulo" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal modal-alerta modal-alerta--info"
+            role="alertdialog"
+            aria-labelledby="modal-estatus-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
-              <h3 id="alerta-verificar-entrega-titulo">Verificación requerida</h3>
+              <h3 id="modal-estatus-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ℹ
+                </span>
+                Confirmar cambio de estatus
+              </h3>
             </div>
             <div className="modal-body">
-              <p>{MENSAJE_VERIFICAR_ANTES_ENTREGADO}</p>
+              <p className="modal-alerta-mensaje">
+                Estatus actual: <strong>{modalEstatus.estatusActual}</strong>
+                <br />
+                Va a cambiar a: <strong>{modalEstatus.estatusNuevo}</strong>
+              </p>
+              {modalEstatus.estatusSiguiente ? (
+                <p className="modal-alerta-sugerencia">
+                  Después de guardar, el siguiente paso será:{' '}
+                  <strong>{modalEstatus.estatusSiguiente}</strong>
+                </p>
+              ) : (
+                <p className="modal-alerta-sugerencia">Este es el último estatus del flujo.</p>
+              )}
+              <p className="modal-alerta-sugerencia">
+                Se registrará la fecha de este cambio al pulsar «Actualizar orden».
+              </p>
             </div>
             <div className="modal-footer">
-              <button type="button" onClick={() => setAlertaVerificarEntregaAbierto(false)}>
-                Entendido
+              <button type="button" className="secondary" onClick={() => setModalEstatus(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="modal-alerta-btn" onClick={() => confirmarCambioEstatusModal()}>
+                Confirmar
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {dialogExito && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setDialogExito(false)}>
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{idReparacion ? 'Éxito' : 'Mensaje'}</h3>
-            </div>
-            <div className="modal-body">
-              <p>{msgExito}</p>
-            </div>
-            <div className="modal-footer">
-              <button type="button" onClick={() => setDialogExito(false)}>
-                Aceptar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalAlerta
+        open={modalEstatus?.tipo === 'invalido'}
+        onClose={() => setModalEstatus(null)}
+        titulo="Estatus no permitido"
+        mensaje={modalEstatus?.mensaje}
+        variante="error"
+        tituloId="modal-estatus-error-titulo"
+      >
+        {modalEstatus?.estatusSiguiente ? (
+          <p className="modal-alerta-sugerencia">
+            Estatus siguiente permitido: <strong>{modalEstatus.estatusSiguiente}</strong>
+          </p>
+        ) : null}
+      </ModalAlerta>
+
+      <ModalAlerta
+        open={alertaVerificarEntregaAbierto}
+        onClose={() => setAlertaVerificarEntregaAbierto(false)}
+        titulo="Verificación requerida"
+        mensaje={MENSAJE_VERIFICAR_ANTES_ENTREGADO}
+        variante="warning"
+        tituloId="alerta-verificar-entrega-titulo"
+      />
+
+      <ModalAlerta
+        open={dialogExito}
+        onClose={() => setDialogExito(false)}
+        titulo={idReparacion ? 'Éxito' : 'Mensaje'}
+        mensaje={msgExito}
+        variante="success"
+        textoBoton="Aceptar"
+        role="dialog"
+      />
 
       {confirmGuardarAbierto && (
         <div
@@ -2080,44 +2328,24 @@ export default function ReparacionesOrden({
           role="presentation"
           onClick={() => !guardandoOrden && setConfirmGuardarAbierto(false)}
         >
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📝 {TEXTO_VERIFICAR_DATOS}</h3>
-              <p className="muted small" style={{ margin: '4px 0 0' }}>
-                Revise cliente, equipo y orden. El <strong>número de orden</strong> lo asigna la base de datos al guardar
-                (consecutivo). Si corrigió la serie aquí, se actualizará en el equipo antes de crear la orden.
-              </p>
+          <div className="modal modal-wide modal-alerta modal-alerta--info" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header confirmar-datos-header">
+              <span className="confirmar-datos-header-ico" aria-hidden="true">
+                ✓
+              </span>
+              <div>
+                <h3>📝 {TEXTO_VERIFICAR_DATOS}</h3>
+                <p className="confirmar-datos-lead">
+                  Revise cliente, equipo y orden. El <strong>número de orden</strong> lo asigna la base de datos al
+                  guardar (consecutivo). Si corrigió la serie aquí, se actualizará en el equipo antes de crear la orden.
+                </p>
+              </div>
             </div>
             <div className="modal-body">
-              <div className="resumen-orden">
-                <div className="resumen-orden-grupo">
-                  <h4>👥 Cliente</h4>
-                  <p><strong>Nombre:</strong> {nombreClienteUi || '—'}</p>
-                  <p><strong>Teléfono:</strong> {telClienteUi || '—'}</p>
-                  {domClienteUi ? <p><strong>Domicilio:</strong> {domClienteUi}</p> : null}
-                  {correoClienteUi ? <p><strong>Correo:</strong> {correoClienteUi}</p> : null}
-                </div>
-                <div className="resumen-orden-grupo">
-                  <h4>🖨️ Equipo</h4>
-                  <p><strong>Serie:</strong> {serieEquipo || '—'}</p>
-                  <p><strong>Tipo:</strong> {tipoEquipo || '—'}</p>
-                  {descripcionEquipo ? <p><strong>Descripción:</strong> {descripcionEquipo}</p> : null}
-                  <p><strong>Tipo de reparación:</strong> {tipoReparacion || '—'}</p>
-                </div>
-                <div className="resumen-orden-grupo">
-                  <h4>📋 Orden</h4>
-                  <p><strong>Estatus:</strong> {estatus || '—'}</p>
-                  <p><strong>Técnico(s):</strong> {combinarTecnicos(tecnico1, tecnico2) || '— (sin asignar)'}</p>
-                  <p>
-                    <strong>Problemas reportados:</strong>{' '}
-                    {problemasReportados ? problemasReportados : '— (vacío)'}
-                  </p>
-                  <p>
-                    <strong>Niveles de tinta (B/Y/M/C/ML/CL):</strong>{' '}
-                    {combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight) || '— (sin definir)'}
-                  </p>
-                </div>
-              </div>
+              {renderResumenOrdenConfirmacion()}
+              <p className="confirmar-datos-pregunta confirmar-datos-pregunta--destacada">
+                ¿Los datos son correctos? Confirme para registrar la orden.
+              </p>
             </div>
             <div className="modal-footer">
               <button
@@ -2146,24 +2374,82 @@ export default function ReparacionesOrden({
         </div>
       )}
 
+      {confirmActualizarAbierto && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !actualizandoOrden && setConfirmActualizarAbierto(false)}
+        >
+          <div
+            className="modal modal-wide modal-alerta modal-alerta--info modal-confirmar-actualizar"
+            role="dialog"
+            aria-labelledby="confirmar-actualizar-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header confirmar-datos-header">
+              <span className="confirmar-datos-header-ico" aria-hidden="true">
+                ℹ
+              </span>
+              <div>
+                <h3 id="confirmar-actualizar-heading">Verificar datos antes de actualizar</h3>
+                <p className="confirmar-datos-lead">
+                  Revise la información de la orden #{idReparacion ?? numeroOrden ?? '—'}. Si todo es correcto,
+                  confirme para guardar los cambios en la base de datos.
+                </p>
+              </div>
+            </div>
+            <div className="modal-body">
+              {renderResumenOrdenConfirmacion({ incluirNumeroOrden: true })}
+              <p className="confirmar-datos-pregunta confirmar-datos-pregunta--destacada">
+                ¿Los datos son correctos? Confirme para actualizar la orden.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmActualizarAbierto(false)}
+                disabled={actualizandoOrden}
+              >
+                Volver a editar
+              </button>
+              <button
+                type="button"
+                className="modal-alerta-btn btn-confirm-guardar"
+                disabled={actualizandoOrden}
+                onClick={() => void actualizarOrdenCore()}
+              >
+                {actualizandoOrden ? 'Guardando…' : '✅ Confirmar y actualizar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {eliminarConfirmAbierto && (
         <div
           className="modal-backdrop"
           role="presentation"
           onClick={() => !eliminandoOrden && setEliminarConfirmAbierto(false)}
         >
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-alerta modal-alerta--warning" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🗑️ Eliminar orden de servicio</h3>
+              <h3 id="eliminar-orden-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ⚠
+                </span>
+                Eliminar orden de servicio
+              </h3>
             </div>
             <div className="modal-body">
-              <p>
+              <p className="modal-alerta-mensaje">
                 ¿Seguro que deseas eliminar la orden{' '}
                 <strong>#{idReparacion ?? numeroOrden ?? '—'}</strong> de{' '}
                 <strong>{nombreClienteUi || 'el cliente'}</strong>?
               </p>
-              <p className="muted small">
-                Esta acción <strong>no se puede deshacer</strong>. También se eliminarán la cuenta asociada y todos los pagos/anticipos registrados.
+              <p className="modal-alerta-sugerencia">
+                Esta acción <strong>no se puede deshacer</strong>. También se eliminarán la cuenta asociada y todos
+                los pagos/anticipos registrados.
               </p>
             </div>
             <div className="modal-footer">

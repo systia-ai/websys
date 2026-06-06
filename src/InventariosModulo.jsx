@@ -888,20 +888,25 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
       {surtidoExitoPregunta && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSurtidoExitoPregunta(null)}>
           <div
-            className="modal inventarios-surtido-exito-modal"
+            className="modal modal-alerta modal-alerta--success inventarios-surtido-exito-modal"
             role="dialog"
             aria-labelledby="inventarios-surtido-exito-titulo"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <h3 id="inventarios-surtido-exito-titulo">✅ Surtido guardado</h3>
+              <h3 id="inventarios-surtido-exito-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ✓
+                </span>
+                Surtido guardado
+              </h3>
             </div>
             <div className="modal-body">
-              <p>
+              <p className="modal-alerta-mensaje">
                 Se registró <strong>+{surtidoExitoPregunta.entrada}</strong> en{' '}
                 <strong>{surtidoExitoPregunta.etiqueta}</strong>.
               </p>
-              <p className="muted">¿Desea surtir otro producto del inventario?</p>
+              <p className="modal-alerta-sugerencia">¿Desea surtir otro producto del inventario?</p>
             </div>
             <div className="modal-footer modal-footer-wrap">
               <button type="button" className="secondary" onClick={() => setSurtidoExitoPregunta(null)}>
@@ -917,12 +922,17 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
 
       {eliminar && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEliminar(null)}>
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-alerta modal-alerta--warning" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Eliminar producto</h3>
+              <h3>
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ⚠
+                </span>
+                Eliminar producto
+              </h3>
             </div>
             <div className="modal-body">
-              <p>
+              <p className="modal-alerta-mensaje">
                 ¿Eliminar <strong>{eliminar.serie}</strong>?
               </p>
             </div>

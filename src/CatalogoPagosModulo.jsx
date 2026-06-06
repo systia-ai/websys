@@ -501,12 +501,17 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
 
       {eliminar && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEliminar(null)}>
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-alerta modal-alerta--warning" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Eliminar concepto</h3>
+              <h3>
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ⚠
+                </span>
+                Eliminar concepto
+              </h3>
             </div>
             <div className="modal-body">
-              <p>
+              <p className="modal-alerta-mensaje">
                 ¿Eliminar <strong>{eliminar.concepto}</strong>?
               </p>
             </div>

@@ -996,7 +996,7 @@ export default function ClientesModulo({
 
       {cargandoEquipoRep && (
         <div className="modal-backdrop">
-          <div className="modal modal-narrow">
+          <div className="modal modal-narrow modal-alerta modal-alerta--info">
             <div className="modal-header">
               <h3>Cargando información</h3>
             </div>

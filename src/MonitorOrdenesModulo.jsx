@@ -6,6 +6,7 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   aYmdLocalDesdeRaw,
+  estaVerificadoEntrega,
   estatusEsEntregado,
   fechaEntregaYmd,
   fechaIngresoYmd,
@@ -15,6 +16,12 @@ import {
   ymdHoyLocal,
 } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
+import {
+  guardarFiltrosMonitorSesion,
+  leerEstadoFiltrosInicialMonitor,
+  limpiarFiltrosMonitorSesion,
+  marcarVolverMonitorDesdeOrden,
+} from './monitorOrdenesFiltrosSesion.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -145,6 +152,7 @@ export default function MonitorOrdenesModulo({
 }) {
   void onNotice
   const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+  const filtrosIniciales = useMemo(() => leerEstadoFiltrosInicialMonitor(), [])
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])
@@ -153,26 +161,34 @@ export default function MonitorOrdenesModulo({
   const [loading, setLoading] = useState(true)
 
   /** Estatus incluidos en el listado (por defecto solo INGRESADO). */
-  const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => new Set(['INGRESADO']))
+  const [estatusSeleccionados, setEstatusSeleccionados] = useState(
+    () => new Set(filtrosIniciales.estatusSeleccionados),
+  )
   /** Tipos de servicio incluidos (por defecto todos los del catálogo). */
   const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
-    () => new Set(TIPOS_SERVICIO_FILTRO),
+    () => new Set(filtrosIniciales.tiposServicioSeleccionados),
   )
   /** 'asc' = más antigua primero, 'desc' = más reciente primero */
-  const [ordenFecha, setOrdenFecha] = useState('asc')
+  const [ordenFecha, setOrdenFecha] = useState(filtrosIniciales.ordenFecha)
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
-  const [tecnicoFiltro, setTecnicoFiltro] = useState(TECNICO_TODAS)
+  const [tecnicoFiltro, setTecnicoFiltro] = useState(filtrosIniciales.tecnicoFiltro)
   /** Rango de fechas (arriba); lo usan los modos «Fecha ingresado» / «Fecha entrega». */
-  const [fechaDesde, setFechaDesde] = useState(() => ymdHoyLocal() ?? '')
-  const [fechaHasta, setFechaHasta] = useState(() => ymdHoyLocal() ?? '')
+  const [fechaDesde, setFechaDesde] = useState(filtrosIniciales.fechaDesde)
+  const [fechaHasta, setFechaHasta] = useState(filtrosIniciales.fechaHasta)
   /** Activo: filtra por ingreso en el rango superior (ignora estatus). */
-  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
+  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(
+    filtrosIniciales.filtroModoFechaIngreso,
+  )
   /** Activo: filtra por entrega en el rango superior (ignora estatus). */
-  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
+  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(
+    filtrosIniciales.filtroModoFechaEntrega,
+  )
   /** Activo: órdenes verificadas listas para entrega (ignora estatus). */
-  const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(false)
+  const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(
+    filtrosIniciales.filtroModoVerificadas,
+  )
   /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda)
 
   /** Catálogo de técnicos (controlado por el usuario). */
   const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
@@ -528,6 +544,19 @@ export default function MonitorOrdenesModulo({
 
   function handleEditarOrden(rep) {
     if (!onEditarOrden) return
+    guardarFiltrosMonitorSesion({
+      estatusSeleccionados: [...estatusSeleccionados],
+      tiposServicioSeleccionados: [...tiposServicioSeleccionados],
+      ordenFecha,
+      tecnicoFiltro,
+      fechaDesde,
+      fechaHasta,
+      filtroModoFechaIngreso,
+      filtroModoFechaEntrega,
+      filtroModoVerificadas,
+      busqueda,
+    })
+    marcarVolverMonitorDesdeOrden()
     const c = clientes.find((x) => sameId(x.id, rep.cliente_id)) ?? {}
     const eq = rep.equipo_id != null ? equipoPorId.get(String(rep.equipo_id)) ?? {} : {}
     onEditarOrden({
@@ -569,14 +598,24 @@ export default function MonitorOrdenesModulo({
 
   function badgeEstatus(rep) {
     const ent = estatusEsEntregado(rep?.estatus)
+    const verificada = estaVerificadoEntrega(rep)
     const st = String(rep?.estatus ?? '—').trim()
+    const mainVariant = ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'
     return (
-      <span
-        className={`rep-orden-badge rep-orden-badge--tabla${ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
-      >
-        {st}
+      <span className="monitor-ordenes-estatus-celda">
+        <span className={`rep-orden-badge rep-orden-badge--tabla${mainVariant}`}>{st}</span>
+        {verificada ? (
+          <span className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--verificada">
+            VERIFICADA
+          </span>
+        ) : null}
       </span>
     )
+  }
+
+  function salirMonitor() {
+    limpiarFiltrosMonitorSesion()
+    onHome?.()
   }
 
   function handleAtras() {
@@ -584,7 +623,7 @@ export default function MonitorOrdenesModulo({
       setGestionTecnicosAbierto(false)
       return
     }
-    onHome?.()
+    salirMonitor()
   }
 
   return (
@@ -598,7 +637,7 @@ export default function MonitorOrdenesModulo({
           Monitor de órdenes
         </h1>
         {onHome ? (
-          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+          <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={salirMonitor}>
             Inicio
           </button>
         ) : (
@@ -928,11 +967,16 @@ export default function MonitorOrdenesModulo({
                         const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
                         const tech = String(rep.tecnico ?? '').trim()
                         const ent = estatusEsEntregado(rep?.estatus)
+                        const verificada = estaVerificadoEntrega(rep)
                         return (
                           <tr
                             key={rep.id}
-                            className="monitor-ordenes-tabla-fila monitor-ordenes-tabla-fila--clic"
-                            title={`Abrir orden #${rep.id}`}
+                            className={`monitor-ordenes-tabla-fila monitor-ordenes-tabla-fila--clic${verificada ? ' monitor-ordenes-tabla-fila--verificada' : ''}`}
+                            title={
+                              verificada
+                                ? `Orden #${rep.id} — verificada, lista para entrega`
+                                : `Abrir orden #${rep.id}`
+                            }
                             onClick={() => handleEditarOrden(rep)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {

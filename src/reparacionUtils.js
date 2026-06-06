@@ -57,6 +57,101 @@ export function estatusEsReparado(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'REPARADO'
 }
 
+export function estatusEsIngresado(estatus) {
+  return String(estatus ?? '').trim().toUpperCase() === 'INGRESADO'
+}
+
+/** Secuencia principal obligatoria (no saltar pasos hacia adelante). */
+export const FLUJO_ESTATUS_ORDEN = ['INGRESADO', 'EN REVISION', 'REPARADO', 'ENTREGADO']
+
+/** Estatus laterales permitidos solo desde EN REVISION. */
+export const ESTATUS_LATERALES_DESDE_REVISION = ['EN ESPERA POR REFACCION', 'SIN REPARACION']
+
+export function normalizarEstatusOrden(st) {
+  const u = String(st ?? '').trim().toUpperCase()
+  if (u === 'ENTREGADA') return 'ENTREGADO'
+  return u
+}
+
+export function estatusSiguienteEnFlujo(estatus) {
+  const st = normalizarEstatusOrden(estatus)
+  const idx = FLUJO_ESTATUS_ORDEN.indexOf(st)
+  if (idx < 0 || idx >= FLUJO_ESTATUS_ORDEN.length - 1) return null
+  return FLUJO_ESTATUS_ORDEN[idx + 1]
+}
+
+/** Estatus a los que se puede cambiar desde el actual (un paso; incluye retroceso en el flujo). */
+export function estatusSiguientesPermitidos(estatusActual) {
+  const actual = normalizarEstatusOrden(estatusActual)
+  if (actual === 'ENTREGADO') return []
+
+  const opciones = new Set()
+
+  if (ESTATUS_LATERALES_DESDE_REVISION.includes(actual)) {
+    opciones.add('EN REVISION')
+    opciones.add('REPARADO')
+    return [...opciones]
+  }
+
+  const siguiente = estatusSiguienteEnFlujo(actual)
+  if (siguiente) opciones.add(siguiente)
+
+  if (actual === 'EN REVISION') {
+    for (const lat of ESTATUS_LATERALES_DESDE_REVISION) opciones.add(lat)
+  }
+
+  const idx = FLUJO_ESTATUS_ORDEN.indexOf(actual)
+  if (idx > 0) opciones.add(FLUJO_ESTATUS_ORDEN[idx - 1])
+
+  return [...opciones]
+}
+
+function mensajeTransicionEstatusInvalida(desde, hacia, siguiente) {
+  const d = normalizarEstatusOrden(desde)
+  const h = normalizarEstatusOrden(hacia)
+  if (d === 'INGRESADO' && h === 'REPARADO') {
+    return 'El equipo debe estar En Revisión antes de ser reparado.'
+  }
+  if (d === 'INGRESADO' && h === 'ENTREGADO') {
+    return 'El equipo debe pasar por En Revisión y Reparado antes de ser entregado.'
+  }
+  if (d === 'EN REVISION' && h === 'ENTREGADO') {
+    return 'El equipo debe estar Reparado antes de ser entregado.'
+  }
+  if (siguiente) {
+    return `El siguiente estatus permitido es ${siguiente}. No puede saltar etapas del proceso.`
+  }
+  return 'No puede cambiar a ese estatus desde el estatus actual.'
+}
+
+/** Valida cambio de estatus (un paso; sin saltos hacia adelante). */
+export function validarTransicionEstatus(estatusActual, estatusNuevo) {
+  const actual = normalizarEstatusOrden(estatusActual)
+  const nuevo = normalizarEstatusOrden(estatusNuevo)
+  const siguiente = estatusSiguienteEnFlujo(actual)
+
+  if (actual === nuevo) {
+    return { ok: true, estatusSiguiente: siguiente }
+  }
+
+  const permitidos = estatusSiguientesPermitidos(actual)
+  if (permitidos.includes(nuevo)) {
+    return { ok: true, estatusSiguiente: estatusSiguienteEnFlujo(nuevo) }
+  }
+
+  return {
+    ok: false,
+    estatusSiguiente: siguiente,
+    estatusSugerido: siguiente,
+    mensaje: mensajeTransicionEstatusInvalida(actual, nuevo, siguiente),
+  }
+}
+
+/** Al guardar: el estatus en BD solo puede avanzar un paso válido desde el persistido. */
+export function validarTransicionEstatusAlGuardar(estatusPersistido, estatusNuevo) {
+  return validarTransicionEstatus(estatusPersistido, estatusNuevo)
+}
+
 /** Marca de verificación previa a entrega (no es un estatus). */
 export function estaVerificadoEntrega(rep) {
   const v = rep?.verificado_entrega
@@ -108,6 +203,10 @@ function reducirPayloadReparacionTrasError(error, payload) {
   }
   if ('fecha_entrega' in payload && esErrorColumnaDesconocida(error, 'fecha_entrega')) {
     const { fecha_entrega: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
+  if ('fecha_ingreso' in payload && esErrorColumnaDesconocida(error, 'fecha_ingreso')) {
+    const { fecha_ingreso: _f, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
   }
   if ('fecha_revision' in payload && esErrorColumnaDesconocida(error, 'fecha_revision')) {
@@ -413,6 +512,9 @@ export function fechaReparadoYmd(rep) {
 export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   const patch = {}
   const hoy = ymdFechaEntregaParaGuardar(null)
+  if (estatusEsIngresado(estatusNuevo) && !fechaIngresoYmd(repActual)) {
+    patch.fecha_ingreso = hoy
+  }
   if (estatusEsEnRevision(estatusNuevo) && !fechaRevisionYmd(repActual)) {
     patch.fecha_revision = hoy
   }
@@ -435,6 +537,31 @@ export function fechasHitosOrdenLegibles(rep, { cuentaVinculada = null, ymdDesde
   if (repa) hitos.push({ clave: 'reparado', etiqueta: 'Reparado', texto: fmt(repa) })
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
   if (ent) hitos.push({ clave: 'entrega', etiqueta: 'Entrega', texto: fmt(ent) })
+  return hitos
+}
+
+/** Hitos incl. verificación previa a entrega (para banner de la orden). */
+export function fechasHitosOrdenConVerificacion(
+  rep,
+  { cuentaVinculada = null, ymdDesdePagos = null, verificado = false, fechaVerificacion = null } = {},
+) {
+  const hitos = fechasHitosOrdenLegibles(rep, { cuentaVinculada, ymdDesdePagos })
+  if (verificado) {
+    const fmtHora = (raw) =>
+      raw
+        ? formatFechaLegibleEsMx(raw, {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : null
+    const texto = fmtHora(fechaVerificacion) ?? fmtHora(new Date().toISOString())
+    if (texto) {
+      hitos.push({ clave: 'verificacion', etiqueta: 'Verificado', texto })
+    }
+  }
   return hitos
 }
 
@@ -465,12 +592,6 @@ function diasEntreYmd(a, b) {
   const ta = Date.UTC(ya, ma - 1, da)
   const tb = Date.UTC(yb, mb - 1, db)
   return Math.round(Math.abs(tb - ta) / 86400000)
-}
-
-function normalizarEstatusOrden(st) {
-  const u = String(st ?? '').trim().toUpperCase()
-  if (u === 'ENTREGADA') return 'ENTREGADO'
-  return u
 }
 
 /**
@@ -991,6 +1112,11 @@ export async function insertarReparacionSupabase(supabase, row) {
     if (!first.error) return first.data
     if (esErrorColumnaEsOrdenDuplicada(first.error)) {
       payload = filaReparacionSinCampoDuplicada(payload)
+      continue
+    }
+    if ('fecha_ingreso' in payload && esErrorColumnaDesconocida(first.error, 'fecha_ingreso')) {
+      const { fecha_ingreso: _f, ...rest } = payload
+      payload = rest
       continue
     }
     if ('fecha_revision' in payload && esErrorColumnaDesconocida(first.error, 'fecha_revision')) {

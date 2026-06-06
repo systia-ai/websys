@@ -15,6 +15,7 @@ import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { limpiarFiltrosMonitorSesion } from './monitorOrdenesFiltrosSesion.js'
 
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
@@ -129,6 +130,7 @@ function App() {
       setClientesRetornoVentas(null)
       setClientesRetornoOrdenes(null)
       setServiciosRetornoReparaciones(null)
+      limpiarFiltrosMonitorSesion()
       setActiveModule('home')
       setNotice('')
       return
@@ -165,6 +167,7 @@ function App() {
     const nextStack = navStackRef.current
     const target = nextStack[nextStack.length - 1] ?? 'home'
     if (leaving === 'reparaciones') setRepSession(null)
+    if (leaving === 'monitor_ordenes') limpiarFiltrosMonitorSesion()
     if (leaving === 'ventas') {
       const vctx = ventasContext
       setVentasContext(null)
