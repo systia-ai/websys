@@ -26,7 +26,14 @@ import {
   totalesVisiblesCuenta,
   sumPagosCuenta,
   descripcionEquipoParaRecibo,
+  agregarEntradaBitacora,
+  actualizarReparacionSupabase,
+  siguienteNumeroNotificacionCliente,
+  textoNotaBitacoraNotificacionCliente,
 } from './reparacionUtils.js'
+import { buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
+import { buildWhatsAppUrl } from './whatsappUtils.js'
+import ModalAlerta from './ModalAlerta.jsx'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
 const LS_EQUIPOS = 'sistefix_local_equipos'
@@ -276,6 +283,9 @@ export default function VentasCuentaScreen({
   const [productoContableSel, setProductoContableSel] = useState(true)
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
+  const [modalNotificarCliente, setModalNotificarCliente] = useState(false)
+  const [mensajeNotificacionEditado, setMensajeNotificacionEditado] = useState('')
+  const [confirmandoEnvioNotificacion, setConfirmandoEnvioNotificacion] = useState(false)
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
@@ -1076,6 +1086,92 @@ export default function VentasCuentaScreen({
     }
   }
 
+  function abrirModalNotificarCliente() {
+    setMensajeNotificacionEditado(
+      buildMensajeNotificacionCuentaCliente({
+        nombreCliente: cliente.nombre,
+        lineas,
+        saldoPendiente,
+      }),
+    )
+    setModalNotificarCliente(true)
+  }
+
+  async function copiarMensajeNotificacion() {
+    const texto = mensajeNotificacionEditado.trim()
+    if (!texto) {
+      onError?.('El mensaje está vacío')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(texto)
+      onNotice?.('Mensaje copiado al portapapeles')
+    } catch {
+      onError?.('No se pudo copiar el mensaje')
+    }
+  }
+
+  function enviarNotificacionWhatsApp() {
+    const texto = mensajeNotificacionEditado.trim()
+    if (!texto) {
+      onError?.('El mensaje está vacío')
+      return
+    }
+    if (!cliente.telefono?.trim()) {
+      onError?.('El teléfono del cliente es requerido para enviar por WhatsApp')
+      return
+    }
+    const url = buildWhatsAppUrl({ telefono: cliente.telefono, mensaje: texto })
+    if (!url) {
+      onError?.('Teléfono del cliente no válido para WhatsApp')
+      return
+    }
+    const win = window.open(url, '_blank', 'noopener')
+    if (!win) onError?.('No se pudo abrir WhatsApp (ventana bloqueada)')
+  }
+
+  async function confirmarEnvioNotificacion() {
+    if (reparaIdCuenta == null) {
+      onError?.('Esta cuenta no tiene orden de servicio vinculada; no se puede registrar en la bitácora.')
+      return
+    }
+    setConfirmandoEnvioNotificacion(true)
+    try {
+      let bitacoraActual = ''
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('reparaciones')
+          .select('bitacora')
+          .eq('id', reparaIdCuenta)
+          .maybeSingle()
+        if (error) throw error
+        bitacoraActual = data?.bitacora ?? ''
+      } else {
+        const rep = readLs(LS_REP, []).find((r) => sameId(r.id, reparaIdCuenta))
+        bitacoraActual = rep?.bitacora ?? ''
+      }
+      const numeroNotificacion = siguienteNumeroNotificacionCliente(bitacoraActual)
+      const nota = textoNotaBitacoraNotificacionCliente(numeroNotificacion)
+      const bitacoraActualizada = agregarEntradaBitacora(bitacoraActual, nota)
+      const patch = { bitacora: bitacoraActualizada, updated_at: new Date().toISOString() }
+      if (supabase) {
+        await actualizarReparacionSupabase(supabase, reparaIdCuenta, patch)
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patch } : r)),
+        )
+      }
+      onNotice?.(`Envío confirmado: notificación (${numeroNotificacion}) registrada en la bitácora.`)
+      setModalNotificarCliente(false)
+    } catch (e) {
+      onError?.(`No se pudo registrar en la bitácora: ${e.message}`)
+    } finally {
+      setConfirmandoEnvioNotificacion(false)
+    }
+  }
+
   async function enviarComprobante() {
     if (!cliente.telefono?.trim()) {
       onError?.('El teléfono del cliente es requerido para el comprobante')
@@ -1219,6 +1315,15 @@ export default function VentasCuentaScreen({
           {esCuentaExistente && cuentaEstatus.toUpperCase() !== 'LIQUIDADA' ? (
             <button type="button" className="btn-liquidar-cuenta" onClick={() => void liquidarCuenta()}>
               ✅ LIQUIDAR CUENTA
+            </button>
+          ) : null}
+          {esCuentaExistente ? (
+            <button
+              type="button"
+              className="btn-notificar-cliente"
+              onClick={() => abrirModalNotificarCliente()}
+            >
+              📱 NOTIFICAR AL CLIENTE
             </button>
           ) : null}
           <button type="button" className="btn-comprobante-ventas" onClick={enviarComprobante}>
@@ -1697,6 +1802,54 @@ export default function VentasCuentaScreen({
           </div>
         </div>
       ) : null}
+
+      <ModalAlerta
+        open={modalNotificarCliente}
+        onClose={() => setModalNotificarCliente(false)}
+        titulo="Notificar al cliente"
+        variante="info"
+        tituloId="modal-notificar-cliente-titulo"
+        role="dialog"
+        textoBoton="Cerrar"
+        backdropClose
+        footer={
+          <>
+            <button type="button" className="secondary" onClick={() => void copiarMensajeNotificacion()}>
+              Copiar mensaje
+            </button>
+            {cliente.telefono?.trim() ? (
+              <button type="button" className="btn-notificar-wa" onClick={enviarNotificacionWhatsApp}>
+                Enviar por WhatsApp
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn-confirmar-envio-notificacion"
+              disabled={confirmandoEnvioNotificacion || reparaIdCuenta == null}
+              title={
+                reparaIdCuenta == null
+                  ? 'No hay orden de servicio vinculada a esta cuenta'
+                  : 'Registrar en la bitácora de la orden que se notificó al cliente'
+              }
+              onClick={() => void confirmarEnvioNotificacion()}
+            >
+              {confirmandoEnvioNotificacion ? 'Confirmando…' : 'Confirmar envío'}
+            </button>
+            <button type="button" className="modal-alerta-btn" onClick={() => setModalNotificarCliente(false)}>
+              Cerrar
+            </button>
+          </>
+        }
+      >
+        <p className="muted small">Puede editar el mensaje antes de copiarlo o enviarlo al cliente:</p>
+        <textarea
+          className="cuenta-notificacion-mensaje"
+          rows={8}
+          value={mensajeNotificacionEditado}
+          onChange={(e) => setMensajeNotificacionEditado(e.target.value)}
+          aria-label="Mensaje para el cliente"
+        />
+      </ModalAlerta>
     </div>
   )
 }

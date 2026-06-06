@@ -6,6 +6,7 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   aYmdLocalDesdeRaw,
+  contarNotificacionesClienteBitacora,
   estaVerificadoEntrega,
   estatusEsEntregado,
   fechaEntregaYmd,
@@ -652,6 +653,7 @@ export default function MonitorOrdenesModulo({
   function badgeEstatus(rep) {
     const ent = estatusEsEntregado(rep?.estatus)
     const verificada = estaVerificadoEntrega(rep)
+    const numNotificaciones = contarNotificacionesClienteBitacora(rep?.bitacora)
     const st = String(rep?.estatus ?? '—').trim()
     const mainVariant = ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'
     return (
@@ -660,6 +662,14 @@ export default function MonitorOrdenesModulo({
         {verificada ? (
           <span className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--verificada">
             VERIFICADA
+          </span>
+        ) : null}
+        {numNotificaciones > 0 ? (
+          <span
+            className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--notificada"
+            title={`${numNotificaciones} notificación${numNotificaciones === 1 ? '' : 'es'} al cliente`}
+          >
+            NOTIFICACIÓN({numNotificaciones})
           </span>
         ) : null}
       </span>

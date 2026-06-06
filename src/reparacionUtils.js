@@ -445,6 +445,35 @@ export function agregarEntradaBitacora(raw, texto) {
   return serializarBitacora(entradas)
 }
 
+export const NOTA_BITACORA_NOTIFICACION_CLIENTE = 'Se le notificó al cliente'
+
+const NOTA_BITACORA_NOTIFICACION_RE = /^se le notific[oó] al cliente(?:\s*\((\d+)\))?\s*$/i
+
+function esEntradaNotificacionCliente(texto) {
+  return NOTA_BITACORA_NOTIFICACION_RE.test(String(texto ?? '').trim())
+}
+
+/** Cuántas confirmaciones de notificación hay en la bitácora (incluye notas antiguas sin número). */
+export function contarNotificacionesClienteBitacora(raw) {
+  return parseBitacora(raw).filter((e) => esEntradaNotificacionCliente(e?.texto)).length
+}
+
+/** Texto de bitácora para la notificación N (1, 2, 3…). */
+export function textoNotaBitacoraNotificacionCliente(numero) {
+  const n = Math.max(1, Math.floor(Number(numero) || 1))
+  return `${NOTA_BITACORA_NOTIFICACION_CLIENTE} (${n})`
+}
+
+/** Siguiente número de notificación según entradas existentes. */
+export function siguienteNumeroNotificacionCliente(raw) {
+  return contarNotificacionesClienteBitacora(raw) + 1
+}
+
+/** True si la bitácora incluye al menos una confirmación de notificación al cliente. */
+export function bitacoraTieneNotificacionCliente(raw) {
+  return contarNotificacionesClienteBitacora(raw) > 0
+}
+
 export function formatFechaBitacora(ymd) {
   if (!ymd) return '—'
   return formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'long', year: 'numeric' })

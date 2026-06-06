@@ -5192,6 +5192,12 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   border: 1px solid #66bb6a;
 }
 
+.rep-orden-badge--notificada {
+  background: #ffe0b2;
+  color: #e65100;
+  border: 1px solid #ff9800;
+}
+
 .warning-inline {
   display: block;
   margin: 8px 0 0;
@@ -7161,6 +7167,60 @@ input.full {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+}
+
+.btn-notificar-cliente {
+  border: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #00897b;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cuenta-notificacion-mensaje {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #b0bec5;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  resize: vertical;
+  background: #fff;
+}
+
+.btn-notificar-wa {
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #25d366;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-confirmar-envio-notificacion {
+  border: 0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: #ef6c00;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(239, 108, 0, 0.35);
+}
+
+.btn-confirmar-envio-notificacion:hover:not(:disabled) {
+  background: #e65100;
+}
+
+.btn-confirmar-envio-notificacion:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-comprobante-ventas {
