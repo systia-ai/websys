@@ -8,5 +8,7 @@ export default defineConfig(({ command }) => ({
   plugins: [react()],
   server: {
     port: 8080,
+    // Abre Google Chrome (no el navegador integrado de Cursor) al hacer npm run dev.
+    open: process.platform === 'win32' ? { app: { name: 'chrome' } } : true,
   },
 }))

@@ -9,14 +9,28 @@ import {
 } from './pagosClientesUtils.js'
 import { formatFechaLegibleEsMx, ymdHoyLocal } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import {
+  cargarDesglosePorCuentas,
+  desgloseParaPago,
+  formatearLineaDesglose,
+} from './corteCajaDesglose.js'
 
 const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
+const LS_DETALLADO_CORTE = 'sistefix_corte_caja_detallado'
 
 function leerVistaCorte() {
   try {
     return localStorage.getItem(LS_VISTA_CORTE) === 'tabla' ? 'tabla' : 'lista'
   } catch {
     return 'lista'
+  }
+}
+
+function leerDetalladoCorte() {
+  try {
+    return localStorage.getItem(LS_DETALLADO_CORTE) === '1'
+  } catch {
+    return false
   }
 }
 
@@ -72,6 +86,9 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
   const [loadingCorte, setLoadingCorte] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [vista, setVista] = useState(leerVistaCorte)
+  const [detallado, setDetallado] = useState(leerDetalladoCorte)
+  const [desglosePorCuenta, setDesglosePorCuenta] = useState(() => new Map())
+  const [cargandoDesglose, setCargandoDesglose] = useState(false)
 
   const cargarClientes = useCallback(async () => {
     try {
@@ -113,6 +130,17 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
         setPeriodoAplicado({ ini, fin })
         setPantalla('resultados')
         setBusqueda('')
+        setCargandoDesglose(true)
+        try {
+          const idsCuenta = filas.map((p) => p.cuenta_id).filter((id) => id != null && id !== '')
+          const desglose = await cargarDesglosePorCuentas(supabase, idsCuenta)
+          setDesglosePorCuenta(desglose)
+        } catch (e) {
+          setDesglosePorCuenta(new Map())
+          console.warn('No se cargó el desglose del corte:', e.message)
+        } finally {
+          setCargandoDesglose(false)
+        }
         if (sinF && todos.length > 0) {
           onNotice?.('Los registros no tienen fecha; se muestran todos los movimientos.')
         } else if (sinFechaIncluidos > 0) {
@@ -195,6 +223,43 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
     setSinColumnaFecha(false)
     setAvisoPagosSinFecha(0)
     setBusqueda('')
+    setDesglosePorCuenta(new Map())
+  }
+
+  function cambiarDetallado(activo) {
+    setDetallado(activo)
+    try {
+      localStorage.setItem(LS_DETALLADO_CORTE, activo ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function conceptoPagoFilas(p) {
+    const concepto = String(p.concepto ?? '—')
+    if (!detallado) return { titulo: concepto, lineas: [] }
+    const cargos = desgloseParaPago(p, desglosePorCuenta)
+    return {
+      titulo: concepto,
+      lineas: cargos.map(formatearLineaDesglose),
+    }
+  }
+
+  function renderConceptoPago(p) {
+    const { titulo, lineas } = conceptoPagoFilas(p)
+    if (!detallado || lineas.length === 0) {
+      return titulo
+    }
+    return (
+      <span className="corte-caja-concepto-detallado">
+        <span className="corte-caja-concepto-titulo">{titulo}</span>
+        <ul className="corte-caja-desglose-lista">
+          {lineas.map((txt, i) => (
+            <li key={i}>{txt}</li>
+          ))}
+        </ul>
+      </span>
+    )
   }
 
   function fechaPagoEtiqueta(p) {
@@ -217,14 +282,19 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
         formatearFechaCorta,
         etiquetaTotal: etiquetaTotalResumen,
         resumen,
-        filas: pagos.map((p) => ({
-          concepto: String(p.concepto ?? '—'),
-          cliente: nombreCliente(clientes, p.cliente_id),
-          cuenta: p.cuenta_id != null && p.cuenta_id !== '' ? String(p.cuenta_id) : '—',
-          forma: String(p.forma_pago ?? '—'),
-          fecha: fechaPagoEtiqueta(p),
-          monto: `$${Number(p.pago ?? 0).toFixed(2)}`,
-        })),
+        filas: pagos.map((p) => {
+          const { titulo, lineas } = conceptoPagoFilas(p)
+          const conceptoPdf =
+            detallado && lineas.length > 0 ? [titulo, ...lineas.map((l) => `  · ${l}`)].join('\n') : titulo
+          return {
+            concepto: conceptoPdf,
+            cliente: nombreCliente(clientes, p.cliente_id),
+            cuenta: p.cuenta_id != null && p.cuenta_id !== '' ? String(p.cuenta_id) : '—',
+            forma: String(p.forma_pago ?? '—'),
+            fecha: fechaPagoEtiqueta(p),
+            monto: `$${Number(p.pago ?? 0).toFixed(2)}`,
+          }
+        }),
       })
     } catch (e) {
       onError?.(`No se pudo imprimir el corte: ${e?.message ?? e}`)
@@ -299,7 +369,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
 
   return (
     <div
-      className={`servicios-root inventarios-root corte-caja-root${vista === 'tabla' && periodoAplicado ? ' corte-caja-modulo--tabla' : ''}`}
+      className={`servicios-root inventarios-root corte-caja-root${vista === 'tabla' && periodoAplicado ? ' corte-caja-modulo--tabla' : ''}${detallado ? ' corte-caja-modulo--detallado' : ''}`}
     >
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={volverAElegirFechas} aria-label="Atrás">
@@ -438,6 +508,15 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
               ▦ Tabla
             </button>
           </div>
+          <label className="corte-caja-detallado-check">
+            <input
+              type="checkbox"
+              checked={detallado}
+              onChange={(e) => cambiarDetallado(e.target.checked)}
+              disabled={cargandoDesglose && pagos.length > 0}
+            />
+            <span>Detallado</span>
+          </label>
         </div>
 
         {loadingCorte ? (
@@ -459,7 +538,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
             showHint={false}
             syncDeps={[vista, filtrados, loadingCorte]}
           >
-              <div className="inventario-tabla-grid corte-caja-tabla-grid">
+              <div className={`inventario-tabla-grid corte-caja-tabla-grid${detallado ? ' corte-caja-tabla-grid--detallado' : ''}`}>
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
                   <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
                     <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Monto</span>
@@ -479,7 +558,9 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
                         <span className="inventario-celda inventario-celda--monto-cat corte-caja-monto-celda">
                           ${Number(p.pago ?? 0).toFixed(2)}
                         </span>
-                        <span className="inventario-celda inventario-celda--concepto">{String(p.concepto ?? '—')}</span>
+                        <span className="inventario-celda inventario-celda--concepto">
+                          {renderConceptoPago(p)}
+                        </span>
                         <span className="inventario-celda inventario-celda--cliente-corte">
                           {nombreCliente(clientes, p.cliente_id)}
                         </span>
@@ -508,7 +589,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice })
                   <div className="equipo-card-main inventario-card-main corte-caja-fila-lectura">
                     <strong className="corte-caja-monto-lista">${Number(p.pago ?? 0).toFixed(2)}</strong>
                     <span className="corte-caja-concepto-lista">
-                      <span aria-hidden="true">📝</span> {String(p.concepto ?? '—')}
+                      <span aria-hidden="true">📝</span> {renderConceptoPago(p)}
                     </span>
                     <span className="muted small corte-caja-meta-lista">
                       <span aria-hidden="true">👤</span> {nombreCliente(clientes, p.cliente_id)}

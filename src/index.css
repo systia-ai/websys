@@ -1580,6 +1580,56 @@ td {
   line-height: 1.4;
 }
 
+.corte-caja-detallado-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #37474f;
+  cursor: pointer;
+  user-select: none;
+}
+
+.corte-caja-detallado-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #1976d2;
+  cursor: pointer;
+}
+
+.corte-caja-concepto-detallado {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.corte-caja-concepto-titulo {
+  font-weight: 600;
+  color: #1565c0;
+}
+
+.corte-caja-desglose-lista {
+  margin: 0;
+  padding: 0 0 0 1rem;
+  list-style: disc;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #455a64;
+  line-height: 1.35;
+}
+
+.corte-caja-desglose-lista li {
+  margin: 2px 0;
+}
+
+.corte-caja-tabla-grid.corte-caja-tabla-grid--detallado .inventario-celda--concepto {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
 .reportes-body {
   max-width: 1100px;
   margin: 0 auto;
