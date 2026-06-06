@@ -534,6 +534,10 @@ function App() {
             setTimeout(() => setNotice(''), 4000)
           }}
           onEditarOrden={(payload) => openReparacionesFromServicios(payload)}
+          onAbrirCuenta={(boot) => {
+            setVentasContext({ ...boot, returnTo: 'monitor_ordenes' })
+            navigateTo('ventas')
+          }}
         />
       </main>
     )

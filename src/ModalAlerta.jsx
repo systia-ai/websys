@@ -6,7 +6,7 @@ const ICONOS = {
 }
 
 /**
- * Modal de alerta con animación de zumbido y variantes de color.
+ * Modal de alerta con variantes de color (zumbido solo en error/advertencia).
  * @param {{ open: boolean, onClose?: () => void, titulo: string, mensaje?: string, variante?: 'error'|'warning'|'success'|'info', icono?: string, children?: import('react').ReactNode, footer?: import('react').ReactNode, textoBoton?: string, backdropClose?: boolean, role?: string, tituloId?: string, className?: string }} props
  */
 export default function ModalAlerta({

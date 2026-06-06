@@ -335,7 +335,6 @@ body {
   border-radius: 14px;
   font-weight: 700;
   line-height: 1.45;
-  animation: modal-alerta-zumbido 1s ease-out forwards;
 }
 
 .info {
@@ -346,7 +345,6 @@ body {
   border-radius: 14px;
   font-weight: 700;
   line-height: 1.45;
-  animation: modal-alerta-zumbido 1s ease-out forwards;
 }
 
 .form {
@@ -514,6 +512,10 @@ td {
 .modal-alerta {
   border-radius: 20px;
   overflow: hidden;
+}
+
+.modal-alerta--error,
+.modal-alerta--warning {
   animation: modal-alerta-zumbido 1s ease-out forwards;
 }
 
@@ -569,12 +571,11 @@ td {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modal-alerta,
+  .modal-alerta--error,
+  .modal-alerta--warning,
   .alerta-permiso-flotante-inner,
   .error,
   .warning,
-  .ok,
-  .info,
   .warning-inline,
   .rep-verificacion-entrega-error {
     animation: none !important;
@@ -3255,6 +3256,36 @@ td {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+}
+
+.monitor-accion-orden-modal {
+  max-width: 480px;
+}
+
+.monitor-accion-orden-footer {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.monitor-accion-orden-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.monitor-accion-orden-cancelar {
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.monitor-accion-orden-btn-cuenta,
+.monitor-accion-orden-btn-orden {
+  min-width: 10.5rem;
+  font-weight: 800;
 }
 
 .monitor-ordenes-col-cliente {

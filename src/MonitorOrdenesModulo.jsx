@@ -138,6 +138,17 @@ function todosTiposServicioSeleccionados(sel) {
   return TIPOS_SERVICIO_FILTRO.length > 0 && TIPOS_SERVICIO_FILTRO.every((t) => sel.has(t))
 }
 
+function cuentaParaVentas(cuenta) {
+  if (!cuenta?.id) return undefined
+  return {
+    id: cuenta.id,
+    total: cuenta.total,
+    saldo: cuenta.saldo,
+    estatus: cuenta.estatus,
+    repara_id: cuenta.repara_id ?? null,
+  }
+}
+
 /**
  * Monitor de órdenes: lista de reparaciones filtrable por estatus, orden por fecha de registro,
  * columnas tipo taller (Android).
@@ -148,11 +159,13 @@ export default function MonitorOrdenesModulo({
   onError,
   onNotice,
   onEditarOrden,
+  onAbrirCuenta,
   puedeEliminar = true,
 }) {
   void onNotice
   const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
   const filtrosIniciales = useMemo(() => leerEstadoFiltrosInicialMonitor(), [])
+  const [selectorAccionRep, setSelectorAccionRep] = useState(null)
   const [reparaciones, setReparaciones] = useState([])
   const [clientes, setClientes] = useState([])
   const [equipos, setEquipos] = useState([])
@@ -542,8 +555,7 @@ export default function MonitorOrdenesModulo({
     if (tecnicoFiltro === nombre) setTecnicoFiltro(TECNICO_TODAS)
   }
 
-  function handleEditarOrden(rep) {
-    if (!onEditarOrden) return
+  function persistirFiltrosParaVolver() {
     guardarFiltrosMonitorSesion({
       estatusSeleccionados: [...estatusSeleccionados],
       tiposServicioSeleccionados: [...tiposServicioSeleccionados],
@@ -557,6 +569,15 @@ export default function MonitorOrdenesModulo({
       busqueda,
     })
     marcarVolverMonitorDesdeOrden()
+  }
+
+  function solicitarAccionOrden(rep) {
+    setSelectorAccionRep(rep)
+  }
+
+  function handleEditarOrden(rep) {
+    if (!onEditarOrden) return
+    persistirFiltrosParaVolver()
     const c = clientes.find((x) => sameId(x.id, rep.cliente_id)) ?? {}
     const eq = rep.equipo_id != null ? equipoPorId.get(String(rep.equipo_id)) ?? {} : {}
     onEditarOrden({
@@ -572,6 +593,38 @@ export default function MonitorOrdenesModulo({
       equipoTipoReparacion: rep.tipo_reparacion ?? eq.tipo_reparacion ?? '',
       reparacionId: rep.id != null ? String(rep.id) : '',
     })
+  }
+
+  function abrirCuentaDesdeOrden(rep) {
+    if (!onAbrirCuenta) {
+      onError?.('No se puede abrir la cuenta desde aquí.')
+      return
+    }
+    const cuenta = cuentaPorReparaId.get(String(rep.id))
+    if (!cuenta?.id) {
+      onError?.('Esta orden no tiene una cuenta vinculada.')
+      setSelectorAccionRep(null)
+      return
+    }
+    const c = clientes.find((x) => sameId(x.id, rep.cliente_id))
+    if (!c?.id) {
+      onError?.('No se encontró el cliente de esta orden.')
+      setSelectorAccionRep(null)
+      return
+    }
+    persistirFiltrosParaVolver()
+    setSelectorAccionRep(null)
+    onAbrirCuenta({
+      cliente: normalizeClienteRow(c),
+      cuenta: cuentaParaVentas(cuenta),
+    })
+  }
+
+  function confirmarOrdenServicioDesdeSelector() {
+    if (!selectorAccionRep) return
+    const rep = selectorAccionRep
+    setSelectorAccionRep(null)
+    handleEditarOrden(rep)
   }
 
   function datosEquipo(rep) {
@@ -975,13 +1028,13 @@ export default function MonitorOrdenesModulo({
                             title={
                               verificada
                                 ? `Orden #${rep.id} — verificada, lista para entrega`
-                                : `Abrir orden #${rep.id}`
+                                : `Orden #${rep.id} — elegir acción`
                             }
-                            onClick={() => handleEditarOrden(rep)}
+                            onClick={() => solicitarAccionOrden(rep)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault()
-                                handleEditarOrden(rep)
+                                solicitarAccionOrden(rep)
                               }
                             }}
                             tabIndex={0}
@@ -1021,10 +1074,10 @@ export default function MonitorOrdenesModulo({
                                 className="btn-icon edit monitor-ordenes-btn-edit"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleEditarOrden(rep)
+                                  solicitarAccionOrden(rep)
                                 }}
-                                title="Editar orden"
-                                aria-label={`Editar orden ${rep.id}`}
+                                title="Abrir orden o cuenta"
+                                aria-label={`Abrir orden ${rep.id}`}
                               >
                                 ✏️
                               </button>
@@ -1040,6 +1093,63 @@ export default function MonitorOrdenesModulo({
           </section>
         )}
       </div>
+
+      {selectorAccionRep ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setSelectorAccionRep(null)}
+        >
+          <div
+            className="modal modal-alerta modal-alerta--info monitor-accion-orden-modal"
+            role="dialog"
+            aria-labelledby="monitor-accion-orden-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="monitor-accion-orden-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ℹ
+                </span>
+                ¿Qué desea abrir?
+              </h3>
+            </div>
+            <div className="modal-body">
+              <p className="modal-alerta-mensaje">
+                Orden <strong>#{selectorAccionRep.id ?? '—'}</strong>
+                <br />
+                Cliente: <strong>{nombreCliente(selectorAccionRep.cliente_id)}</strong>
+              </p>
+              <p className="modal-alerta-sugerencia">Elija si desea ver la orden de servicio o la cuenta del cliente.</p>
+            </div>
+            <div className="modal-footer modal-footer-wrap monitor-accion-orden-footer">
+              <div className="monitor-accion-orden-acciones">
+                <button
+                  type="button"
+                  className="btn-cuentas monitor-accion-orden-btn-cuenta"
+                  onClick={() => abrirCuentaDesdeOrden(selectorAccionRep)}
+                >
+                  💰 Cuenta del cliente
+                </button>
+                <button
+                  type="button"
+                  className="modal-alerta-btn monitor-accion-orden-btn-orden"
+                  onClick={() => confirmarOrdenServicioDesdeSelector()}
+                >
+                  📋 Orden de servicio
+                </button>
+              </div>
+              <button
+                type="button"
+                className="secondary monitor-accion-orden-cancelar"
+                onClick={() => setSelectorAccionRep(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {gestionTecnicosAbierto && (
         <div
