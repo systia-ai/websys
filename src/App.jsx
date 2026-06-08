@@ -179,7 +179,7 @@ function App() {
       const vctx = ventasContext
       setVentasContext(null)
       if (vctx?.returnTo === 'reparaciones' && vctx?.repSessionRestore != null) {
-        setRepSession(vctx.repSessionRestore)
+        setRepSession({ ...vctx.repSessionRestore, _recargarOrden: Date.now() })
       }
       if (vctx?.returnTo === 'clientes' && vctx?.cliente) {
         setClientesRetornoVentas({

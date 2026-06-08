@@ -530,6 +530,14 @@ export default function ReparacionesOrden({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repIdStr])
 
+  /** Al volver de Cuentas, recargar orden (p. ej. bitácora tras notificar al cliente). */
+  useEffect(() => {
+    if (!s._recargarOrden) return
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (id != null) void cargarReparacionRef.current(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s._recargarOrden])
+
   useEffect(() => {
     setWaEnviados({ orden: false, anticipo: false, liquidacion: false })
     setWaExitoVisible(false)

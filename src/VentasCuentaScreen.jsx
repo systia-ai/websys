@@ -27,11 +27,9 @@ import {
   sumPagosCuenta,
   cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
-  agregarEntradaBitacoraAhora,
-  actualizarReparacionSupabase,
+  formatFechaBitacora,
   normalizarReparacionId,
-  siguienteNumeroNotificacionCliente,
-  textoNotaBitacoraNotificacionCliente,
+  registrarNotificacionClienteEnBitacora,
 } from './reparacionUtils.js'
 import { buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
 import { buildWhatsAppUrl } from './whatsappUtils.js'
@@ -288,6 +286,9 @@ export default function VentasCuentaScreen({
   const [modalNotificarCliente, setModalNotificarCliente] = useState(false)
   const [mensajeNotificacionEditado, setMensajeNotificacionEditado] = useState('')
   const [confirmandoEnvioNotificacion, setConfirmandoEnvioNotificacion] = useState(false)
+  const [errorNotificacion, setErrorNotificacion] = useState('')
+  const [modalExitoNotificacion, setModalExitoNotificacion] = useState(false)
+  const [detalleExitoNotificacion, setDetalleExitoNotificacion] = useState('')
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
@@ -327,6 +328,7 @@ export default function VentasCuentaScreen({
       cuentaInicial?.repara_id ??
       context?.reparacionOrdenId ??
       context?.monitorReparacionId ??
+      reciboOrdenEquipo?.orden ??
       null
     return normalizarReparacionId(raw)
   }, [
@@ -335,6 +337,7 @@ export default function VentasCuentaScreen({
     cuentaInicial?.repara_id,
     context?.reparacionOrdenId,
     context?.monitorReparacionId,
+    reciboOrdenEquipo?.orden,
   ])
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
@@ -1138,6 +1141,7 @@ export default function VentasCuentaScreen({
   }
 
   function abrirModalNotificarCliente() {
+    setErrorNotificacion('')
     setMensajeNotificacionEditado(
       buildMensajeNotificacionCuentaCliente({
         nombreCliente: cliente.nombre,
@@ -1184,48 +1188,37 @@ export default function VentasCuentaScreen({
   async function confirmarEnvioNotificacion() {
     const rid = ordenVinculadaId
     if (rid == null) {
-      onError?.('Esta cuenta no tiene orden de servicio vinculada; no se puede registrar en la bitácora.')
+      const msg = 'Esta cuenta no tiene orden de servicio vinculada; no se puede registrar en la bitácora.'
+      setErrorNotificacion(msg)
+      onError?.(msg)
       return
     }
     setConfirmandoEnvioNotificacion(true)
+    setErrorNotificacion('')
     try {
-      let bitacoraActual = ''
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('reparaciones')
-          .select('bitacora')
-          .eq('id', rid)
-          .maybeSingle()
-        if (error) throw error
-        if (!data) {
-          throw new Error(`No se encontró la orden #${rid}.`)
-        }
-        bitacoraActual = data?.bitacora ?? ''
-      } else {
-        const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
-        if (!rep) throw new Error(`No se encontró la orden #${rid}.`)
-        bitacoraActual = rep?.bitacora ?? ''
-      }
-      const numeroNotificacion = siguienteNumeroNotificacionCliente(bitacoraActual)
-      const nota = textoNotaBitacoraNotificacionCliente(numeroNotificacion)
-      const bitacoraActualizada = agregarEntradaBitacoraAhora(bitacoraActual, nota)
-      const patch = { bitacora: bitacoraActualizada, updated_at: new Date().toISOString() }
-      if (supabase) {
-        const actualizada = await actualizarReparacionSupabase(supabase, rid, patch)
-        if (actualizada?.bitacora !== bitacoraActualizada) {
-          throw new Error('La bitácora no se guardó correctamente en la orden.')
-        }
-      } else {
-        const all = readLs(LS_REP, [])
-        const idx = all.findIndex((r) => sameId(r.id, rid))
-        if (idx < 0) throw new Error(`No se encontró la orden #${rid}.`)
-        all[idx] = { ...all[idx], ...patch }
-        writeLs(LS_REP, all)
-      }
+      const resultado = await registrarNotificacionClienteEnBitacora(supabase, rid, {
+        leerBitacoraLocal: (idOrden) => {
+          const rep = readLs(LS_REP, []).find((r) => sameId(r.id, idOrden))
+          return rep?.bitacora ?? ''
+        },
+        escribirBitacoraLocal: (idOrden, bitacoraNueva, updatedAt) => {
+          const all = readLs(LS_REP, [])
+          const idx = all.findIndex((r) => sameId(r.id, idOrden))
+          if (idx < 0) throw new Error(`No se encontró la orden #${idOrden}.`)
+          all[idx] = { ...all[idx], bitacora: bitacoraNueva, updated_at: updatedAt }
+          writeLs(LS_REP, all)
+        },
+      })
       setModalNotificarCliente(false)
+      setDetalleExitoNotificacion(
+        `${resultado.nota} — ${formatFechaBitacora(resultado.fechaHora)}`,
+      )
+      setModalExitoNotificacion(true)
       onNotice?.('Nota agregada con éxito')
     } catch (e) {
-      onError?.(`No se pudo registrar en la bitácora: ${e.message}`)
+      const msg = e?.message ?? String(e)
+      setErrorNotificacion(msg)
+      onError?.(`No se pudo registrar en la bitácora: ${msg}`)
     } finally {
       setConfirmandoEnvioNotificacion(false)
     }
@@ -1906,6 +1899,20 @@ export default function VentasCuentaScreen({
         }
       >
         <p className="muted small">Puede editar el mensaje antes de copiarlo o enviarlo al cliente:</p>
+        {errorNotificacion ? (
+          <p className="error ventas-notificacion-error" role="alert">
+            {errorNotificacion}
+          </p>
+        ) : null}
+        {ordenVinculadaId == null ? (
+          <p className="warning small">
+            No hay orden de servicio vinculada; no se podrá registrar en la bitácora.
+          </p>
+        ) : (
+          <p className="muted small">
+            Orden vinculada: <strong>#{ordenVinculadaId}</strong>
+          </p>
+        )}
         <textarea
           className="cuenta-notificacion-mensaje"
           rows={8}
@@ -1914,6 +1921,18 @@ export default function VentasCuentaScreen({
           aria-label="Mensaje para el cliente"
         />
       </ModalAlerta>
+
+      <ModalAlerta
+        open={modalExitoNotificacion}
+        onClose={() => setModalExitoNotificacion(false)}
+        titulo="Nota agregada con éxito"
+        variante="success"
+        tituloId="modal-exito-notificacion-titulo"
+        role="alertdialog"
+        textoBoton="Entendido"
+        backdropClose
+        mensaje={detalleExitoNotificacion || 'Se registró la notificación en la bitácora de la orden.'}
+      />
     </div>
   )
 }

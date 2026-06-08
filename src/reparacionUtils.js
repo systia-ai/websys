@@ -494,6 +494,73 @@ export function bitacoraTieneNotificacionCliente(raw) {
   return contarNotificacionesClienteBitacora(raw) > 0
 }
 
+/**
+ * Registra en la bitácora de la orden que se notificó al cliente.
+ * Devuelve número, texto de la nota y fecha/hora usados.
+ */
+export async function registrarNotificacionClienteEnBitacora(supabase, reparaId, opts = {}) {
+  const rid = normalizarReparacionId(reparaId)
+  if (rid == null) throw new Error('ID de orden inválido.')
+
+  let bitacoraActual = ''
+  if (supabase?.from) {
+    const { data, error } = await supabase.from('reparaciones').select('bitacora').eq('id', rid).maybeSingle()
+    if (error) {
+      const msg = String(error.message ?? '')
+      if (/column .*bitacora.* does not exist/i.test(msg) || error.code === '42703') {
+        throw new Error(
+          'Falta la columna bitacora en Supabase. Ejecute la migración 20260603140000_reparaciones_bitacora.sql.',
+        )
+      }
+      throw error
+    }
+    if (!data) throw new Error(`No se encontró la orden #${rid}.`)
+    bitacoraActual = data.bitacora ?? ''
+  } else if (typeof opts.leerBitacoraLocal === 'function') {
+    bitacoraActual = opts.leerBitacoraLocal(rid) ?? ''
+  } else {
+    throw new Error('No hay conexión a la base de datos.')
+  }
+
+  const numeroNotificacion = siguienteNumeroNotificacionCliente(bitacoraActual)
+  const nota = textoNotaBitacoraNotificacionCliente(numeroNotificacion)
+  const cuando = new Date()
+  const bitacoraActualizada = agregarEntradaBitacoraAhora(bitacoraActual, nota, cuando)
+  if (!bitacoraActualizada) {
+    throw new Error('No se pudo generar la nota de bitácora.')
+  }
+
+  const patch = { bitacora: bitacoraActualizada, updated_at: cuando.toISOString() }
+
+  if (supabase?.from) {
+    const actualizada = await actualizarReparacionSupabase(supabase, rid, patch)
+    const guardada = String(actualizada?.bitacora ?? '')
+    if (!guardada.includes(nota)) {
+      throw new Error(
+        'La bitácora no se guardó en la orden. Verifique permisos o que la migración de bitácora esté aplicada.',
+      )
+    }
+    return {
+      numeroNotificacion,
+      nota,
+      fechaHora: stampBitacoraFechaHoraLocal(cuando),
+      bitacora: guardada,
+    }
+  }
+
+  if (typeof opts.escribirBitacoraLocal === 'function') {
+    opts.escribirBitacoraLocal(rid, bitacoraActualizada, patch.updated_at)
+    return {
+      numeroNotificacion,
+      nota,
+      fechaHora: stampBitacoraFechaHoraLocal(cuando),
+      bitacora: bitacoraActualizada,
+    }
+  }
+
+  throw new Error('No hay conexión a la base de datos.')
+}
+
 export function formatFechaBitacora(fechaRaw) {
   if (!fechaRaw) return '—'
   const s = String(fechaRaw).trim()
