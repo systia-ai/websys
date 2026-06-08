@@ -396,7 +396,7 @@ export default function VentasCuentaScreen({
               supabase.from('reparamov').select('*').eq('repara_id', rid),
               supabase
                 .from('reparaciones')
-                .select('id, costo_reparacion, descripcion_equipo, equipo_id')
+                .select('id, costo_reparacion, descripcion_equipo, equipo_id, tipo_reparacion')
                 .eq('id', rid)
                 .maybeSingle(),
             ])
@@ -426,6 +426,7 @@ export default function VentasCuentaScreen({
             ? {
                 orden: String(rid),
                 descripcionEquipo: descEq || null,
+                tipoReparacion: repOrden?.tipo_reparacion ?? null,
               }
             : null,
         )
@@ -1092,6 +1093,7 @@ export default function VentasCuentaScreen({
         nombreCliente: cliente.nombre,
         lineas,
         saldoPendiente,
+        tipoReparacion: reciboOrdenEquipo?.tipoReparacion,
       }),
     )
     setModalNotificarCliente(true)

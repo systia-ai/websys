@@ -23,11 +23,16 @@ export const ORDEN_PDF_FORMAT = RECIBO_PAGE_FORMAT
 export const LEGAL_ORDEN_SERVICIO =
   'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
 
+const AVISO_TINTA_ORDEN = 'LA TINTA CONSUMIDA CSA NO LA RELLENA'
+
 const MARGIN = 5
 const GAP_ORDEN_CAMPOS = 2.5
 const GAP_ANTES_PIE = 2.5
 const GAP_ANTES_LEYENDA = 1.5
+const GAP_AVISO_LEYENDA = 2
 const GAP_LEYENDA_CONTACTO = 1.5
+const FUENTE_AVISO_TINTA = 7.8
+const LINE_H_AVISO_TINTA = 3.6
 const FUENTE_LEGAL_ORDEN = 6.5
 const LINE_H_LEGAL = 3.15
 const ENCABEZADO_MEDIA = { scale: 0.42, subtitleSize: 6.8, titleSize: 9.2, compactFooter: true }
@@ -42,6 +47,13 @@ function formatFechaOrdenPdf(fechaCreacion) {
   return formatFechaLegibleEsMx(fechaCreacion, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+function measureAvisoTintaOrdenHeight(pdf, contentW) {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(FUENTE_AVISO_TINTA)
+  const lines = pdf.splitTextToSize(AVISO_TINTA_ORDEN, contentW - 6)
+  return lines.length * LINE_H_AVISO_TINTA + GAP_AVISO_LEYENDA
+}
+
 function measureLeyendaOrdenHeight(pdf, contentW) {
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(FUENTE_LEGAL_ORDEN)
@@ -50,7 +62,21 @@ function measureLeyendaOrdenHeight(pdf, contentW) {
 }
 
 function measurePieOrdenHeight(pdf, contentW) {
-  return GAP_ANTES_LEYENDA + measureLeyendaOrdenHeight(pdf, contentW) + measureContactoSistebitPdf(pdf, contentW, PIE_COMPACT)
+  return (
+    GAP_ANTES_LEYENDA +
+    measureAvisoTintaOrdenHeight(pdf, contentW) +
+    measureLeyendaOrdenHeight(pdf, contentW) +
+    measureContactoSistebitPdf(pdf, contentW, PIE_COMPACT)
+  )
+}
+
+function drawAvisoTintaOrden(pdf, y, contentW, centerX) {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(FUENTE_AVISO_TINTA)
+  pdf.setTextColor(26, 32, 44)
+  const lines = pdf.splitTextToSize(AVISO_TINTA_ORDEN, contentW - 6)
+  pdf.text(lines, centerX, y, { align: 'center', maxWidth: contentW - 6 })
+  return lines.length * LINE_H_AVISO_TINTA + GAP_AVISO_LEYENDA
 }
 
 function drawLeyendaOrden(pdf, y, contentW, centerX) {
@@ -63,9 +89,16 @@ function drawLeyendaOrden(pdf, y, contentW, centerX) {
 }
 
 function drawPieOrden(pdf, y, contentW, centerX) {
-  const yLeyenda = y + GAP_ANTES_LEYENDA
+  const yInicio = y + GAP_ANTES_LEYENDA
+  const avisoH = drawAvisoTintaOrden(pdf, yInicio, contentW, centerX)
+  const yLeyenda = yInicio + avisoH
   const leyendaH = drawLeyendaOrden(pdf, yLeyenda, contentW, centerX)
-  return GAP_ANTES_LEYENDA + leyendaH + drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX, PIE_COMPACT)
+  return (
+    GAP_ANTES_LEYENDA +
+    avisoH +
+    leyendaH +
+    drawContactoSistebitPdf(pdf, yLeyenda + leyendaH, contentW, centerX, PIE_COMPACT)
+  )
 }
 
 function labelTipoServicioPdf(raw) {

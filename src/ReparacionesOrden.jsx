@@ -165,12 +165,25 @@ function esViolacionUnica(err) {
   return msg.includes('duplicate') || msg.includes('unique')
 }
 
+function cuentaParaVentas(cuenta) {
+  if (!cuenta?.id) return undefined
+  return {
+    id: cuenta.id,
+    total: cuenta.total,
+    saldo: cuenta.saldo,
+    estatus: cuenta.estatus,
+    repara_id: cuenta.repara_id ?? null,
+  }
+}
+
 export default function ReparacionesOrden({
   supabase,
   session,
   onSalir,
   onError,
   onNotice,
+  /** Abre la cuenta del cliente vinculada a esta orden (módulo Ventas). */
+  onIrCuentaCliente,
   /** Si true, no se muestra la franja azul "Reparaciones" (el padre ya muestra el título, p. ej. OrdenServicioModulo). */
   omitOuterHeader = false,
   puedeEliminar = true,
@@ -1341,6 +1354,35 @@ export default function ReparacionesOrden({
   const domClienteUi = clienteDesdeBd?.domicilio || s.clienteDomicilio || ''
   const correoClienteUi = clienteDesdeBd?.correo || s.clienteCorreo || ''
   const puedeAccionesPdf = ordenRegistrada || idReparacion != null
+  const puedeIrCuentaCliente = Boolean((esOrdenExistente || idReparacion != null) && cuentaOrden?.id)
+
+  function irACuentaCliente() {
+    if (!onIrCuentaCliente) {
+      onError?.('No se puede abrir la cuenta desde aquí.')
+      return
+    }
+    if (!cuentaOrden?.id) {
+      onError?.('Esta orden no tiene una cuenta vinculada.')
+      return
+    }
+    const cid = clienteDesdeBd?.id ?? clienteIdNum ?? s.clienteId ?? s.cliente_id
+    const cliente = normalizeClienteRow({
+      id: cid,
+      nombre: nombreClienteUi,
+      telefono: telClienteUi,
+      domicilio: domClienteUi,
+      correo: correoClienteUi,
+      ...(clienteDesdeBd ?? {}),
+    })
+    if (!cliente?.id) {
+      onError?.('No se encontró el cliente de esta orden.')
+      return
+    }
+    onIrCuentaCliente({
+      cliente,
+      cuenta: cuentaParaVentas(cuentaOrden),
+    })
+  }
 
   async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
@@ -2129,6 +2171,21 @@ export default function ReparacionesOrden({
               onClick={() => solicitarActualizarOrden()}
             >
               {actualizandoOrden ? 'Guardando…' : 'Actualizar orden'}
+            </button>
+          )}
+          {(esOrdenExistente || idReparacion != null) && (
+            <button
+              type="button"
+              className="btn-cuenta-cliente-orden wide"
+              disabled={!puedeIrCuentaCliente}
+              onClick={() => irACuentaCliente()}
+              title={
+                puedeIrCuentaCliente
+                  ? 'Abrir la cuenta de ventas de este cliente'
+                  : 'La orden aún no tiene cuenta vinculada'
+              }
+            >
+              💳 Cuenta del cliente
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>

@@ -171,6 +171,9 @@ function App() {
     if (leaving === 'ventas') {
       const vctx = ventasContext
       setVentasContext(null)
+      if (vctx?.returnTo === 'reparaciones' && vctx?.repSessionRestore != null) {
+        setRepSession(vctx.repSessionRestore)
+      }
       if (vctx?.returnTo === 'clientes' && vctx?.cliente) {
         setClientesRetornoVentas({
           openAccionesModal: true,
@@ -611,6 +614,14 @@ function App() {
         onSeleccionarOrdenDesdeBusqueda={(payload) => setRepSession({ ...payload, _fromSearch: true })}
         onClearOrdenSession={() => setRepSession(null)}
         onSalir={goBack}
+        onIrCuentaCliente={(boot) => {
+          setVentasContext({
+            ...boot,
+            returnTo: 'reparaciones',
+            repSessionRestore: repSession ?? {},
+          })
+          navigateTo('ventas')
+        }}
         onError={(msg) => {
           setError(msg)
           setTimeout(() => setError(''), 6000)
