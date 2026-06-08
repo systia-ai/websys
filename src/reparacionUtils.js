@@ -803,16 +803,21 @@ export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
   if (!cuenta?.id) return repRow
 
   const estCuenta = String(cuenta.estatus ?? '').trim().toUpperCase()
-  if (estCuenta === 'LIQUIDADA') return repRow
+  if (estCuenta === 'LIQUIDADA' || estCuenta === 'PAGADA') return repRow
 
   const { data: pagos, error: eP } = await supabase
     .from('pagosclientes')
-    .select('id')
+    .select('pago')
     .eq('cuenta_id', cuenta.id)
-    .limit(1)
   if (eP) return repRow
-  if ((pagos ?? []).length > 0) return repRow
 
+  const pagado = sumPagosCuenta(pagos ?? [])
+  const totalVenta = Number(cuenta.total ?? 0)
+
+  // Cargos cubiertos: la orden puede estar entregada aunque la cuenta siga PENDIENTE hasta liquidar.
+  if (totalVenta > 0.0001 && pagado >= totalVenta - 0.01) return repRow
+
+  // Solo anticipo, sin cargos, o cuenta abierta: el equipo no debe figurar como entregado.
   const now = new Date().toISOString()
   const patch = { estatus: 'INGRESADO', fecha_entrega: null, updated_at: now }
   await actualizarReparacionSupabase(supabase, repRow.id, patch)
@@ -844,6 +849,12 @@ export function balanceNetoCuenta(totalVenta, pagosCuenta = []) {
 /** Adeudo = total de la venta menos lo pagado (mínimo 0). */
 export function saldoPendienteCuenta(totalVenta, pagosCuenta = []) {
   return Math.max(0, balanceNetoCuenta(totalVenta, pagosCuenta))
+}
+
+/** Hay anticipo registrado pero aún no hay cargos de venta/reparación. */
+export function cuentaTieneSoloAnticipo(totalVenta, pagosCuenta = []) {
+  const total = Number(totalVenta ?? 0)
+  return total <= 0.0001 && sumPagosCuenta(pagosCuenta) > 0.0001
 }
 
 /** Monto con signo para UI/PDF (ej. -$300.00). */
@@ -944,8 +955,8 @@ export async function sincronizarEstatusCuentaPorSaldo(
       return { ...cuenta, ...patchAnticipo }
     }
     const patchSoloSaldo = patchTotalesSaldoCuenta(0, 0, {
-      estatus: cuenta.estatus ?? 'PENDIENTE',
-      fecha_liquidada: cuenta.fecha_liquidada ?? null,
+      estatus: 'PENDIENTE',
+      fecha_liquidada: null,
     })
     if (supabase && Number(cuenta.saldo ?? -1) !== 0) {
       await actualizarCuentaSupabase(supabase, cuenta.id, patchSoloSaldo)

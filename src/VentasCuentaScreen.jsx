@@ -25,6 +25,7 @@ import {
   sincronizarEstatusCuentaPorSaldo,
   totalesVisiblesCuenta,
   sumPagosCuenta,
+  cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
   agregarEntradaBitacora,
   actualizarReparacionSupabase,
@@ -313,6 +314,11 @@ export default function VentasCuentaScreen({
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
+  const puedeLiquidarCuenta =
+    esCuentaExistente &&
+    cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
+    totalCargos > 0.0001 &&
+    !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -577,6 +583,8 @@ export default function VentasCuentaScreen({
         let next = { ...prev, total: totalSync, saldo: adeudo }
         if (adeudo > 0.01) {
           next = { ...next, estatus: 'PENDIENTE', fecha_liquidada: null }
+        } else if (totalSync <= 0.0001 && pagado > 0.0001) {
+          next = { ...next, total: totalSync, saldo: 0, estatus: 'PENDIENTE', fecha_liquidada: null }
         } else if (totalSync > 0.0001 && pagado >= totalSync - 0.01) {
           const est = String(prev.estatus ?? '').toUpperCase()
           if (est === 'LIQUIDADA') {
@@ -1009,6 +1017,22 @@ export default function VentasCuentaScreen({
 
   async function aplicarLiquidacionCuenta({ avisar = true, totalOverride = null } = {}) {
     if (!cuentaId) return false
+    const cargos = totalCargosDesdeLineas(lineas)
+    const pagosUi = pagosDesdeLineas(lineas)
+    if (cuentaTieneSoloAnticipo(cargos, pagosUi)) {
+      if (avisar) {
+        onError?.(
+          'No se puede liquidar: solo hay anticipo. La cuenta sigue pendiente hasta registrar el servicio y el pago total.',
+        )
+      }
+      return false
+    }
+    if (cargos <= 0.0001) {
+      if (avisar) {
+        onError?.('No se puede liquidar: agregue cargos a la cuenta antes de cerrarla.')
+      }
+      return false
+    }
     const saldoNet =
       totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas, totalCargos)
     if (saldoNet > 0.0001) {
@@ -1017,12 +1041,11 @@ export default function VentasCuentaScreen({
       }
       return false
     }
-    const cargos = totalCargosDesdeLineas(lineas)
-    const pagosUi = sumMontoPagos(pagosDesdeLineas(lineas))
-    if (cargos > 0.01 && pagosUi < cargos - 0.01) {
+    const pagosUiTotal = sumMontoPagos(pagosUi)
+    if (pagosUiTotal < cargos - 0.01) {
       if (avisar) {
         onError?.(
-          `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUi.toFixed(2)}.`,
+          `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUiTotal.toFixed(2)}.`,
         )
       }
       return false
@@ -1317,8 +1340,13 @@ export default function VentasCuentaScreen({
         </label>
 
         <div className="ventas-acciones">
-          {esCuentaExistente && cuentaEstatus.toUpperCase() !== 'LIQUIDADA' ? (
-            <button type="button" className="btn-liquidar-cuenta" onClick={() => void liquidarCuenta()}>
+          {puedeLiquidarCuenta ? (
+            <button
+              type="button"
+              className="btn-liquidar-cuenta"
+              onClick={() => void liquidarCuenta()}
+              title="Cierra la cuenta y marca la orden como entregada"
+            >
               ✅ LIQUIDAR CUENTA
             </button>
           ) : null}

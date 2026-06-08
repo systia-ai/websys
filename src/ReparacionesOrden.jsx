@@ -37,9 +37,6 @@ import {
   agregarEntradaBitacora,
   bloqueaEntregaSinVerificacion,
   corregirEntregadaIndebidaSiAplica,
-  estatusSiguienteEnFlujo,
-  validarTransicionEstatus,
-  validarTransicionEstatusAlGuardar,
   fechasHitosOrdenConVerificacion,
   formatFechaBitacora,
   insertarReparacionSupabase,
@@ -49,7 +46,6 @@ import {
   parseBitacora,
   patchFechasHitosEstatus,
   patchVerificadoEntrega,
-  normalizarEstatusOrden,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -230,7 +226,6 @@ export default function ReparacionesOrden({
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
   const [confirmActualizarAbierto, setConfirmActualizarAbierto] = useState(false)
   const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
-  const [modalEstatus, setModalEstatus] = useState(null)
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
@@ -279,11 +274,6 @@ export default function ReparacionesOrden({
     setFechaVerificacionEntrega(data?.fecha_verificacion_entrega ?? null)
     setErrorVerificacion('')
   }, [])
-
-  const estatusOpcionesCambio = useMemo(() => {
-    const actual = normalizarEstatusOrden(estatus)
-    return ESTATUS_ORDEN.filter((st) => normalizarEstatusOrden(st) !== actual)
-  }, [estatus])
 
   const fechasHitosBanner = useMemo(() => {
     const rep = {
@@ -820,41 +810,15 @@ export default function ReparacionesOrden({
     }
   }
 
-  function solicitarCambioEstatus(v) {
+  function cambiarEstatusDesdeSelect(v) {
     if (!v) return
     const actual = estatusRef.current ?? estatus
-    const validacion = validarTransicionEstatus(actual, v)
-    if (!validacion.ok) {
-      setModalEstatus({
-        tipo: 'invalido',
-        mensaje: validacion.mensaje,
-        estatusActual: actual,
-        estatusIntentado: v,
-        estatusSiguiente: validacion.estatusSiguiente ?? validacion.estatusSugerido,
-      })
-      onError?.(validacion.mensaje)
-      return
-    }
     if (estatusEsEntregado(v) && bloqueaEntregaSinVerificacion(actual, verificadoEntrega)) {
       setAlertaVerificarEntregaAbierto(true)
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
       return
     }
-    setModalEstatus({
-      tipo: 'confirmar',
-      estatusActual: actual,
-      estatusNuevo: v,
-      estatusSiguiente: estatusSiguienteEnFlujo(v),
-    })
-  }
-
-  function confirmarCambioEstatusModal() {
-    if (!modalEstatus || modalEstatus.tipo !== 'confirmar') return
-    aplicarCambioEstatusLocal(modalEstatus.estatusNuevo)
-    setModalEstatus(null)
-    onNotice?.(
-      `Estatus cambiado a ${modalEstatus.estatusNuevo}. Pulse «Actualizar orden» para guardar en la base de datos.`,
-    )
+    aplicarCambioEstatusLocal(v)
   }
 
   async function marcarVerificadoEntrega() {
@@ -987,21 +951,6 @@ export default function ReparacionesOrden({
       return
     }
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
-    const validacionSecuencia = validarTransicionEstatusAlGuardar(
-      estatusPersistidoRef.current,
-      estatusGuardar,
-    )
-    if (!validacionSecuencia.ok) {
-      setModalEstatus({
-        tipo: 'invalido',
-        mensaje: validacionSecuencia.mensaje,
-        estatusActual: estatusPersistidoRef.current,
-        estatusIntentado: estatusGuardar,
-        estatusSiguiente: validacionSecuencia.estatusSiguiente ?? validacionSecuencia.estatusSugerido,
-      })
-      onError?.(validacionSecuencia.mensaje)
-      return
-    }
     if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
       setAlertaVerificarEntregaAbierto(true)
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
@@ -1022,23 +971,6 @@ export default function ReparacionesOrden({
     actualizandoRef.current = true
     setActualizandoOrden(true)
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
-    const validacionSecuencia = validarTransicionEstatusAlGuardar(
-      estatusPersistidoRef.current,
-      estatusGuardar,
-    )
-    if (!validacionSecuencia.ok) {
-      setModalEstatus({
-        tipo: 'invalido',
-        mensaje: validacionSecuencia.mensaje,
-        estatusActual: estatusPersistidoRef.current,
-        estatusIntentado: estatusGuardar,
-        estatusSiguiente: validacionSecuencia.estatusSiguiente ?? validacionSecuencia.estatusSugerido,
-      })
-      onError?.(validacionSecuencia.mensaje)
-      actualizandoRef.current = false
-      setActualizandoOrden(false)
-      return
-    }
     if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
       setAlertaVerificarEntregaAbierto(true)
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
@@ -1976,24 +1908,23 @@ export default function ReparacionesOrden({
               aria-readonly="true"
               tabIndex={-1}
             />
-            {!estatusEsEntregado(estatus) ? (
-              <select
-                className="estatus-select"
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value
-                  e.target.value = ''
-                  solicitarCambioEstatus(v)
-                }}
-              >
-                <option value="">Cambiar estatus →</option>
-                {estatusOpcionesCambio.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+            <select
+              className="estatus-select"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value
+                if (!v) return
+                cambiarEstatusDesdeSelect(v)
+                e.target.value = ''
+              }}
+            >
+              <option value="">Seleccionar</option>
+              {ESTATUS_ORDEN.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -2305,71 +2236,6 @@ export default function ReparacionesOrden({
           </div>
         </div>
       )}
-
-      {modalEstatus?.tipo === 'confirmar' ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => setModalEstatus(null)}
-        >
-          <div
-            className="modal modal-alerta modal-alerta--info"
-            role="alertdialog"
-            aria-labelledby="modal-estatus-titulo"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 id="modal-estatus-titulo">
-                <span className="modal-alerta-icon" aria-hidden="true">
-                  ℹ
-                </span>
-                Confirmar cambio de estatus
-              </h3>
-            </div>
-            <div className="modal-body">
-              <p className="modal-alerta-mensaje">
-                Estatus actual: <strong>{modalEstatus.estatusActual}</strong>
-                <br />
-                Va a cambiar a: <strong>{modalEstatus.estatusNuevo}</strong>
-              </p>
-              {modalEstatus.estatusSiguiente ? (
-                <p className="modal-alerta-sugerencia">
-                  Después de guardar, el siguiente paso será:{' '}
-                  <strong>{modalEstatus.estatusSiguiente}</strong>
-                </p>
-              ) : (
-                <p className="modal-alerta-sugerencia">Este es el último estatus del flujo.</p>
-              )}
-              <p className="modal-alerta-sugerencia">
-                Se registrará la fecha de este cambio al pulsar «Actualizar orden».
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="secondary" onClick={() => setModalEstatus(null)}>
-                Cancelar
-              </button>
-              <button type="button" className="modal-alerta-btn" onClick={() => confirmarCambioEstatusModal()}>
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <ModalAlerta
-        open={modalEstatus?.tipo === 'invalido'}
-        onClose={() => setModalEstatus(null)}
-        titulo="Estatus no permitido"
-        mensaje={modalEstatus?.mensaje}
-        variante="error"
-        tituloId="modal-estatus-error-titulo"
-      >
-        {modalEstatus?.estatusSiguiente ? (
-          <p className="modal-alerta-sugerencia">
-            Estatus siguiente permitido: <strong>{modalEstatus.estatusSiguiente}</strong>
-          </p>
-        ) : null}
-      </ModalAlerta>
 
       <ModalAlerta
         open={alertaVerificarEntregaAbierto}
