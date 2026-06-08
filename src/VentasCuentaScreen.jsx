@@ -27,7 +27,7 @@ import {
   sumPagosCuenta,
   cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
-  agregarEntradaBitacora,
+  agregarEntradaBitacoraAhora,
   actualizarReparacionSupabase,
   siguienteNumeroNotificacionCliente,
   textoNotaBitacoraNotificacionCliente,
@@ -319,6 +319,7 @@ export default function VentasCuentaScreen({
     cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
     totalCargos > 0.0001 &&
     !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))
+  const ordenVinculadaId = reparaIdCuenta ?? cuentaInfo?.repara_id ?? cuentaInicial?.repara_id ?? null
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -1159,7 +1160,8 @@ export default function VentasCuentaScreen({
   }
 
   async function confirmarEnvioNotificacion() {
-    if (reparaIdCuenta == null) {
+    const rid = ordenVinculadaId
+    if (rid == null || rid === '') {
       onError?.('Esta cuenta no tiene orden de servicio vinculada; no se puede registrar en la bitácora.')
       return
     }
@@ -1170,28 +1172,28 @@ export default function VentasCuentaScreen({
         const { data, error } = await supabase
           .from('reparaciones')
           .select('bitacora')
-          .eq('id', reparaIdCuenta)
+          .eq('id', rid)
           .maybeSingle()
         if (error) throw error
         bitacoraActual = data?.bitacora ?? ''
       } else {
-        const rep = readLs(LS_REP, []).find((r) => sameId(r.id, reparaIdCuenta))
+        const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
         bitacoraActual = rep?.bitacora ?? ''
       }
       const numeroNotificacion = siguienteNumeroNotificacionCliente(bitacoraActual)
       const nota = textoNotaBitacoraNotificacionCliente(numeroNotificacion)
-      const bitacoraActualizada = agregarEntradaBitacora(bitacoraActual, nota)
+      const bitacoraActualizada = agregarEntradaBitacoraAhora(bitacoraActual, nota)
       const patch = { bitacora: bitacoraActualizada, updated_at: new Date().toISOString() }
       if (supabase) {
-        await actualizarReparacionSupabase(supabase, reparaIdCuenta, patch)
+        await actualizarReparacionSupabase(supabase, rid, patch)
       } else {
         const all = readLs(LS_REP, [])
         writeLs(
           LS_REP,
-          all.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patch } : r)),
+          all.map((r) => (sameId(r.id, rid) ? { ...r, ...patch } : r)),
         )
       }
-      onNotice?.(`Envío confirmado: notificación (${numeroNotificacion}) registrada en la bitácora.`)
+      onNotice?.('Se agregó la nota a la bitácora exitosamente')
       setModalNotificarCliente(false)
     } catch (e) {
       onError?.(`No se pudo registrar en la bitácora: ${e.message}`)
@@ -1858,9 +1860,9 @@ export default function VentasCuentaScreen({
             <button
               type="button"
               className="btn-confirmar-envio-notificacion"
-              disabled={confirmandoEnvioNotificacion || reparaIdCuenta == null}
+              disabled={confirmandoEnvioNotificacion || ordenVinculadaId == null}
               title={
-                reparaIdCuenta == null
+                ordenVinculadaId == null
                   ? 'No hay orden de servicio vinculada a esta cuenta'
                   : 'Registrar en la bitácora de la orden que se notificó al cliente'
               }

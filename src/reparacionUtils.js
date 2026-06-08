@@ -405,7 +405,7 @@ export function formatFechaLegibleEsMx(
   return d.toLocaleDateString('es-MX', opts)
 }
 
-const BITACORA_LINE_RE = /^(\d{4}-\d{2}-\d{2})\t(.+)$/
+const BITACORA_LINE_RE = /^(\d{4}-\d{2}-\d{2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)\t(.+)$/
 
 /** Entradas de bitácora (fecha YYYY-MM-DD + texto). */
 export function parseBitacora(raw) {
@@ -445,9 +445,26 @@ export function agregarEntradaBitacora(raw, texto) {
   return serializarBitacora(entradas)
 }
 
-export const NOTA_BITACORA_NOTIFICACION_CLIENTE = 'Se le notificó al cliente'
+/** Marca local YYYY-MM-DD HH:mm para bitácora. */
+function stampBitacoraFechaHoraLocal(date = new Date()) {
+  const ymd = ymdLocalDesdeDate(date)
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${ymd} ${h}:${m}`
+}
 
-const NOTA_BITACORA_NOTIFICACION_RE = /^se le notific[oó] al cliente(?:\s*\((\d+)\))?\s*$/i
+/** Agrega una nota con fecha y hora locales (p. ej. confirmación de notificación al cliente). */
+export function agregarEntradaBitacoraAhora(raw, texto, cuando = new Date()) {
+  const t = String(texto ?? '').trim()
+  if (!t) return raw ?? null
+  const entradas = parseBitacora(raw)
+  entradas.push({ fecha: stampBitacoraFechaHoraLocal(cuando), texto: t })
+  return serializarBitacora(entradas)
+}
+
+export const NOTA_BITACORA_NOTIFICACION_CLIENTE = 'Se notificó al cliente'
+
+const NOTA_BITACORA_NOTIFICACION_RE = /^se (?:le )?notific[oó] al cliente(?:\s*\((\d+)\))?\s*$/i
 
 function esEntradaNotificacionCliente(texto) {
   return NOTA_BITACORA_NOTIFICACION_RE.test(String(texto ?? '').trim())
@@ -458,10 +475,9 @@ export function contarNotificacionesClienteBitacora(raw) {
   return parseBitacora(raw).filter((e) => esEntradaNotificacionCliente(e?.texto)).length
 }
 
-/** Texto de bitácora para la notificación N (1, 2, 3…). */
-export function textoNotaBitacoraNotificacionCliente(numero) {
-  const n = Math.max(1, Math.floor(Number(numero) || 1))
-  return `${NOTA_BITACORA_NOTIFICACION_CLIENTE} (${n})`
+/** Texto de bitácora al confirmar notificación al cliente. */
+export function textoNotaBitacoraNotificacionCliente(_numero) {
+  return NOTA_BITACORA_NOTIFICACION_CLIENTE
 }
 
 /** Siguiente número de notificación según entradas existentes. */
@@ -474,8 +490,25 @@ export function bitacoraTieneNotificacionCliente(raw) {
   return contarNotificacionesClienteBitacora(raw) > 0
 }
 
-export function formatFechaBitacora(ymd) {
-  if (!ymd) return '—'
+export function formatFechaBitacora(fechaRaw) {
+  if (!fechaRaw) return '—'
+  const s = String(fechaRaw).trim()
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}):(\d{2}))?/)
+  if (!m) {
+    return formatFechaLegibleEsMx(s, { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  const [, ymd, hh, mm] = m
+  if (hh != null && mm != null) {
+    const [y, mo, d] = ymd.split('-').map(Number)
+    const dt = new Date(y, mo - 1, d, Number(hh), Number(mm))
+    return dt.toLocaleString('es-MX', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
   return formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
