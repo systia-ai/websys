@@ -119,8 +119,8 @@ function compararProductosPorDescripcion(a, b) {
  * Inventarios / catálogo de productos (tabla `productos`), flujo tipo pantalla dedicada en Android:
  * lista con búsqueda, alta, edición y baja.
  */
-export default function InventariosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = true }) {
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+export default function InventariosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = false }) {
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -144,6 +144,8 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   const [precioVentaSurtido, setPrecioVentaSurtido] = useState('')
   /** Tras guardar surtido: pregunta si surtir otro producto. */
   const [surtidoExitoPregunta, setSurtidoExitoPregunta] = useState(null)
+  /** 'oculto' = barra compacta al entrar; 'abierto' = panel desplegado. */
+  const [stockBajoAvisoModo, setStockBajoAvisoModo] = useState('oculto')
 
   const [eliminar, setEliminar] = useState(null)
 
@@ -432,6 +434,11 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   }
 
   async function confirmarEliminar() {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      setEliminar(null)
+      return
+    }
     const p = eliminar
     if (!p?.id) return
     try {
@@ -499,8 +506,37 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
 
       <div className="servicios-body">
         <AlertaPermiso mensaje={alertaPermiso} />
-        {!loading && productosStockBajo.length > 0 ? (
+        {!loading && productosStockBajo.length > 0 && stockBajoAvisoModo === 'oculto' ? (
+          <button
+            type="button"
+            className="inventarios-stock-bajo-minimo"
+            onClick={() => setStockBajoAvisoModo('abierto')}
+            aria-label="Desplegar aviso de stock bajo"
+            aria-expanded={false}
+          >
+            <span className="inventarios-stock-bajo-minimo-ico" aria-hidden="true">
+              ⚠️
+            </span>
+            <span className="inventarios-stock-bajo-minimo-texto">
+              Stock bajo ({productosStockBajo.length}{' '}
+              {productosStockBajo.length === 1 ? 'producto' : 'productos'}) — toque para ver
+            </span>
+            <span className="inventarios-stock-bajo-minimo-flecha" aria-hidden="true">
+              ▼
+            </span>
+          </button>
+        ) : null}
+        {!loading && productosStockBajo.length > 0 && stockBajoAvisoModo === 'abierto' ? (
           <div className="inventarios-stock-bajo-aviso" role="alert" aria-live="polite">
+            <button
+              type="button"
+              className="inventarios-stock-bajo-cerrar"
+              onClick={() => setStockBajoAvisoModo('oculto')}
+              aria-label="Ocultar aviso de stock bajo"
+              title="Ocultar"
+            >
+              ×
+            </button>
             <div className="inventarios-stock-bajo-aviso-header">
               <span className="inventarios-stock-bajo-aviso-ico" aria-hidden="true">
                 ⚠️

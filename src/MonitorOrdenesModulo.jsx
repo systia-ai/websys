@@ -179,10 +179,10 @@ export default function MonitorOrdenesModulo({
   onNotice,
   onEditarOrden,
   onAbrirCuenta,
-  puedeEliminar = true,
+  puedeEliminar = false,
 }) {
   void onNotice
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const filtrosIniciales = useMemo(() => leerEstadoFiltrosInicialMonitor(), [])
   const [selectorAccionRep, setSelectorAccionRep] = useState(null)
   const [reparaciones, setReparaciones] = useState([])
@@ -558,6 +558,10 @@ export default function MonitorOrdenesModulo({
   }
 
   function handleEliminarTecnico(nombre) {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      return
+    }
     if (!window.confirm(`¿Eliminar el técnico "${nombre}" del catálogo?\n\nLas órdenes ya asignadas a este técnico no se modifican; pero no podrás seleccionarlo de nuevo.`)) return
     const nueva = eliminarTecnico(nombre)
     setTecnicosCatalogo(nueva)

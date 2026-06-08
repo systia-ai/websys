@@ -110,9 +110,9 @@ export default function ServiciosEquipos({
   onConsumeClienteVinculo,
   retornoReparaciones = null,
   onRetornoReparacionesConsumido,
-  puedeEliminar = true,
+  puedeEliminar = false,
 }) {
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const [equipos, setEquipos] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -511,6 +511,11 @@ export default function ServiciosEquipos({
   }
 
   async function eliminarConfirmado() {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      setEliminarEquipo(null)
+      return
+    }
     const eq = eliminarEquipo
     if (!eq?.id) return
     try {

@@ -248,9 +248,9 @@ export default function VentasCuentaScreen({
   onSalir,
   onError,
   onNotice,
-  puedeEliminar = true,
+  puedeEliminar = false,
 }) {
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const cliente = useMemo(() => normalizeClienteRow(context?.cliente ?? {}), [context?.cliente])
   const cuentaInicial = context?.cuenta
 
@@ -954,6 +954,10 @@ export default function VentasCuentaScreen({
   }
 
   async function eliminarLinea(L) {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      return
+    }
     if (!confirm('¿Eliminar este elemento de la lista?')) return
     try {
       if (L.tipo === 'reparamov' && L.dbId != null) {
@@ -1093,7 +1097,6 @@ export default function VentasCuentaScreen({
         nombreCliente: cliente.nombre,
         lineas,
         saldoPendiente,
-        tipoReparacion: reciboOrdenEquipo?.tipoReparacion,
       }),
     )
     setModalNotificarCliente(true)

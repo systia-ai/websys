@@ -186,9 +186,9 @@ export default function ReparacionesOrden({
   onIrCuentaCliente,
   /** Si true, no se muestra la franja azul "Reparaciones" (el padre ya muestra el título, p. ej. OrdenServicioModulo). */
   omitOuterHeader = false,
-  puedeEliminar = true,
+  puedeEliminar = false,
 }) {
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const s = session ?? {}
   const repIdStr = s.reparacionId != null ? String(s.reparacionId).trim() : ''
   const [numeroOrden, setNumeroOrden] = useState(() => (repIdStrEsOrdenExistente(repIdStr) ? repIdStr : ''))
@@ -1290,6 +1290,11 @@ export default function ReparacionesOrden({
   }
 
   async function eliminarOrden() {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      setEliminarConfirmAbierto(false)
+      return
+    }
     if (eliminandoOrden) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) {

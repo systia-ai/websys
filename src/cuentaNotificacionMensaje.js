@@ -1,20 +1,8 @@
-import { claveCanonicaTipoServicio } from './reparacionUtils.js'
-
-function limpiarPrefijoDescripcion(texto) {
-  return (
-    String(texto ?? '')
-      .trim()
-      .replace(/^\[(VENTA|REPARACIÓN|REPARACION|CUENTA)\]\s*/i, '')
-      .trim() || 'Concepto'
-  )
-}
-
-
-/** Monto sin símbolo $ para el desglose compacto (500, 225.50). */
-function fmtNumeroCompacto(n) {
+/** Monto con símbolo $ (500, 225.50). */
+function fmtMonto(n) {
   const x = Number(n)
-  if (!Number.isFinite(x)) return '0'
-  return x % 1 === 0 ? String(Math.round(x)) : x.toFixed(2)
+  if (!Number.isFinite(x)) return '$0'
+  return x % 1 === 0 ? `$${Math.round(x)}` : `$${x.toFixed(2)}`
 }
 
 function esAnticipoLinea(linea) {
@@ -22,12 +10,12 @@ function esAnticipoLinea(linea) {
   return /anticipo/i.test(texto)
 }
 
+/** Cargos en el mismo orden que la lista de la cuenta; descripción exacta. */
 function cargosDesdeLineas(lineas) {
   return (lineas ?? [])
     .filter((l) => l.tipo !== 'pago')
     .map((l) => ({
-      tipo: l.tipo,
-      descripcion: limpiarPrefijoDescripcion(l.descripcion),
+      descripcion: String(l.descripcion ?? 'Concepto').trim() || 'Concepto',
       monto: Number(l.subtotal ?? 0),
     }))
     .filter((c) => c.monto > 0.0001)
@@ -45,49 +33,16 @@ function sumOtrosPagos(lineas) {
     .reduce((s, l) => s + Math.abs(Number(l.subtotal ?? l.precioUnitario ?? 0)), 0)
 }
 
-function necesitaDesgloseDetallado(principal, adicionales, anticipo, otrosPagos) {
-  return (
-    anticipo > 0.0001 ||
-    otrosPagos > 0.0001 ||
-    adicionales.length > 0
-  )
-}
-
-function etiquetaTipoServicioMensaje(tipoCanon) {
-  if (tipoCanon === 'SERVICIO') return 'SERVICIO'
-  if (tipoCanon === 'GARANTIA EPSON') return 'GARANTÍA EPSON'
-  if (tipoCanon === 'GARANTIA SISTEBIT') return 'GARANTÍA SISTEBIT'
-  return null
-}
-
-function fraseTipoAtencion(tipoCanon) {
-  const label = etiquetaTipoServicioMensaje(tipoCanon)
-  return label ? `Tipo de atención: ${label}` : null
-}
-
-function etiquetaCargoCorto(cargo, tipoCanon) {
-  const tipo = etiquetaTipoServicioMensaje(tipoCanon)
-  if (tipo === 'SERVICIO') return 'servicio'
-  if (tipo === 'GARANTÍA EPSON') return 'garantía EPSON'
-  if (tipo === 'GARANTÍA SISTEBIT') return 'garantía SISTEBIT'
-  const d = cargo.descripcion.trim()
-  if (/servicio|reparaci/i.test(d)) return 'servicio'
-  return d.toLowerCase()
-}
-
-/** Desglose compacto: servicio 500 - 200 anticipo + 225 tinta amarilla */
-function buildDesgloseCompacto(principal, adicionales, anticipo, otrosPagos, tipoCanon) {
-  const segmentos = [`${etiquetaCargoCorto(principal, tipoCanon)} ${fmtNumeroCompacto(principal.monto)}`]
+/** concepto $monto + concepto $monto - anticipo $monto */
+function buildDesgloseCargos(cargos, anticipo, otrosPagos) {
+  let texto = cargos.map((c) => `${c.descripcion} ${fmtMonto(c.monto)}`).join(' + ')
   if (anticipo > 0.0001) {
-    segmentos.push(`- ${fmtNumeroCompacto(anticipo)} anticipo`)
-  }
-  for (const cargo of adicionales) {
-    segmentos.push(`+ ${fmtNumeroCompacto(cargo.monto)} ${cargo.descripcion.trim().toLowerCase()}`)
+    texto += `${texto ? ' ' : ''}- anticipo ${fmtMonto(anticipo)}`
   }
   if (otrosPagos > 0.0001) {
-    segmentos.push(`- ${fmtNumeroCompacto(otrosPagos)} pago`)
+    texto += `${texto ? ' ' : ''}- pago ${fmtMonto(otrosPagos)}`
   }
-  return segmentos.join(' ')
+  return texto
 }
 
 const EMPRESA_NOTIFICACION = 'SISTEBIT'
@@ -106,12 +61,11 @@ function saludoNotificacionCliente(nombre, empresa = EMPRESA_NOTIFICACION) {
 /**
  * Redacta mensaje de cobro / entrega para el cliente según líneas de la cuenta.
  *
- * @param {{ nombreCliente?: string, lineas?: object[], saldoPendiente?: number, negocio?: string, tipoServicio?: string, tipoReparacion?: string }} p
+ * @param {{ nombreCliente?: string, lineas?: object[], saldoPendiente?: number, negocio?: string }} p
  */
 export function buildMensajeNotificacionCuentaCliente(p) {
   const nombre = String(p?.nombreCliente ?? '').trim() || 'cliente'
   const empresa = String(p?.negocio ?? EMPRESA_NOTIFICACION).trim() || EMPRESA_NOTIFICACION
-  const tipoCanon = claveCanonicaTipoServicio(p?.tipoServicio ?? p?.tipoReparacion)
   const lineas = p?.lineas ?? []
   const cargos = cargosDesdeLineas(lineas)
   const anticipo = sumAnticipos(lineas)
@@ -128,30 +82,18 @@ export function buildMensajeNotificacionCuentaCliente(p) {
         )
 
   const partes = [saludoNotificacionCliente(nombre, empresa)]
-  const tipoAtencion = fraseTipoAtencion(tipoCanon)
-  if (tipoAtencion) partes.push(tipoAtencion)
 
   if (cargos.length === 0) {
     if (saldo > 0.0001) {
-      partes.push(`total a pagar ${fmtNumeroCompacto(saldo)}`)
+      partes.push(`total a pagar ${fmtMonto(saldo)}`)
     } else {
       partes.push('No hay cargos pendientes registrados en esta cuenta.')
     }
     return partes.join(' ')
   }
 
-  const idxPrincipal = cargos.findIndex((c) => c.tipo === 'reparamov' || c.tipo === 'reparacion_cargo')
-  const principal = idxPrincipal >= 0 ? cargos[idxPrincipal] : cargos[0]
-  const adicionales =
-    idxPrincipal >= 0
-      ? [...cargos.slice(0, idxPrincipal), ...cargos.slice(idxPrincipal + 1)]
-      : cargos.slice(1)
-
-  if (necesitaDesgloseDetallado(principal, adicionales, anticipo, otrosPagos)) {
-    partes.push(buildDesgloseCompacto(principal, adicionales, anticipo, otrosPagos, tipoCanon))
-  }
-
-  partes.push(`total a pagar ${fmtNumeroCompacto(saldo)}`)
+  partes.push(buildDesgloseCargos(cargos, anticipo, otrosPagos))
+  partes.push(`total a pagar ${fmtMonto(saldo)}`)
 
   if (partes.length <= 2) {
     return `${partes[0]} ${partes[1]}.`

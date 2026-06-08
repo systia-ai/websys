@@ -9,6 +9,8 @@ export default function ReportesFiltrosCard({
   fechaFin,
   onFechaInicio,
   onFechaFin,
+  puedeCambiarFechas = true,
+  onIntentoSinPermisoFecha = null,
   estatusSeleccionados,
   onEstatusSeleccionados,
   filtroModoFechaIngreso = false,
@@ -28,6 +30,26 @@ export default function ReportesFiltrosCard({
   const tiposServicioLista = TIPOS_SERVICIO_CANONICOS
 
   const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
+
+  function avisarSinPermisoFecha() {
+    onIntentoSinPermisoFecha?.()
+  }
+
+  function cambiarFechaInicio(e) {
+    if (!puedeCambiarFechas) {
+      avisarSinPermisoFecha()
+      return
+    }
+    onFechaInicio(e.target.value)
+  }
+
+  function cambiarFechaFin(e) {
+    if (!puedeCambiarFechas) {
+      avisarSinPermisoFecha()
+      return
+    }
+    onFechaFin(e.target.value)
+  }
 
   function toggleEstatus(est) {
     const st = String(est).trim().toUpperCase()
@@ -81,8 +103,12 @@ export default function ReportesFiltrosCard({
             <input
               type="date"
               value={fechaInicio}
-              max={fechaFin || undefined}
-              onChange={(e) => onFechaInicio(e.target.value)}
+              min={puedeCambiarFechas ? undefined : fechaInicio || undefined}
+              max={puedeCambiarFechas ? fechaFin || undefined : fechaInicio || undefined}
+              readOnly={!puedeCambiarFechas}
+              onClick={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
+              onFocus={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
+              onChange={cambiarFechaInicio}
               aria-label="Fecha inicial"
             />
           </div>
@@ -95,8 +121,12 @@ export default function ReportesFiltrosCard({
             <input
               type="date"
               value={fechaFin}
-              min={fechaInicio || undefined}
-              onChange={(e) => onFechaFin(e.target.value)}
+              min={puedeCambiarFechas ? fechaInicio || undefined : fechaFin || undefined}
+              max={puedeCambiarFechas ? undefined : fechaFin || undefined}
+              readOnly={!puedeCambiarFechas}
+              onClick={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
+              onFocus={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
+              onChange={cambiarFechaFin}
               aria-label="Fecha final"
             />
           </div>

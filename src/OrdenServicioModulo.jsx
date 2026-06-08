@@ -27,7 +27,7 @@ export default function OrdenServicioModulo({
   onIrCuentaCliente,
   error,
   notice,
-  puedeEliminar = true,
+  puedeEliminar = false,
 }) {
   const mostrarFormulario = tieneSesionOrdenCargada(session)
 

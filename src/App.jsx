@@ -14,6 +14,7 @@ import AdministracionModulo from './AdministracionModulo.jsx'
 import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import AlertaPermiso from './AlertaPermiso.jsx'
+import { esRolAdmin, rolDesdeFilaUserRoles } from './permisosUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { limpiarFiltrosMonitorSesion } from './monitorOrdenesFiltrosSesion.js'
 
@@ -94,14 +95,13 @@ function App() {
           .eq('user_id', user.id)
           .maybeSingle()
         if (error) throw error
-        const rol = String(data?.rol ?? 'ADMIN').toUpperCase()
-        if (!cancelado) setRolUsuario(rol === 'ADMIN' ? 'ADMIN' : 'TECNICO')
+        if (!cancelado) setRolUsuario(rolDesdeFilaUserRoles(data))
       } catch (e) {
         const msg = String(e?.message ?? '')
         if (/relation .*user_roles.* does not exist/i.test(msg)) {
           if (!cancelado) setRolUsuario('ADMIN')
         } else {
-          if (!cancelado) setRolUsuario('ADMIN')
+          if (!cancelado) setRolUsuario('TECNICO')
           setError(`No se pudo verificar rol de usuario: ${msg}`)
           setTimeout(() => setError(''), 6000)
         }
@@ -116,7 +116,7 @@ function App() {
     }
   }, [supabase, user?.id])
 
-  const esAdmin = rolUsuario === 'ADMIN'
+  const esAdmin = esRolAdmin(rolUsuario)
   const puedeEliminar = esAdmin
   const { alertaPermiso: alertaPermisoApp, intentarEliminar: intentarEliminarApp } =
     usePermisoEliminar(puedeEliminar)
@@ -483,6 +483,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <CorteCajaModulo
           supabase={supabase}
+          esAdmin={esAdmin}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -505,6 +506,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <ReportesModulo
           supabase={supabase}
+          esAdmin={esAdmin}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)

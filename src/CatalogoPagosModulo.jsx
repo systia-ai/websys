@@ -93,8 +93,8 @@ function compararCatalogoPorConcepto(a, b) {
  * Catálogo de conceptos de pago (`catalogopagos`), pantalla dedicada como en Android:
  * lista, búsqueda, alta/edición y baja (concepto + cantidad/monto por defecto).
  */
-export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = true }) {
-  const { alertaPermiso, intentarEliminar } = usePermisoEliminar(puedeEliminar)
+export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = false }) {
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -256,6 +256,11 @@ export default function CatalogoPagosModulo({ supabase, onHome, onError, onNotic
   }
 
   async function confirmarEliminar() {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      setEliminar(null)
+      return
+    }
     const row = eliminar
     if (!row?.id) return
     try {

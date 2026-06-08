@@ -1,6 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AlertaPermiso from './AlertaPermiso.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
+import { rangoFechasPermitidoUsuario } from './permisosUtils.js'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
@@ -108,9 +111,11 @@ function esEntregada(rep) {
 /**
  * Reportes de reparaciones por periodo (fecha inicio / fin), resumen y lista, al estilo Android.
  */
-export default function ReportesModulo({ supabase, onHome, onError, onNotice }) {
+export default function ReportesModulo({ supabase, onHome, onError, onNotice, esAdmin = false }) {
+  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(esAdmin)
+
   const [pantalla, setPantalla] = useState('fechas')
-  const [fechaInicio, setFechaInicio] = useState(ymdInicioMes)
+  const [fechaInicio, setFechaInicio] = useState(() => (esAdmin ? ymdInicioMes() : ymdHoy()))
   const [fechaFin, setFechaFin] = useState(ymdHoy)
   const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => crearSetEstatusTodos())
   const [estadisticasDesdeReporte, setEstadisticasDesdeReporte] = useState(false)
@@ -159,6 +164,13 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   useEffect(() => {
     void cargarClientes()
   }, [cargarClientes])
+
+  useEffect(() => {
+    if (esAdmin) return
+    const hoy = ymdHoy()
+    setFechaInicio(hoy)
+    setFechaFin(hoy)
+  }, [esAdmin])
 
   const cargarEquipos = useCallback(async () => {
     try {
@@ -306,8 +318,8 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   }
 
   function validarFiltros() {
-    const ini = fechaInicio.trim()
-    const fin = fechaFin.trim()
+    const hoy = ymdHoy()
+    const { ini, fin } = rangoFechasPermitidoUsuario(esAdmin, fechaInicio.trim(), fechaFin.trim(), hoy)
     if (!ini || !fin) {
       onError?.('Indique fecha inicio y fecha fin')
       return null
@@ -422,6 +434,11 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     setBusqueda('')
     setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_CANONICOS))
     clearModoFecha()
+    if (!esAdmin) {
+      const hoy = ymdHoy()
+      setFechaInicio(hoy)
+      setFechaFin(hoy)
+    }
   }
 
   const propsFiltrosReporte = {
@@ -443,10 +460,14 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
     busqueda,
     onBusqueda: setBusqueda,
     rangoInvalido,
+    puedeCambiarFechas: esAdmin,
+    onIntentoSinPermisoFecha: mostrarSinPermiso,
   }
 
   if (pantalla === 'estadisticas') {
     return (
+      <>
+      <AlertaPermiso mensaje={alertaPermiso} />
       <ReportesEstadisticasView
         reparaciones={reparaciones}
         pagosPeriodo={pagosPeriodo}
@@ -474,6 +495,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
           ) : null
         }
       />
+      </>
     )
   }
 
@@ -514,6 +536,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
   if (pantalla === 'fechas') {
     return (
       <div className="servicios-root inventarios-root reportes-modulo-root">
+        <AlertaPermiso mensaje={alertaPermiso} />
         <header className="servicios-appbar">
           <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
             ←
@@ -558,6 +581,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice }) 
 
   return (
     <div className="servicios-root inventarios-root reportes-modulo-root">
+      <AlertaPermiso mensaje={alertaPermiso} />
       <header className="servicios-appbar">
         <button type="button" className="icon-back" onClick={volverAElegirFechas} aria-label="Atrás">
           ←

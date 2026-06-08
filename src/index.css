@@ -4686,13 +4686,112 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 }
 
 .inventarios-stock-bajo-aviso {
+  position: relative;
   margin: 0 0 14px;
-  padding: 14px 16px;
+  padding: 14px 40px 14px 16px;
   border-radius: 12px;
   border: 2px solid #ef6c00;
   background: linear-gradient(135deg, #fff8e1 0%, #ffe0b2 100%);
   box-shadow: 0 4px 14px rgba(239, 108, 0, 0.2);
-  animation: alerta-permiso-entra 0.35s ease-out;
+  animation: inventarios-stock-bajo-despliega 0.32s ease-out;
+}
+
+@keyframes inventarios-stock-bajo-despliega {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.inventarios-stock-bajo-cerrar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(230, 81, 0, 0.15);
+  color: #bf360c;
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.inventarios-stock-bajo-cerrar:hover {
+  background: rgba(230, 81, 0, 0.28);
+  color: #e65100;
+}
+
+@keyframes inventarios-stock-bajo-respira {
+  0%,
+  100% {
+    box-shadow: 0 2px 8px rgba(239, 108, 0, 0.18);
+    border-color: #ffb74d;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(239, 108, 0, 0.42);
+    border-color: #ef6c00;
+    transform: scale(1.012);
+  }
+}
+
+.inventarios-stock-bajo-minimo {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 2px solid #ffb74d;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  color: #e65100;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(239, 108, 0, 0.15);
+  animation: inventarios-stock-bajo-respira 2.4s ease-in-out infinite;
+}
+
+.inventarios-stock-bajo-minimo:hover {
+  border-color: #ef6c00;
+  background: linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%);
+  animation-play-state: paused;
+}
+
+.inventarios-stock-bajo-minimo-ico {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.inventarios-stock-bajo-minimo-texto {
+  flex: 1;
+  text-align: center;
+}
+
+.inventarios-stock-bajo-minimo-flecha {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inventarios-stock-bajo-minimo,
+  .inventarios-stock-bajo-aviso {
+    animation: none;
+  }
 }
 
 .inventarios-stock-bajo-aviso-header {
