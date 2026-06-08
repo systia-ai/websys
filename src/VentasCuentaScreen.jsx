@@ -1217,7 +1217,7 @@ export default function VentasCuentaScreen({
             <div className="ventas-nueva-cuenta-row">
               <p className="muted small">Nueva cuenta — cree el registro antes de agregar líneas.</p>
               <button type="button" className="btn-crear-cuenta-ventas" onClick={() => void crearCuentaVacia()}>
-                Crear cuenta
+                ➕ Crear cuenta
               </button>
             </div>
           )}
@@ -1290,7 +1290,7 @@ export default function VentasCuentaScreen({
           }
           onClick={() => void abrirSelectorProductos()}
         >
-          Agregar Producto/Servicio
+          📦 Agregar Producto/Servicio
         </button>
 
         <div className="ventas-cuenta-resumen" role="group" aria-label="Total y saldo de la cuenta">
@@ -1454,10 +1454,10 @@ export default function VentasCuentaScreen({
                 Decidir después
               </button>
               <button type="button" className="btn-cuentas" onClick={() => void elegirCuentaActivaPagadaTrasPago()}>
-                Activa pagada
+                ✅ Activa pagada
               </button>
               <button type="button" className="btn-liquidar-cuenta" onClick={() => void elegirLiquidarCuentaTrasPago()}>
-                Liquidar cuenta
+                ✅ Liquidar cuenta
               </button>
             </div>
           </div>
@@ -1817,11 +1817,11 @@ export default function VentasCuentaScreen({
         footer={
           <>
             <button type="button" className="secondary" onClick={() => void copiarMensajeNotificacion()}>
-              Copiar mensaje
+              📋 Copiar mensaje
             </button>
             {cliente.telefono?.trim() ? (
               <button type="button" className="btn-notificar-wa" onClick={enviarNotificacionWhatsApp}>
-                Enviar por WhatsApp
+                📲 Enviar por WhatsApp
               </button>
             ) : null}
             <button
@@ -1835,7 +1835,7 @@ export default function VentasCuentaScreen({
               }
               onClick={() => void confirmarEnvioNotificacion()}
             >
-              {confirmandoEnvioNotificacion ? 'Confirmando…' : 'Confirmar envío'}
+              {confirmandoEnvioNotificacion ? 'Confirmando…' : '✅ Confirmar envío'}
             </button>
             <button type="button" className="modal-alerta-btn" onClick={() => setModalNotificarCliente(false)}>
               Cerrar

@@ -2136,7 +2136,7 @@ export default function ReparacionesOrden({
                   disabled={guardandoBitacora || !bitacoraNueva.trim()}
                   onClick={() => void agregarNotaBitacora()}
                 >
-                  {guardandoBitacora ? 'Guardando…' : 'Agregar nota'}
+                  {guardandoBitacora ? 'Guardando…' : '📝 Agregar nota'}
                 </button>
               </div>
             </div>
@@ -2161,7 +2161,7 @@ export default function ReparacionesOrden({
               setConfirmGuardarAbierto(true)
             }}
           >
-            {ordenRegistrada ? 'Orden registrada' : 'Registrar orden'}
+            {ordenRegistrada ? '✅ Orden registrada' : '📝 Registrar orden'}
           </button>
           {(esOrdenExistente || idReparacion != null) && (
             <button
@@ -2170,7 +2170,7 @@ export default function ReparacionesOrden({
               disabled={actualizandoOrden}
               onClick={() => solicitarActualizarOrden()}
             >
-              {actualizandoOrden ? 'Guardando…' : 'Actualizar orden'}
+              {actualizandoOrden ? 'Guardando…' : '💾 Actualizar orden'}
             </button>
           )}
           {(esOrdenExistente || idReparacion != null) && (
@@ -2189,10 +2189,10 @@ export default function ReparacionesOrden({
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
-            Imprimir etiqueta (PDF)
+            🏷️ Imprimir etiqueta (PDF)
           </button>
           <button type="button" className="btn-primary wide" disabled={!puedeAccionesPdf} onClick={enviarOrdenPdf}>
-            Imprimir orden de servicio
+            📄 Imprimir orden de servicio
           </button>
           <button
             type="button"
@@ -2217,7 +2217,7 @@ export default function ReparacionesOrden({
             </button>
           )}
           <button type="button" className="btn-danger wide" onClick={onSalir}>
-            Salir
+            ❌ Salir
           </button>
         </div>
       </div>
@@ -2252,7 +2252,7 @@ export default function ReparacionesOrden({
                     disabled={enviandoWa || waEnviados.orden}
                     onClick={() => void elegirEnvioWhatsApp('orden')}
                   >
-                    {waEnviados.orden ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : 'Enviar orden cliente'}
+                    {waEnviados.orden ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : '📋 Enviar orden cliente'}
                   </button>
                   <button
                     type="button"
@@ -2260,7 +2260,7 @@ export default function ReparacionesOrden({
                     disabled={enviandoWa || waEnviados.anticipo}
                     onClick={() => void elegirEnvioWhatsApp('anticipo')}
                   >
-                    {waEnviados.anticipo ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : 'Enviar anticipo de cliente'}
+                    {waEnviados.anticipo ? '✓ Mensaje enviado' : enviandoWa ? 'Enviando…' : '💰 Enviar anticipo de cliente'}
                   </button>
                   <button
                     type="button"
@@ -2281,7 +2281,7 @@ export default function ReparacionesOrden({
                         ? 'Enviando…'
                         : consultandoCuentaWa
                           ? 'Verificando cuenta…'
-                          : 'Pago total (cuenta liquidada)'}
+                          : '✅ Pago total (cuenta liquidada)'}
                   </button>
                 </div>
                 <div className="modal-footer">

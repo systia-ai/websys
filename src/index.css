@@ -4348,7 +4348,7 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   padding: 0 14px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #ff8f00 0%, #ef6c00 100%);
+  background: linear-gradient(180deg, #ff9800 0%, #f57c00 100%);
   color: #fff;
   font-weight: 700;
   font-size: 1.02rem;
@@ -4357,15 +4357,13 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  box-shadow: 0 4px 12px rgba(239, 108, 0, 0.35);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 10px rgba(245, 124, 0, 0.35);
   letter-spacing: 0.3px;
-  transition: background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
 }
 
 .btn-pagar-adeudo-total:hover:not(:disabled) {
-  background: linear-gradient(135deg, #ef6c00 0%, #e65100 100%);
-  box-shadow: 0 6px 16px rgba(230, 81, 0, 0.45);
+  filter: brightness(1.06);
+  box-shadow: 0 4px 14px rgba(245, 124, 0, 0.4);
 }
 
 .btn-pagar-adeudo-total:active:not(:disabled) {
@@ -4401,13 +4399,13 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   gap: 14px;
   padding: 12px 18px;
   border-radius: 10px;
-  border: 1px solid #cfd8dc;
-  background: #fff;
+  border: 0;
+  background: #1976d2;
   font-size: 1rem;
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: 700;
+  color: #fff;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.3);
 }
 
 .btn-forma-pago span[aria-hidden] {
@@ -4417,11 +4415,10 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 
 .btn-forma-pago:hover:not(:disabled),
 .btn-forma-pago:focus-visible {
-  background: #e3f2fd;
-  border-color: #1976d2;
-  color: #0d47a1;
+  background: #1565c0;
+  color: #fff;
   outline: none;
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15);
+  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.35);
 }
 
 .btn-forma-pago:active:not(:disabled) {
@@ -6378,6 +6375,16 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 0.88rem;
 }
 
+.rep-bitacora-agregar.btn-secondary {
+  background: #2196f3;
+  color: #fff;
+  border: 0;
+}
+
+.rep-bitacora-agregar.btn-secondary:hover:not(:disabled) {
+  background: #1976d2;
+}
+
 .rep-cliente-card {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -6407,37 +6414,109 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   margin-bottom: 32px;
 }
 
-.rep-actions .btn-actualizar-orden {
-  border: 2px solid #1565c0;
-}
-
-.rep-actions .btn-cuenta-cliente-orden.wide {
-  background: linear-gradient(135deg, #e1bee7 0%, #ce93d8 100%);
-  color: #4a148c;
-  border: 2px solid #8e24aa;
-  box-shadow: 0 2px 10px rgba(106, 27, 154, 0.22);
-}
-
-.rep-actions .btn-cuenta-cliente-orden.wide:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d1a8e0 0%, #ba68c8 100%);
-  border-color: #7b1fa2;
-}
-
-.rep-actions .btn-cuenta-cliente-orden.wide:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-  border-color: #ab47bc;
-}
-
 .rep-actions .wide {
   width: 100%;
   min-height: 56px;
   border: 0;
   border-radius: 8px;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  color: #fff;
+}
+
+.rep-actions .btn-primary.wide {
+  background: #1976d2;
+}
+
+.rep-actions .btn-primary.wide:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.rep-actions .btn-primary.wide:disabled {
+  background: #9e9e9e;
+  cursor: not-allowed;
+}
+
+.rep-actions .btn-success.wide {
+  background: #4caf50;
+}
+
+.rep-actions .btn-success.wide:hover:not(:disabled) {
+  background: #43a047;
+}
+
+.rep-actions .btn-success.wide:disabled {
+  background: #bdbdbd;
+  cursor: not-allowed;
+}
+
+.rep-actions .btn-secondary.wide,
+.rep-actions .btn-secondary.wide.btn-actualizar-orden {
+  background: #546e7a;
+}
+
+.rep-actions .btn-secondary.wide:hover:not(:disabled) {
+  background: #455a64;
+}
+
+.rep-actions .btn-danger.wide {
+  background: #f44336;
+}
+
+.rep-actions .btn-danger.wide:hover:not(:disabled) {
+  background: #e53935;
+}
+
+.rep-actions .btn-eliminar-orden.wide {
+  background: #c62828;
+}
+
+.rep-actions .btn-eliminar-orden.wide:hover:not(:disabled) {
+  background: #b71c1c;
+}
+
+.rep-actions .btn-cuenta-cliente-orden.wide {
+  background: #9c27b0;
+  color: #fff;
+}
+
+.rep-actions .btn-cuenta-cliente-orden.wide:hover:not(:disabled) {
+  background: #8e24aa;
+}
+
+.rep-actions .btn-cuenta-cliente-orden.wide:disabled {
+  background: #ce93d8;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.wa-menu-body .wa-menu-option.btn-primary.wide {
+  background: #1976d2;
+  color: #fff;
+  border: 0;
+}
+
+.wa-menu-body .wa-menu-option.btn-anticipo.wide {
+  background: #7b1fa2;
+  color: #fff;
+  border: 0;
+}
+
+.wa-menu-body .wa-menu-option.btn-liquidacion.wide.btn-liquidacion--activo {
+  background: #f57c00;
+  color: #fff;
+  border: 0;
+  opacity: 1;
+}
+
+.wa-menu-body .wa-menu-option.btn-liquidacion.wide.btn-liquidacion--inactivo,
+.wa-menu-body .wa-menu-option.btn-liquidacion.wide.btn-liquidacion--inactivo:disabled {
+  background: transparent;
+  color: rgba(84, 110, 122, 0.55);
+  border: 1px dashed rgba(245, 124, 0, 0.35);
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 .wa-menu-body {
@@ -6498,61 +6577,6 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 1.25rem;
   font-weight: 700;
   color: #155724;
-}
-
-.btn-primary.wide {
-  background: #1976d2;
-  color: #fff;
-}
-
-.btn-primary.wide:disabled {
-  background: #9e9e9e;
-  cursor: not-allowed;
-}
-
-.btn-success.wide {
-  background: #4caf50;
-  color: #fff;
-}
-
-.btn-success.wide:disabled {
-  background: #bdbdbd;
-  cursor: not-allowed;
-}
-
-.btn-anticipo.wide {
-  background: #7b1fa2;
-  color: #fff;
-}
-
-.btn-liquidacion.wide {
-  border: 0;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  width: 100%;
-  min-height: 52px;
-}
-
-.btn-liquidacion.wide.btn-liquidacion--activo {
-  background: #f57c00;
-  color: #fff;
-  opacity: 1;
-}
-
-.btn-liquidacion.wide.btn-liquidacion--inactivo,
-.btn-liquidacion.wide.btn-liquidacion--inactivo:disabled {
-  background: transparent;
-  color: rgba(84, 110, 122, 0.55);
-  border: 1px dashed rgba(245, 124, 0, 0.35);
-  opacity: 0.72;
-  cursor: not-allowed;
-}
-
-.btn-secondary.wide {
-  background: #546e7a;
-  color: #fff;
 }
 
 .rep-card.selected {
@@ -6647,8 +6671,13 @@ input.full {
   border-radius: 8px;
   background: #2e7d32;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(46, 125, 50, 0.3);
+}
+
+.btn-crear-cuenta-ventas:hover:not(:disabled) {
+  background: #1b5e20;
 }
 
 .ventas-seccion-titulo {
@@ -6783,6 +6812,11 @@ input.full {
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 137, 123, 0.35);
+}
+
+.btn-agregar-pago-ventas:hover:not(:disabled) {
+  background: #00695c;
 }
 
 .btn-agregar-prod-ventas {
@@ -6790,15 +6824,20 @@ input.full {
   border: 0;
   padding: 14px;
   border-radius: 8px;
-  background: #5e35b1;
+  background: #7b1fa2;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(123, 31, 162, 0.35);
+}
+
+.btn-agregar-prod-ventas:hover:not(:disabled) {
+  background: #6a1b9a;
 }
 
 .btn-agregar-prod-ventas.abierto {
-  background: #4527a0;
+  background: #6a1b9a;
 }
 
 .ventas-producto-modal-backdrop {
@@ -7063,6 +7102,11 @@ input.full {
   font-weight: 700;
   cursor: pointer;
   margin-top: 8px;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.3);
+}
+
+.btn-primary-ventas:hover:not(:disabled) {
+  background: #1565c0;
 }
 
 .ventas-cuenta-resumen {
@@ -7178,6 +7222,11 @@ input.full {
   margin-bottom: 24px;
 }
 
+.ventas-acciones > button {
+  border: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
 .btn-liquidar-cuenta {
   border: 0;
   padding: 14px;
@@ -7186,6 +7235,11 @@ input.full {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(46, 125, 50, 0.35);
+}
+
+.btn-liquidar-cuenta:hover:not(:disabled) {
+  background: #1b5e20;
 }
 
 .btn-notificar-cliente {
@@ -7196,6 +7250,11 @@ input.full {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 137, 123, 0.35);
+}
+
+.btn-notificar-cliente:hover:not(:disabled) {
+  background: #00695c;
 }
 
 .cuenta-notificacion-mensaje {
@@ -7217,23 +7276,28 @@ input.full {
   border-radius: 8px;
   background: #25d366;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
+}
+
+.btn-notificar-wa:hover:not(:disabled) {
+  background: #1ebe57;
 }
 
 .btn-confirmar-envio-notificacion {
   border: 0;
   padding: 10px 18px;
   border-radius: 8px;
-  background: #ef6c00;
+  background: #f57c00;
   color: #fff;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(239, 108, 0, 0.35);
+  box-shadow: 0 2px 10px rgba(245, 124, 0, 0.35);
 }
 
 .btn-confirmar-envio-notificacion:hover:not(:disabled) {
-  background: #e65100;
+  background: #ef6c00;
 }
 
 .btn-confirmar-envio-notificacion:disabled {
@@ -7246,20 +7310,41 @@ input.full {
   border: 0;
   padding: 14px;
   border-radius: 8px;
-  background: #0277bd;
+  background: #1976d2;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.3);
+}
+
+.btn-comprobante-ventas:hover:not(:disabled) {
+  background: #1565c0;
 }
 
 .btn-salir-ventas {
   border: 0;
   padding: 14px;
   border-radius: 8px;
-  background: #c62828;
+  background: #f44336;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(244, 67, 54, 0.35);
+}
+
+.btn-salir-ventas:hover:not(:disabled) {
+  background: #e53935;
+}
+
+.ventas-cuenta-root .btn-cuentas {
+  background: #2e7d32;
+  color: #fff;
+  border: 0;
+  box-shadow: 0 2px 10px rgba(46, 125, 50, 0.35);
+}
+
+.ventas-cuenta-root .btn-cuentas:hover:not(:disabled) {
+  background: #1b5e20;
 }
 
 /* Vista pública al escanear el QR de la etiqueta (#/etiqueta?…) */
