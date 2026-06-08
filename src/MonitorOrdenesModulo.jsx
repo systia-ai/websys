@@ -179,6 +179,8 @@ export default function MonitorOrdenesModulo({
   onNotice,
   onEditarOrden,
   onAbrirCuenta,
+  retornoVentas = null,
+  onRetornoVentasConsumido,
   puedeEliminar = false,
 }) {
   void onNotice
@@ -278,6 +280,15 @@ export default function MonitorOrdenesModulo({
   useEffect(() => {
     void cargarTodo()
   }, [cargarTodo])
+
+  useEffect(() => {
+    const r = retornoVentas
+    if (!r?.openSelectorAccion || r.reparacionId == null) return
+    if (loading) return
+    const rep = reparaciones.find((x) => sameId(x.id, r.reparacionId))
+    if (rep) setSelectorAccionRep(rep)
+    onRetornoVentasConsumido?.()
+  }, [retornoVentas, reparaciones, loading, onRetornoVentasConsumido])
 
   const equipoPorId = useMemo(() => {
     const m = new Map()
@@ -629,7 +640,12 @@ export default function MonitorOrdenesModulo({
     setSelectorAccionRep(null)
     onAbrirCuenta({
       cliente: normalizeClienteRow(c),
-      cuenta: cuentaParaVentas(cuenta),
+      cuenta: {
+        ...cuentaParaVentas(cuenta),
+        repara_id: cuenta.repara_id ?? rep.id,
+      },
+      reparacionOrdenId: rep.id,
+      monitorReparacionId: rep.id,
     })
   }
 

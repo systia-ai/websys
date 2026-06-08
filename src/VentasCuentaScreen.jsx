@@ -29,6 +29,7 @@ import {
   descripcionEquipoParaRecibo,
   agregarEntradaBitacoraAhora,
   actualizarReparacionSupabase,
+  normalizarReparacionId,
   siguienteNumeroNotificacionCliente,
   textoNotaBitacoraNotificacionCliente,
 } from './reparacionUtils.js'
@@ -319,7 +320,22 @@ export default function VentasCuentaScreen({
     cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
     totalCargos > 0.0001 &&
     !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))
-  const ordenVinculadaId = reparaIdCuenta ?? cuentaInfo?.repara_id ?? cuentaInicial?.repara_id ?? null
+  const ordenVinculadaId = useMemo(() => {
+    const raw =
+      reparaIdCuenta ??
+      cuentaInfo?.repara_id ??
+      cuentaInicial?.repara_id ??
+      context?.reparacionOrdenId ??
+      context?.monitorReparacionId ??
+      null
+    return normalizarReparacionId(raw)
+  }, [
+    reparaIdCuenta,
+    cuentaInfo?.repara_id,
+    cuentaInicial?.repara_id,
+    context?.reparacionOrdenId,
+    context?.monitorReparacionId,
+  ])
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -381,7 +397,7 @@ export default function VentasCuentaScreen({
         }
         setCuentaInfo(cuentaRow)
         const ridRaw = cuentaRow?.repara_id ?? reparaBoot ?? null
-        const rid = ridRaw != null && ridRaw !== '' ? ridRaw : null
+        const rid = normalizarReparacionId(ridRaw)
         setReparaIdCuenta(rid)
 
         let movs = []
@@ -518,17 +534,23 @@ export default function VentasCuentaScreen({
   /* eslint-disable react-hooks/set-state-in-effect -- carga asíncrona + reset al cambiar cuenta */
   useEffect(() => {
     const cid = cuentaInicial?.id
-    const rb = cuentaInicial?.repara_id
+    const rb =
+      cuentaInicial?.repara_id ?? context?.reparacionOrdenId ?? context?.monitorReparacionId ?? null
     if (cid != null) {
       void cargarTodo(cid, rb)
     } else {
       setCuentaInfo(null)
-      const rbNorm = rb != null && rb !== '' ? rb : null
-      setReparaIdCuenta(rbNorm)
+      setReparaIdCuenta(normalizarReparacionId(rb))
       setLineas([])
       setLoading(false)
     }
-  }, [cuentaInicial?.id, cuentaInicial?.repara_id, cargarTodo])
+  }, [
+    cuentaInicial?.id,
+    cuentaInicial?.repara_id,
+    context?.reparacionOrdenId,
+    context?.monitorReparacionId,
+    cargarTodo,
+  ])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const persistirTotalCuenta = useCallback(async () => {
@@ -1161,7 +1183,7 @@ export default function VentasCuentaScreen({
 
   async function confirmarEnvioNotificacion() {
     const rid = ordenVinculadaId
-    if (rid == null || rid === '') {
+    if (rid == null) {
       onError?.('Esta cuenta no tiene orden de servicio vinculada; no se puede registrar en la bitácora.')
       return
     }
@@ -1175,9 +1197,13 @@ export default function VentasCuentaScreen({
           .eq('id', rid)
           .maybeSingle()
         if (error) throw error
+        if (!data) {
+          throw new Error(`No se encontró la orden #${rid}.`)
+        }
         bitacoraActual = data?.bitacora ?? ''
       } else {
         const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
+        if (!rep) throw new Error(`No se encontró la orden #${rid}.`)
         bitacoraActual = rep?.bitacora ?? ''
       }
       const numeroNotificacion = siguienteNumeroNotificacionCliente(bitacoraActual)
@@ -1185,16 +1211,19 @@ export default function VentasCuentaScreen({
       const bitacoraActualizada = agregarEntradaBitacoraAhora(bitacoraActual, nota)
       const patch = { bitacora: bitacoraActualizada, updated_at: new Date().toISOString() }
       if (supabase) {
-        await actualizarReparacionSupabase(supabase, rid, patch)
+        const actualizada = await actualizarReparacionSupabase(supabase, rid, patch)
+        if (actualizada?.bitacora !== bitacoraActualizada) {
+          throw new Error('La bitácora no se guardó correctamente en la orden.')
+        }
       } else {
         const all = readLs(LS_REP, [])
-        writeLs(
-          LS_REP,
-          all.map((r) => (sameId(r.id, rid) ? { ...r, ...patch } : r)),
-        )
+        const idx = all.findIndex((r) => sameId(r.id, rid))
+        if (idx < 0) throw new Error(`No se encontró la orden #${rid}.`)
+        all[idx] = { ...all[idx], ...patch }
+        writeLs(LS_REP, all)
       }
-      onNotice?.('Se agregó la nota a la bitácora exitosamente')
       setModalNotificarCliente(false)
+      onNotice?.('Nota agregada con éxito')
     } catch (e) {
       onError?.(`No se pudo registrar en la bitácora: ${e.message}`)
     } finally {

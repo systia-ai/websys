@@ -1318,7 +1318,11 @@ export default function ReparacionesOrden({
     }
     onIrCuentaCliente({
       cliente,
-      cuenta: cuentaParaVentas(cuenta),
+      cuenta: {
+        ...cuentaParaVentas(cuenta),
+        repara_id: cuenta.repara_id ?? rid,
+      },
+      reparacionOrdenId: rid,
     })
   }
 

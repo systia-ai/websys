@@ -56,6 +56,8 @@ function App() {
   const [clientesRetornoOrdenes, setClientesRetornoOrdenes] = useState(null)
   /** Al volver de Orden de servicio → Equipos, reabrir modal Reparaciones del equipo. */
   const [serviciosRetornoReparaciones, setServiciosRetornoReparaciones] = useState(null)
+  /** Al volver de Ventas → Monitor, reabrir modal Orden / Cuenta de la misma orden. */
+  const [monitorRetornoVentas, setMonitorRetornoVentas] = useState(null)
   const [rolUsuario, setRolUsuario] = useState('ADMIN')
   const [rolesReady, setRolesReady] = useState(false)
 
@@ -69,6 +71,10 @@ function App() {
 
   const limpiarRetornoServiciosReparaciones = useCallback(() => {
     setServiciosRetornoReparaciones(null)
+  }, [])
+
+  const limpiarRetornoVentasMonitor = useCallback(() => {
+    setMonitorRetornoVentas(null)
   }, [])
   const activeModuleRef = useRef(activeModule)
   /** Historial de pantallas para «atrás» / salir (no siempre inicio). */
@@ -130,6 +136,7 @@ function App() {
       setClientesRetornoVentas(null)
       setClientesRetornoOrdenes(null)
       setServiciosRetornoReparaciones(null)
+      setMonitorRetornoVentas(null)
       limpiarFiltrosMonitorSesion()
       setActiveModule('home')
       setNotice('')
@@ -179,6 +186,12 @@ function App() {
           openAccionesModal: true,
           cliente: normalizeClienteRow(vctx.cliente),
           reopenCuentasPanel: true,
+        })
+      }
+      if (vctx?.returnTo === 'monitor_ordenes' && vctx?.monitorReparacionId != null) {
+        setMonitorRetornoVentas({
+          openSelectorAccion: true,
+          reparacionId: vctx.monitorReparacionId,
         })
       }
     }
@@ -529,6 +542,8 @@ function App() {
         <MonitorOrdenesModulo
           supabase={supabase}
           puedeEliminar={puedeEliminar}
+          retornoVentas={monitorRetornoVentas}
+          onRetornoVentasConsumido={limpiarRetornoVentasMonitor}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)

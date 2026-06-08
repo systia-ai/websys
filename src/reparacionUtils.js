@@ -475,8 +475,12 @@ export function contarNotificacionesClienteBitacora(raw) {
   return parseBitacora(raw).filter((e) => esEntradaNotificacionCliente(e?.texto)).length
 }
 
-/** Texto de bitácora al confirmar notificación al cliente. */
-export function textoNotaBitacoraNotificacionCliente(_numero) {
+/** Texto de bitácora al confirmar notificación al cliente (con número secuencial). */
+export function textoNotaBitacoraNotificacionCliente(numero) {
+  const n = Number(numero)
+  if (Number.isFinite(n) && n > 0) {
+    return `${NOTA_BITACORA_NOTIFICACION_CLIENTE} (${n})`
+  }
   return NOTA_BITACORA_NOTIFICACION_CLIENTE
 }
 
@@ -778,14 +782,31 @@ function esErrorColumnaDesconocida(error, nombreColumna) {
   )
 }
 
+/** ID numérico de reparación para consultas Supabase/local. */
+export function normalizarReparacionId(id) {
+  if (id == null || id === '') return null
+  const n = Number(id)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 /** UPDATE en reparaciones; reintenta sin columnas opcionales si la BD aún no las tiene. */
 export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
+  const rid = normalizarReparacionId(reparaId)
+  if (rid == null) throw new Error('ID de orden inválido.')
   let payload = { ...patch }
   const queriaVerificacion =
     'verificado_entrega' in patch || 'fecha_verificacion_entrega' in patch
+  const queriaBitacora = 'bitacora' in patch
   for (let intento = 0; intento < 6; intento += 1) {
-    const { error } = await supabase.from('reparaciones').update(payload).eq('id', reparaId)
+    const { data, error } = await supabase
+      .from('reparaciones')
+      .update(payload)
+      .eq('id', rid)
+      .select('id, bitacora')
     if (!error) {
+      if (!data?.length) {
+        throw new Error(`No se encontró la orden #${rid} para actualizar.`)
+      }
       if (
         queriaVerificacion &&
         !('verificado_entrega' in payload) &&
@@ -795,7 +816,12 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
           'No se pudo guardar la verificación: falta la columna verificado_entrega en Supabase. Ejecute la migración 20260603160000_reparaciones_verificado_entrega.sql.',
         )
       }
-      return
+      if (queriaBitacora && !('bitacora' in payload)) {
+        throw new Error(
+          'No se pudo guardar la bitácora: falta la columna bitacora en Supabase. Ejecute la migración 20260603140000_reparaciones_bitacora.sql.',
+        )
+      }
+      return data[0]
     }
     payload = reducirPayloadReparacionTrasError(error, payload)
   }
