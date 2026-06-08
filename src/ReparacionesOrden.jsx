@@ -456,13 +456,7 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
-        const estatusCarga = estatusDirtyRef.current ? estatusRef.current : data.estatus
-        if (estatusEsEntregado(estatusCarga)) {
-          await cargarCuentaYEntregaAux(data.id)
-        } else {
-          setCuentaOrden(null)
-          setYmdEntregaDesdePagos(null)
-        }
+        await cargarCuentaYEntregaAux(data.id)
         if (supabase && data.equipo_id) {
           const { data: eq } = await supabase.from('equipos').select('*').eq('id', data.equipo_id).maybeSingle()
           if (eq) {
@@ -509,13 +503,7 @@ export default function ReparacionesOrden({
         setNivelC(nv.c)
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
-        const estatusCargaLs = estatusDirtyRef.current ? estatusRef.current : data.estatus
-        if (estatusEsEntregado(estatusCargaLs)) {
-          await cargarCuentaYEntregaAux(data.id)
-        } else {
-          setCuentaOrden(null)
-          setYmdEntregaDesdePagos(null)
-        }
+        await cargarCuentaYEntregaAux(data.id)
         const eq = readLs(LS_EQUIPOS, []).find((e) => sameId(e.id, data.equipo_id))
         if (eq) {
           setSerieEquipo(eq.serie ?? '')
@@ -795,6 +783,7 @@ export default function ReparacionesOrden({
       setMsgExito(msgDuplicadoEvitado)
       setDialogExito(true)
       onNotice(existenteId ? 'Orden existente recuperada' : 'Orden registrada')
+      await cargarCuentaYEntregaAux(newId)
       return true
     } catch (e) {
       setMsgExito(`Error: ${e.message}`)
@@ -823,7 +812,6 @@ export default function ReparacionesOrden({
       setFechaEntregaOrden(ymdFechaEntregaParaGuardar(fechaEntregaOrden))
     } else {
       setFechaEntregaOrden(null)
-      setCuentaOrden(null)
       setYmdEntregaDesdePagos(null)
     }
     if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
@@ -1172,8 +1160,8 @@ export default function ReparacionesOrden({
       if (patch.fecha_ingreso) setFechaIngresoOrden(patch.fecha_ingreso)
       if (patch.fecha_revision) setFechaRevisionOrden(patch.fecha_revision)
       if (patch.fecha_reparado) setFechaReparadoOrden(patch.fecha_reparado)
+      await cargarCuentaYEntregaAux(id)
       if (estatusEsEntregado(estatusGuardar)) {
-        await cargarCuentaYEntregaAux(id)
         if (supabase) {
           try {
             await liquidarCuentaPagadaAlEntregarOrden(supabase, id)
@@ -1199,9 +1187,6 @@ export default function ReparacionesOrden({
             )
           }
         }
-      } else {
-        setCuentaOrden(null)
-        setYmdEntregaDesdePagos(null)
       }
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
@@ -1359,14 +1344,30 @@ export default function ReparacionesOrden({
   const domClienteUi = clienteDesdeBd?.domicilio || s.clienteDomicilio || ''
   const correoClienteUi = clienteDesdeBd?.correo || s.clienteCorreo || ''
   const puedeAccionesPdf = ordenRegistrada || idReparacion != null
-  const puedeIrCuentaCliente = Boolean((esOrdenExistente || idReparacion != null) && cuentaOrden?.id)
+  const puedeIrCuentaCliente = Boolean(esOrdenExistente || idReparacion != null)
 
-  function irACuentaCliente() {
+  async function irACuentaCliente() {
     if (!onIrCuentaCliente) {
       onError?.('No se puede abrir la cuenta desde aquí.')
       return
     }
-    if (!cuentaOrden?.id) {
+    const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!rid) {
+      onError?.('Primero registre o cargue la orden de servicio.')
+      return
+    }
+    let cuenta = cuentaOrden
+    if (!cuenta?.id) {
+      try {
+        const res = await obtenerCuentaOrdenConPagos()
+        cuenta = res.cuenta
+        if (cuenta) setCuentaOrden(cuenta)
+      } catch (e) {
+        onError?.(`No se pudo consultar la cuenta: ${e.message}`)
+        return
+      }
+    }
+    if (!cuenta?.id) {
       onError?.('Esta orden no tiene una cuenta vinculada.')
       return
     }
@@ -1385,7 +1386,7 @@ export default function ReparacionesOrden({
     }
     onIrCuentaCliente({
       cliente,
-      cuenta: cuentaParaVentas(cuentaOrden),
+      cuenta: cuentaParaVentas(cuenta),
     })
   }
 
@@ -1456,11 +1457,16 @@ export default function ReparacionesOrden({
       if (eP) throw eP
       return { cuenta, pagos: pagos ?? [] }
     }
-    const matches = readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) === Number(rid))
+    const matches = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
     const cuenta =
       matches.length === 0
         ? null
-        : [...matches].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+        : [...matches].sort((a, b) => {
+            const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime()
+            const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime()
+            if (tb !== ta) return tb - ta
+            return Number(b.id ?? 0) - Number(a.id ?? 0)
+          })[0]
     if (!cuenta?.id) return { cuenta: null, pagos: [] }
     const pagos = readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) === Number(cuenta.id))
     return { cuenta, pagos }
@@ -2183,11 +2189,11 @@ export default function ReparacionesOrden({
               type="button"
               className="btn-cuenta-cliente-orden wide"
               disabled={!puedeIrCuentaCliente}
-              onClick={() => irACuentaCliente()}
+              onClick={() => void irACuentaCliente()}
               title={
                 puedeIrCuentaCliente
-                  ? 'Abrir la cuenta de ventas de este cliente'
-                  : 'La orden aún no tiene cuenta vinculada'
+                  ? 'Abrir la cuenta vinculada a esta orden'
+                  : 'Registre la orden para abrir su cuenta'
               }
             >
               💳 Cuenta del cliente
