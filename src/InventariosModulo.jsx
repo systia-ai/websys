@@ -4,6 +4,7 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { sameId } from './clienteUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { listarProductosStockBajo, mensajeStockBajoProducto } from './inventarioStock.js'
 import { esProductoContable } from './productoUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
@@ -174,6 +175,8 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   useEffect(() => {
     void cargarProductos()
   }, [cargarProductos])
+
+  const productosStockBajo = useMemo(() => listarProductosStockBajo(productos), [productos])
 
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
@@ -496,6 +499,31 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
 
       <div className="servicios-body">
         <AlertaPermiso mensaje={alertaPermiso} />
+        {!loading && productosStockBajo.length > 0 ? (
+          <div className="inventarios-stock-bajo-aviso" role="alert" aria-live="polite">
+            <div className="inventarios-stock-bajo-aviso-header">
+              <span className="inventarios-stock-bajo-aviso-ico" aria-hidden="true">
+                ⚠️
+              </span>
+              <div>
+                <strong className="inventarios-stock-bajo-aviso-titulo">Stock bajo en inventario</strong>
+                <p className="inventarios-stock-bajo-aviso-lead">
+                  {productosStockBajo.length === 1
+                    ? 'Hay 1 producto con pocas unidades:'
+                    : `Hay ${productosStockBajo.length} productos con pocas unidades:`}
+                </p>
+              </div>
+            </div>
+            <ul className="inventarios-stock-bajo-lista">
+              {productosStockBajo.map((p) => (
+                <li key={p.id}>{mensajeStockBajoProducto(p)}</li>
+              ))}
+            </ul>
+            <button type="button" className="inventarios-stock-bajo-surtir-btn" onClick={abrirSurtido}>
+              + Surtir inventario
+            </button>
+          </div>
+        ) : null}
         <button type="button" className="btn-agregar-equipo btn-surtir-inventario" onClick={abrirSurtido}>
           + SURTIR INVENTARIO
         </button>

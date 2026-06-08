@@ -1,5 +1,12 @@
 import { ESTATUS_ORDEN } from './catalogos.js'
-import { aYmdLocalDesdeRaw, esOrdenDuplicada, repCoincideFiltroMonitor } from './reparacionUtils.js'
+import {
+  aYmdLocalDesdeRaw,
+  esOrdenDuplicada,
+  estatusEsEntregado,
+  repCoincideFiltroMonitor,
+  repEnRangoFechasMonitor,
+  repEsVerificadaListaEntrega,
+} from './reparacionUtils.js'
 
 /** Orden en la cuadrícula de filtros de reportes (2 columnas). */
 export const ESTATUS_ORDEN_REPORTES = [
@@ -75,6 +82,44 @@ export function mapsFechasEntregaReporte(cuentas = [], pagos = []) {
   return { cuentaPorReparaId, entregaDesdePagosPorRepara }
 }
 
+/** Reporte de entregados: por «Fecha entrega» o solo estatus ENTREGADO. */
+function esFiltroReporteEntregados(estatusSet, modoFecha) {
+  if (modoFecha === 'entrega') return true
+  if (!modoFecha && estatusSet?.size === 1 && estatusSet.has('ENTREGADO')) return true
+  return false
+}
+
+/**
+ * Filtro de reportes: en entregados solo cuenta órdenes con estatus ENTREGADO/A
+ * (excluye las que solo están verificadas en REPARADO).
+ */
+function repCoincideFiltroReporte(
+  rep,
+  { estatusSet, desde, hasta, modoFecha, cuentaVinculada, ymdDesdePagos },
+) {
+  const d = String(desde ?? '').trim()
+  const h = String(hasta ?? '').trim()
+  const hayRango = Boolean(d || h)
+
+  if (esFiltroReporteEntregados(estatusSet, modoFecha)) {
+    if (!estatusEsEntregado(rep?.estatus)) return false
+    if (repEsVerificadaListaEntrega(rep)) return false
+    if (modoFecha === 'entrega' && !hayRango) return false
+    if (!hayRango) return true
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
+  }
+
+  return repCoincideFiltroMonitor(rep, {
+    estatusSeleccionados: estatusSet,
+    desde: d,
+    hasta: h,
+    modoFecha,
+    cuentaVinculada,
+    ymdDesdePagos,
+    estatusParaFiltroFn: estatusParaFiltroReporte,
+  })
+}
+
 /**
  * Filtra órdenes para reportes (estatus + rango, o solo por fecha ingreso/entrega como el monitor).
  * @param {'ingreso'|'entrega'|null} modoFecha
@@ -87,14 +132,13 @@ export function filtrarReparacionesParaReporte(
   const hasta = String(fin ?? '').trim()
   return rows.filter((r) => {
     const rid = String(r.id)
-    return repCoincideFiltroMonitor(r, {
-      estatusSeleccionados: estatusSet,
+    return repCoincideFiltroReporte(r, {
+      estatusSet,
       desde,
       hasta,
       modoFecha,
       cuentaVinculada: cuentaPorReparaId.get(rid) ?? null,
       ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
-      estatusParaFiltroFn: estatusParaFiltroReporte,
     })
   })
 }

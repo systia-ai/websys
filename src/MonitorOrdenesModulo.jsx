@@ -58,12 +58,30 @@ function fechaIngresoTime(rep) {
   return ymdATime(fechaIngresoYmd(rep))
 }
 
-/** Orden de llegada: primero la más antigua, desempate por no. de orden. */
-function compararPorLlegada(a, b, tiempoFn) {
-  const ta = tiempoFn(a) ?? 0
-  const tb = tiempoFn(b) ?? 0
-  if (ta !== tb) return ta - tb
-  return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
+/** Compara por tiempo (fecha de registro/ingreso); respeta asc/desc y desempata por no. de orden. */
+function compararPorTiempo(a, b, tiempoFn, orden = 'asc') {
+  const ta = tiempoFn(a)
+  const tb = tiempoFn(b)
+  if (ta != null && tb != null && ta !== tb) {
+    return orden === 'asc' ? ta - tb : tb - ta
+  }
+  if (ta != null && tb == null) return -1
+  if (ta == null && tb != null) return 1
+  const idCmp = Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
+  return orden === 'asc' ? idCmp : -idCmp
+}
+
+/** Compara por YMD (p. ej. fecha de entrega); sin fecha va al final. */
+function compararPorYmd(aYmd, bYmd, orden = 'asc', idA = 0, idB = 0) {
+  const ta = aYmd ? ymdATime(aYmd) : null
+  const tb = bYmd ? ymdATime(bYmd) : null
+  if (ta != null && tb != null && ta !== tb) {
+    return orden === 'asc' ? ta - tb : tb - ta
+  }
+  if (ta != null && tb == null) return -1
+  if (ta == null && tb != null) return 1
+  const idCmp = idA - idB
+  return orden === 'asc' ? idCmp : -idCmp
 }
 
 function hoyYmdLocal() {
@@ -411,27 +429,17 @@ export default function MonitorOrdenesModulo({
         ymdPago,
       }
     })
-    const ordenarPorLlegada =
-      filtroRangoSuperiorActivo || modoFechaActivo === 'ingreso' || modoFechaActivo === 'entrega'
-
     conTiempo.sort((a, b) => {
-      if (ordenarPorLlegada) {
-        if (modoFechaActivo === 'entrega') {
-          const ya = a.ymdEntrega ? ymdATime(a.ymdEntrega) : null
-          const yb = b.ymdEntrega ? ymdATime(b.ymdEntrega) : null
-          if (ya !== yb) {
-            if (ya == null) return 1
-            if (yb == null) return -1
-            return ya - yb
-          }
-          return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
-        }
-        return compararPorLlegada(a, b, (row) => row.t)
+      if (modoFechaActivo === 'entrega') {
+        return compararPorYmd(
+          a.ymdEntrega,
+          b.ymdEntrega,
+          ordenFecha,
+          Number(a.rep.id ?? 0),
+          Number(b.rep.id ?? 0),
+        )
       }
-      const ta = a.t ?? 0
-      const tb = b.t ?? 0
-      if (ta !== tb) return ordenFecha === 'asc' ? ta - tb : tb - ta
-      return Number(a.rep.id ?? 0) - Number(b.rep.id ?? 0)
+      return compararPorTiempo(a, b, (row) => row.t, ordenFecha)
     })
     return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({
       rep,
@@ -457,7 +465,7 @@ export default function MonitorOrdenesModulo({
     entregaDesdePagosPorRepara,
     hayRangoFechaInvalido,
     modoFechaSinRango,
-    filtroRangoSuperiorActivo,
+    equipoPorId,
   ])
 
   function toggleEstatus(est) {

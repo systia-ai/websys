@@ -701,6 +701,7 @@ export function repCoincideFiltroMonitor(
 
   if (modoFecha === 'ingreso' || modoFecha === 'entrega') {
     if (!hayRango) return false
+    if (modoFecha === 'entrega' && !estatusEsEntregado(rep?.estatus)) return false
     return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)
   }
 

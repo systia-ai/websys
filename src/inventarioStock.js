@@ -1,6 +1,9 @@
 import { sameId } from './clienteUtils.js'
 import { esProductoContable } from './productoUtils.js'
 
+/** A partir de esta existencia (inclusive) se muestra aviso de stock bajo en inventarios. */
+export const STOCK_BAJO_UMBRAL = 5
+
 export const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_CUENTAMOV = 'sistefix_local_cuentamov'
 
@@ -14,6 +17,35 @@ function readLs(key, fb) {
 
 function writeLs(key, v) {
   localStorage.setItem(key, JSON.stringify(v))
+}
+
+export function existenciaNumerica(producto) {
+  const n = Number(producto?.existencia ?? 0)
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
+}
+
+export function productoTieneStockBajo(producto, umbral = STOCK_BAJO_UMBRAL) {
+  if (!esProductoContable(producto)) return false
+  return existenciaNumerica(producto) <= umbral
+}
+
+/** Productos contables con poco stock, del más urgente al menos. */
+export function listarProductosStockBajo(productos, umbral = STOCK_BAJO_UMBRAL) {
+  return [...(productos ?? [])]
+    .filter((p) => productoTieneStockBajo(p, umbral))
+    .sort((a, b) => existenciaNumerica(a) - existenciaNumerica(b))
+}
+
+export function mensajeStockBajoProducto(producto) {
+  const n = existenciaNumerica(producto)
+  const nombre = String(producto?.descripcion ?? 'producto').trim() || 'producto'
+  if (n === 0) {
+    return `Sin stock de «${nombre}», se recomienda surtir urgentemente`
+  }
+  if (n === 1) {
+    return `Queda (1) ${nombre}, recomendable surtir`
+  }
+  return `Quedan (${n}) ${nombre}, recomendable surtir`
 }
 
 function parseCantidad(cantidad) {

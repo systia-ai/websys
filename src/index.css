@@ -4685,6 +4685,74 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   border-color: #90caf9;
 }
 
+.inventarios-stock-bajo-aviso {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 2px solid #ef6c00;
+  background: linear-gradient(135deg, #fff8e1 0%, #ffe0b2 100%);
+  box-shadow: 0 4px 14px rgba(239, 108, 0, 0.2);
+  animation: alerta-permiso-entra 0.35s ease-out;
+}
+
+.inventarios-stock-bajo-aviso-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.inventarios-stock-bajo-aviso-ico {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.inventarios-stock-bajo-aviso-titulo {
+  display: block;
+  font-size: 1rem;
+  color: #e65100;
+  margin-bottom: 2px;
+}
+
+.inventarios-stock-bajo-aviso-lead {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #bf360c;
+  font-weight: 600;
+}
+
+.inventarios-stock-bajo-lista {
+  margin: 0 0 12px;
+  padding: 0 0 0 1.15rem;
+  list-style: disc;
+}
+
+.inventarios-stock-bajo-lista li {
+  margin: 4px 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #4e342e;
+  line-height: 1.4;
+}
+
+.inventarios-stock-bajo-surtir-btn {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: #f57c00;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(245, 124, 0, 0.35);
+}
+
+.inventarios-stock-bajo-surtir-btn:hover {
+  background: #ef6c00;
+}
+
 .inventarios-lista-vista-bar {
   margin-top: 4px;
   margin-bottom: 10px;
