@@ -44,7 +44,9 @@ import {
   MENSAJE_VERIFICAR_ANTES_ENTREGADO,
   parseBitacora,
   patchFechasHitosEstatus,
+  patchCompletarFechasHitosFaltantes,
   patchVerificadoEntrega,
+  persistirFechasHitosFaltantesSupabase,
   registrarOrdenCreadaEnSesion,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
@@ -410,6 +412,7 @@ export default function ReparacionesOrden({
           onError(`No se encontró la orden #${id} en la base de datos.`)
           return
         }
+        data = await persistirFechasHitosFaltantesSupabase(supabase, data)
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
         if (!estatusDirtyRef.current) {
@@ -788,9 +791,12 @@ export default function ReparacionesOrden({
     estatusDirtyRef.current = true
     setEstatus(v)
     const repActual = {
+      estatus: v,
       fecha_ingreso: fechaIngresoOrden,
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
+      verificado_entrega: verificadoEntrega,
+      fecha_verificacion_entrega: fechaVerificacionEntrega,
     }
     const patchF = patchFechasHitosEstatus(v, repActual)
     if (patchF.fecha_ingreso) setFechaIngresoOrden(patchF.fecha_ingreso)
@@ -846,15 +852,49 @@ export default function ReparacionesOrden({
     }
     try {
       if (supabase) {
-        const guardada = await guardarVerificacionEntregaSupabase(supabase, id, true, patchExtra)
+        const repActual = {
+          estatus: estatusActual,
+          fecha_ingreso: fechaIngresoOrden,
+          fecha_revision: fechaRevisionOrden,
+          fecha_reparado: fechaReparadoOrden,
+          verificado_entrega: false,
+          fecha_verificacion_entrega: null,
+          fecha_entrega: fechaEntregaOrden,
+          updated_at: new Date().toISOString(),
+        }
+        const guardada = await guardarVerificacionEntregaSupabase(
+          supabase,
+          id,
+          true,
+          patchExtra,
+          repActual,
+        )
         setVerificadoEntrega(true)
         setFechaVerificacionEntrega(guardada?.fecha_verificacion_entrega ?? null)
+        aplicarFechasDesdeReparacion(guardada ?? repActual)
         if (patchExtra.estatus) {
           estatusDirtyRef.current = false
           setEstatus(guardada?.estatus ?? estatusActual)
         }
       } else {
-        const patch = { ...patchVerificadoEntrega(true), ...patchExtra }
+        const repActual = {
+          estatus: estatusActual,
+          fecha_ingreso: fechaIngresoOrden,
+          fecha_revision: fechaRevisionOrden,
+          fecha_reparado: fechaReparadoOrden,
+          verificado_entrega: false,
+          fecha_entrega: fechaEntregaOrden,
+        }
+        const verificadoPatch = patchVerificadoEntrega(true)
+        const patch = {
+          ...verificadoPatch,
+          ...patchExtra,
+          ...patchCompletarFechasHitosFaltantes({
+            ...repActual,
+            verificado_entrega: true,
+            fecha_verificacion_entrega: verificadoPatch.fecha_verificacion_entrega,
+          }),
+        }
         const all = readLs(LS_REP, [])
         writeLs(
           LS_REP,
@@ -862,6 +902,7 @@ export default function ReparacionesOrden({
         )
         setVerificadoEntrega(true)
         setFechaVerificacionEntrega(patch.fecha_verificacion_entrega)
+        aplicarFechasDesdeReparacion({ ...repActual, ...patch })
         if (patchExtra.estatus) {
           estatusDirtyRef.current = false
           setEstatus(patchExtra.estatus)
@@ -989,6 +1030,13 @@ export default function ReparacionesOrden({
       setBitacora(bitacoraGuardar ?? '')
       setBitacoraNueva('')
     }
+    const repParaFechas = {
+      ...repActual,
+      estatus: estatusGuardar,
+      verificado_entrega: verificadoEntrega || estatusEsEntregado(estatusGuardar),
+      fecha_verificacion_entrega: fechaVerificacionEntrega,
+      fecha_entrega: fechaEntregaOrden,
+    }
     const patch = {
       estatus: estatusGuardar,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
@@ -999,7 +1047,7 @@ export default function ReparacionesOrden({
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
-      ...patchFechasHitosEstatus(estatusGuardar, repActual),
+      ...patchFechasHitosEstatus(estatusGuardar, repParaFechas),
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.verificado_entrega = true

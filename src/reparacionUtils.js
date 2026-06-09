@@ -240,6 +240,7 @@ const MENSAJE_MIGRACION_VERIFICADO =
   'No se pudo guardar la verificación: en Supabase faltan las columnas verificado_entrega y fecha_verificacion_entrega. En el SQL Editor ejecute supabase/migrations/20260603160000_reparaciones_verificado_entrega.sql, pulse Run y recargue esta página (F5).'
 
 const SELECT_VERIFICACION_CANDIDATOS = [
+  'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus',
   'id, verificado_entrega, estatus',
   'id, estatus',
@@ -256,6 +257,10 @@ function filaVerificacionDesdePayload(reparaId, payload, fechaFallback, dataParc
       dataParcial?.fecha_verificacion_entrega ??
       payload.fecha_verificacion_entrega ??
       fechaFallback,
+    fecha_ingreso: dataParcial?.fecha_ingreso ?? payload.fecha_ingreso ?? null,
+    fecha_revision: dataParcial?.fecha_revision ?? payload.fecha_revision ?? null,
+    fecha_reparado: dataParcial?.fecha_reparado ?? payload.fecha_reparado ?? null,
+    fecha_entrega: dataParcial?.fecha_entrega ?? payload.fecha_entrega ?? null,
   }
 }
 
@@ -309,8 +314,25 @@ async function actualizarVerificacionConSelect(supabase, reparaId, payload, fech
  * Marca o quita verificación de entrega y devuelve la fila guardada.
  * Reintenta sin columnas opcionales si la BD aún no las tiene.
  */
-export async function guardarVerificacionEntregaSupabase(supabase, reparaId, verificado, patchExtra = {}) {
+export async function guardarVerificacionEntregaSupabase(
+  supabase,
+  reparaId,
+  verificado,
+  patchExtra = {},
+  repContext = null,
+) {
   let payload = { ...patchVerificadoEntrega(verificado), ...patchExtra }
+  if (verificado && repContext) {
+    Object.assign(
+      payload,
+      patchCompletarFechasHitosFaltantes({
+        ...repContext,
+        verificado_entrega: true,
+        fecha_verificacion_entrega: payload.fecha_verificacion_entrega,
+        estatus: patchExtra.estatus ?? repContext.estatus,
+      }),
+    )
+  }
   const queriaVerificacion =
     'verificado_entrega' in payload || 'fecha_verificacion_entrega' in payload
   const fechaFallback = verificado ? payload.fecha_verificacion_entrega ?? null : null
@@ -639,8 +661,54 @@ export function fechaReparadoYmd(rep) {
 }
 
 /**
+ * Completa fechas de hitos que faltan según el estatus actual, verificación o updated_at.
+ * No sobrescribe fechas ya guardadas.
+ */
+export function patchCompletarFechasHitosFaltantes(rep) {
+  const patch = {}
+  if (!rep) return patch
+
+  const st = normalizarEstatusOrden(rep.estatus)
+  const verificado = estaVerificadoEntrega(rep)
+  const fechaVerYmd = aYmdLocalDesdeRaw(rep.fecha_verificacion_entrega)
+  const fechaEntYmd = aYmdLocalDesdeRaw(
+    rep.fecha_entrega ?? rep.fechaEntrega ?? rep.fecha_entregada ?? null,
+  )
+  const updatedYmd = aYmdLocalDesdeRaw(rep.updated_at)
+  const creacionYmd = aYmdLocalDesdeRaw(rep.fecha_creacion ?? rep.created_at)
+  const ingresoExistente = fechaIngresoYmd(rep)
+  const fallback = updatedYmd || creacionYmd || ingresoExistente || ymdHoyLocal()
+
+  if (!ingresoExistente) {
+    patch.fecha_ingreso = creacionYmd || fallback
+  }
+
+  const requiereRevision =
+    estatusEsEnRevision(st) ||
+    estatusEsReparado(st) ||
+    estatusEsEntregado(st) ||
+    verificado
+
+  if (!fechaRevisionYmd(rep) && requiereRevision) {
+    patch.fecha_revision = ingresoExistente || creacionYmd || fallback
+  }
+
+  const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
+
+  if (!fechaReparadoYmd(rep) && requiereReparado) {
+    patch.fecha_reparado = fechaVerYmd || fechaEntYmd || fallback
+  }
+
+  if (estatusEsEntregado(st) && !fechaEntYmd) {
+    patch.fecha_entrega = fechaVerYmd || updatedYmd || fallback
+  }
+
+  return patch
+}
+
+/**
  * Graba fecha_revision / fecha_reparado la primera vez que entra a ese estatus.
- * No borra fechas históricas al cambiar a otro estatus.
+ * También completa hitos anteriores si la orden ya avanzó sin guardarlos.
  */
 export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   const patch = {}
@@ -654,7 +722,17 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   if (estatusEsReparado(estatusNuevo) && !fechaReparadoYmd(repActual)) {
     patch.fecha_reparado = hoy
   }
-  return patch
+  const repMerged = { ...repActual, ...patch, estatus: estatusNuevo }
+  return { ...patch, ...patchCompletarFechasHitosFaltantes(repMerged) }
+}
+
+/** Persiste en BD las fechas de hitos inferidas (p. ej. al abrir una orden antigua). */
+export async function persistirFechasHitosFaltantesSupabase(supabase, repRow) {
+  if (!supabase?.from || !repRow?.id) return repRow
+  const patch = patchCompletarFechasHitosFaltantes(repRow)
+  if (!Object.keys(patch).length) return repRow
+  await actualizarReparacionSupabase(supabase, repRow.id, patch)
+  return { ...repRow, ...patch }
 }
 
 /** Hitos de fechas legibles para UI (ingreso, revisión, reparado, entrega). */

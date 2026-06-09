@@ -101,6 +101,14 @@ export const CONTACTO_SISTEBIT = `${SISTEBIT_DIRECCION_BASE} ${SISTEBIT_CIUDAD} 
 const WHATSAPP_LABEL = 'WhatsApp'
 const WHATSAPP_ICON_GAP = 0.9
 const WHATSAPP_ICON_DATA_URL = `data:image/png;base64,${WHATSAPP_ICON_PNG_BASE64}`
+/** Separación entre la dirección y la fila tel/WhatsApp. */
+const PIE_GAP_DIRECCION_TEL = 0.7
+/** Anclaje vertical del icono (más bajo = no invade la línea de «local»). */
+const WHATSAPP_ICON_BASELINE_RATIO = 0.55
+
+function whatsappIconTop(yBaseline, iconMm) {
+  return yBaseline - iconMm * WHATSAPP_ICON_BASELINE_RATIO
+}
 
 /** Tipografía del pie: dirección (normal) vs teléfono/WhatsApp (más grande y negritas). */
 const PIE_DIRECCION = { compact: { fontSize: 6.8, lineH: 3.15 }, normal: { fontSize: 7.5, lineH: 3.6 } }
@@ -129,7 +137,7 @@ function measureWhatsappBloqueWidth(pdf, fontSize, iconMm) {
 
 /** Logo WhatsApp oficial (PNG) + texto en negrita. @returns {number} ancho total en mm */
 function drawWhatsappBloque(pdf, x, yBaseline, fontSize, iconMm) {
-  const top = yBaseline - iconMm * 0.88
+  const top = whatsappIconTop(yBaseline, iconMm)
   pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, iconMm, iconMm, undefined, 'FAST')
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(fontSize)
@@ -359,6 +367,7 @@ export function measureContactoSistebitPdf(pdf, contentW, { compact = false } = 
   const seg = '  '
 
   let h = measureDireccionSistebitPdf(pdf, maxW, dir.fontSize, dir.lineH)
+  h += PIE_GAP_DIRECCION_TEL
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(telWa.fontSize)
@@ -379,6 +388,7 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = f
 
   let yCur = y
   yCur += drawDireccionSistebitPdf(pdf, yCur, centerX, maxW, dir.fontSize, dir.lineH)
+  yCur += PIE_GAP_DIRECCION_TEL
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(telWa.fontSize)
@@ -394,7 +404,7 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = f
     pdf.setFont('helvetica', 'bold')
     pdf.text(SISTEBIT_TEL, x, yCur)
     x += wTel + wSeg
-    const top = yCur - telWa.iconMm * 0.88
+    const top = whatsappIconTop(yCur, telWa.iconMm)
     pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, telWa.iconMm, telWa.iconMm, undefined, 'FAST')
     pdf.setFont('helvetica', 'bold')
     pdf.text(waText, x + telWa.iconMm + WHATSAPP_ICON_GAP, yCur)
@@ -405,7 +415,7 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = f
   pdf.text(SISTEBIT_TEL, centerX, yCur, { align: 'center' })
   yCur += telWa.lineH
   const x2 = centerX - wWa / 2
-  const top2 = yCur - telWa.iconMm * 0.88
+  const top2 = whatsappIconTop(yCur, telWa.iconMm)
   pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x2, top2, telWa.iconMm, telWa.iconMm, undefined, 'FAST')
   pdf.setFont('helvetica', 'bold')
   pdf.text(waText, x2 + telWa.iconMm + WHATSAPP_ICON_GAP, yCur)

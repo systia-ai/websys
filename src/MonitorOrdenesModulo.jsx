@@ -235,7 +235,7 @@ export default function MonitorOrdenesModulo({
   const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
   const [gestionTecnicosAbierto, setGestionTecnicosAbierto] = useState(false)
   const [nuevoTecnico, setNuevoTecnico] = useState('')
-  const [avisosExpandido, setAvisosExpandido] = useState(true)
+  const [avisosExpandido, setAvisosExpandido] = useState(false)
   const [filtroAvisoActivo, setFiltroAvisoActivo] = useState(null)
 
   const cargarTodo = useCallback(async () => {
