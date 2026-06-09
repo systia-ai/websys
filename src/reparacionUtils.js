@@ -719,10 +719,11 @@ export function patchCompletarFechasHitosFaltantes(rep) {
   )
   const updatedYmd = aYmdLocalDesdeRaw(rep.updated_at)
   const creacionYmd = aYmdLocalDesdeRaw(rep.fecha_creacion ?? rep.created_at)
-  const ingresoExistente = fechaIngresoYmd(rep)
+  const ingresoColumna = fechaIngresoFiltroYmd(rep)
+  const ingresoExistente = ingresoColumna ?? fechaIngresoYmd(rep)
   const fallback = updatedYmd || creacionYmd || ingresoExistente || ymdHoyLocal()
 
-  if (!ingresoExistente) {
+  if (!ingresoColumna) {
     patch.fecha_ingreso = creacionYmd || fallback
   }
 
@@ -743,6 +744,10 @@ export function patchCompletarFechasHitosFaltantes(rep) {
     else if (fechaEntYmd && estatusEsEntregado(st)) patch.fecha_reparado = fechaEntYmd
   }
 
+  if (estatusEsEntregado(st) && !fechaEntYmd) {
+    if (fechaVerYmd) patch.fecha_entrega = fechaVerYmd
+  }
+
   return patch
 }
 
@@ -754,7 +759,7 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   const patch = {}
   if (!ordenUsaSistemaWeb(repActual)) return patch
   const hoy = ymdFechaEntregaParaGuardar(null)
-  if (estatusEsIngresado(estatusNuevo) && !fechaIngresoYmd(repActual)) {
+  if (estatusEsIngresado(estatusNuevo) && !fechaIngresoFiltroYmd(repActual)) {
     patch.fecha_ingreso = hoy
   }
   if (estatusEsEnRevision(estatusNuevo) && !fechaRevisionYmd(repActual)) {
@@ -912,26 +917,37 @@ export function repCoincideFiltroMonitor(
 
   const sel = estatusSeleccionados
   const st = estatusParaFiltroFn(rep)
+
+  // Solo chip INGRESADO + rango: filtrar por fecha_ingreso (aunque ya estén en revisión/reparado).
+  if (hayRango && sel.size === 1 && sel.has('INGRESADO')) {
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ingreso')
+  }
+
+  // Solo chip ENTREGADO + rango: filtrar por fecha_entrega (estatus ENTREGADO/A).
+  if (hayRango && sel.size === 1 && sel.has('ENTREGADO')) {
+    if (!estatusEsEntregado(rep?.estatus)) return false
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
+  }
+
   if (sel.size === 0 || !sel.has(st)) return false
   if (!hayRango) return true
   const modoRango = modoRangoFechaMonitorPorSeleccion(sel, st)
   return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoRango)
 }
 
-/** En modos de fecha especial, respeta estatus salvo que el chip de fecha ya define el criterio. */
+/** En modos de fecha especial: ingreso/entrega ya definieron el criterio por columna de BD. */
 function repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha) {
   const sel = estatusSeleccionados
   if (!sel || sel.size === 0) return false
   const todos = ESTATUS_ORDEN.length > 0 && ESTATUS_ORDEN.every((e) => sel.has(String(e).trim().toUpperCase()))
   if (todos) return true
+  if (modoFecha === 'ingreso' || modoFecha === 'entrega') return true
   const st = estatusParaFiltroFn(rep)
   if (modoFecha === 'reparado') {
     if (sel.has('ENTREGADO')) return estatusEsReparado(st) || estatusEsEntregado(st)
     if (sel.has('REPARADO')) return estatusEsReparado(st)
     return sel.has(st)
   }
-  if (modoFecha === 'entrega') return sel.has('ENTREGADO') ? estatusEsEntregado(st) : sel.has(st)
-  if (modoFecha === 'ingreso') return sel.has(st)
   return sel.has(st)
 }
 

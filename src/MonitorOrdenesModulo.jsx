@@ -987,7 +987,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaIngreso()
                   }}
-                  title="Órdenes con fecha_ingreso en el rango de arriba (solo columna fecha_ingreso)."
+                  title="Órdenes con fecha_ingreso en el rango (cualquier estatus actual; solo columna fecha_ingreso)."
                 >
                   Solo
                 </button>
@@ -1010,7 +1010,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaEntrega()
                   }}
-                  title="Órdenes con fecha_entrega en el rango de arriba (solo columna fecha_entrega)."
+                  title="Órdenes ENTREGADO/A con fecha_entrega en el rango (solo columna fecha_entrega)."
                 >
                   Solo
                 </button>
