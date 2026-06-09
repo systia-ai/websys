@@ -1,16 +1,16 @@
 import {
-  aYmdLocalDesdeRaw,
+  ORDEN_SISTEMA_DESDE_YMD,
   estatusEsEnRevision,
   estatusEsEntregado,
   estatusEsIngresado,
   estatusEsReparado,
   estaVerificadoEntrega,
-  fechaIngresoYmd,
+  ordenUsaSistemaWeb,
   repEsVerificadaListaEntrega,
 } from './reparacionUtils.js'
 
-/** Solo órdenes con sistema web (desde 1° de mayo). */
-export const MONITOR_AVISOS_DESDE_YMD = '2026-05-01'
+/** Alias histórico; mismo corte que ORDEN_SISTEMA_DESDE_YMD. */
+export const MONITOR_AVISOS_DESDE_YMD = ORDEN_SISTEMA_DESDE_YMD
 
 export const AVISO_IDS = {
   REPARADAS_SIN_VERIFICAR: 'reparadas-sin-verificar',
@@ -20,10 +20,7 @@ export const AVISO_IDS = {
 }
 
 export function repEnPeriodoMonitorAvisos(rep) {
-  const ymd =
-    fechaIngresoYmd(rep) ?? aYmdLocalDesdeRaw(rep?.fecha_creacion ?? rep?.created_at ?? rep?.fecha_registro)
-  if (!ymd || ymd.length < 10) return false
-  return ymd >= MONITOR_AVISOS_DESDE_YMD
+  return ordenUsaSistemaWeb(rep)
 }
 
 export function repCoincideAvisoMonitor(rep, avisoId) {

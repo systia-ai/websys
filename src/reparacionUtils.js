@@ -617,10 +617,22 @@ export function fechaIngresoYmd(rep) {
   return aYmdLocalDesdeRaw(raw)
 }
 
+/** Órdenes anteriores a esta fecha no usaban el sistema web (sin auto-correcciones ni inferencias). */
+export const ORDEN_SISTEMA_DESDE_YMD = '2026-05-01'
+
+/** True si la orden pertenece al periodo con sistema web (ingreso o creación ≥ 1° may 2026). */
+export function ordenUsaSistemaWeb(rep) {
+  const ymd =
+    fechaIngresoYmd(rep) ??
+    aYmdLocalDesdeRaw(rep?.fecha_creacion ?? rep?.created_at ?? rep?.fecha_registro)
+  if (!ymd || ymd.length < 10) return false
+  return ymd >= ORDEN_SISTEMA_DESDE_YMD
+}
+
 /**
  * Fecha de entrega (órdenes ENTREGADO/A).
- * Prioridad: columna fecha_entrega → último pago → fecha_liquidada → updated_at de la orden.
- * No usa created_at de la cuenta (coincide con el ingreso al taller).
+ * Prioridad: columna fecha_entrega → último pago → fecha_liquidada de la cuenta.
+ * No usa updated_at (cambia al abrir/guardar y falsea el filtro «entregadas hoy»).
  */
 export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = null) {
   if (!estatusEsEntregado(rep?.estatus)) return null
@@ -642,7 +654,7 @@ export function fechaEntregaYmd(rep, cuentaVinculada = null, ymdDesdePagos = nul
       if (desdeLiq) return desdeLiq
     }
   }
-  return aYmdLocalDesdeRaw(rep?.updated_at)
+  return null
 }
 
 /** YMD para guardar al marcar entregada: conserva la existente o usa hoy (local). */
@@ -666,7 +678,7 @@ export function fechaReparadoYmd(rep) {
  */
 export function patchCompletarFechasHitosFaltantes(rep) {
   const patch = {}
-  if (!rep) return patch
+  if (!rep || !ordenUsaSistemaWeb(rep)) return patch
 
   const st = normalizarEstatusOrden(rep.estatus)
   const verificado = estaVerificadoEntrega(rep)
@@ -696,11 +708,8 @@ export function patchCompletarFechasHitosFaltantes(rep) {
   const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
 
   if (!fechaReparadoYmd(rep) && requiereReparado) {
-    patch.fecha_reparado = fechaVerYmd || fechaEntYmd || fallback
-  }
-
-  if (estatusEsEntregado(st) && !fechaEntYmd) {
-    patch.fecha_entrega = fechaVerYmd || updatedYmd || fallback
+    if (fechaVerYmd) patch.fecha_reparado = fechaVerYmd
+    else if (fechaEntYmd && estatusEsEntregado(st)) patch.fecha_reparado = fechaEntYmd
   }
 
   return patch
@@ -712,6 +721,7 @@ export function patchCompletarFechasHitosFaltantes(rep) {
  */
 export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   const patch = {}
+  if (!ordenUsaSistemaWeb(repActual)) return patch
   const hoy = ymdFechaEntregaParaGuardar(null)
   if (estatusEsIngresado(estatusNuevo) && !fechaIngresoYmd(repActual)) {
     patch.fecha_ingreso = hoy
@@ -728,7 +738,7 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
 
 /** Persiste en BD las fechas de hitos inferidas (p. ej. al abrir una orden antigua). */
 export async function persistirFechasHitosFaltantesSupabase(supabase, repRow) {
-  if (!supabase?.from || !repRow?.id) return repRow
+  if (!supabase?.from || !repRow?.id || !ordenUsaSistemaWeb(repRow)) return repRow
   const patch = patchCompletarFechasHitosFaltantes(repRow)
   if (!Object.keys(patch).length) return repRow
   await actualizarReparacionSupabase(supabase, repRow.id, patch)
@@ -996,6 +1006,7 @@ export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
   if (!supabase?.from || !repRow?.id || !estatusEsEntregado(repRow.estatus)) {
     return repRow
   }
+  if (!ordenUsaSistemaWeb(repRow)) return repRow
 
   // Entrega ya registrada con fecha: no tocar (evita revertir órdenes entregadas al cliente).
   if (aYmdLocalDesdeRaw(repRow.fecha_entrega)) {
