@@ -99,30 +99,43 @@ const SISTEBIT_WHATSAPP = '462 209 0526'
 export const CONTACTO_SISTEBIT = `${SISTEBIT_DIRECCION_BASE} ${SISTEBIT_CIUDAD} ${SISTEBIT_TEL} ${SISTEBIT_WHATSAPP}`
 
 const WHATSAPP_LABEL = 'WhatsApp'
-const WHATSAPP_ICON_MM = 3.8
 const WHATSAPP_ICON_GAP = 0.9
 const WHATSAPP_ICON_DATA_URL = `data:image/png;base64,${WHATSAPP_ICON_PNG_BASE64}`
+
+/** Tipografía del pie: dirección (normal) vs teléfono/WhatsApp (más grande y negritas). */
+const PIE_DIRECCION = { compact: { fontSize: 6.8, lineH: 3.15 }, normal: { fontSize: 7.5, lineH: 3.6 } }
+const PIE_TEL_WA = {
+  compact: { fontSize: 10.2, lineH: 4.35, iconMm: 5 },
+  normal: { fontSize: 11.5, lineH: 4.75, iconMm: 5.6 },
+}
+
+function pieDireccionStyles(compact) {
+  return compact ? PIE_DIRECCION.compact : PIE_DIRECCION.normal
+}
+
+function pieTelWaStyles(compact) {
+  return compact ? PIE_TEL_WA.compact : PIE_TEL_WA.normal
+}
 
 function whatsappContactoTexto() {
   return `${WHATSAPP_LABEL} ${SISTEBIT_WHATSAPP}`
 }
 
-function measureWhatsappBloqueWidth(pdf) {
+function measureWhatsappBloqueWidth(pdf, fontSize, iconMm) {
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(7.5)
-  return WHATSAPP_ICON_MM + WHATSAPP_ICON_GAP + pdf.getTextWidth(whatsappContactoTexto())
+  pdf.setFontSize(fontSize)
+  return iconMm + WHATSAPP_ICON_GAP + pdf.getTextWidth(whatsappContactoTexto())
 }
 
 /** Logo WhatsApp oficial (PNG) + texto en negrita. @returns {number} ancho total en mm */
-function drawWhatsappBloque(pdf, x, yBaseline) {
-  const size = WHATSAPP_ICON_MM
-  const top = yBaseline - size * 0.88
-  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, size, size, undefined, 'FAST')
+function drawWhatsappBloque(pdf, x, yBaseline, fontSize, iconMm) {
+  const top = yBaseline - iconMm * 0.88
+  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, iconMm, iconMm, undefined, 'FAST')
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(7.5)
+  pdf.setFontSize(fontSize)
   pdf.setTextColor(21, 101, 192)
-  pdf.text(whatsappContactoTexto(), x + size + WHATSAPP_ICON_GAP, yBaseline)
-  return measureWhatsappBloqueWidth(pdf)
+  pdf.text(whatsappContactoTexto(), x + iconMm + WHATSAPP_ICON_GAP, yBaseline)
+  return measureWhatsappBloqueWidth(pdf, fontSize, iconMm)
 }
 
 export function dashIfEmpty(v) {
@@ -340,68 +353,63 @@ function drawDireccionSistebitPdf(pdf, y, centerX, maxW, fontSize, lineH) {
 
 /** Altura en mm del bloque de contacto (misma lógica que `drawContactoSistebitPdf`). */
 export function measureContactoSistebitPdf(pdf, contentW, { compact = false } = {}) {
-  const fontSize = compact ? 6.8 : 7.5
-  const lineH = compact ? 3.15 : 3.6
+  const dir = pieDireccionStyles(compact)
+  const telWa = pieTelWaStyles(compact)
   const maxW = contentW - 6
   const seg = '  '
 
-  let h = measureDireccionSistebitPdf(pdf, maxW, fontSize, lineH)
+  let h = measureDireccionSistebitPdf(pdf, maxW, dir.fontSize, dir.lineH)
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(fontSize)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(telWa.fontSize)
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(fontSize)
-  const wWa = measureWhatsappBloqueWidth(pdf)
+  const wWa = measureWhatsappBloqueWidth(pdf, telWa.fontSize, telWa.iconMm)
   const filaW = wTel + wSeg + wWa
-  h += filaW <= maxW ? lineH : lineH * 2
+  h += filaW <= maxW ? telWa.lineH : telWa.lineH * 2
   return h
 }
 
 /** Datos de contacto SISTEBIT centrados (pie de PDF). */
 export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = false } = {}) {
-  const fontSize = compact ? 6.8 : 7.5
-  const lineH = compact ? 3.15 : 3.6
-  const iconMm = compact ? 3.2 : WHATSAPP_ICON_MM
+  const dir = pieDireccionStyles(compact)
+  const telWa = pieTelWaStyles(compact)
   const maxW = contentW - 6
   const seg = '  '
 
   let yCur = y
-  yCur += drawDireccionSistebitPdf(pdf, yCur, centerX, maxW, fontSize, lineH)
+  yCur += drawDireccionSistebitPdf(pdf, yCur, centerX, maxW, dir.fontSize, dir.lineH)
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(fontSize)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(telWa.fontSize)
   pdf.setTextColor(21, 101, 192)
   const wTel = pdf.getTextWidth(SISTEBIT_TEL)
   const wSeg = pdf.getTextWidth(seg)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(fontSize)
-  const waText = `${WHATSAPP_LABEL} ${SISTEBIT_WHATSAPP}`
-  const wWa = iconMm + WHATSAPP_ICON_GAP + pdf.getTextWidth(waText)
+  const waText = whatsappContactoTexto()
+  const wWa = telWa.iconMm + WHATSAPP_ICON_GAP + pdf.getTextWidth(waText)
   const filaW = wTel + wSeg + wWa
 
   if (filaW <= maxW) {
     let x = centerX - filaW / 2
-    pdf.setFont('helvetica', 'normal')
+    pdf.setFont('helvetica', 'bold')
     pdf.text(SISTEBIT_TEL, x, yCur)
     x += wTel + wSeg
-    const top = yCur - iconMm * 0.88
-    pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, iconMm, iconMm, undefined, 'FAST')
+    const top = yCur - telWa.iconMm * 0.88
+    pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x, top, telWa.iconMm, telWa.iconMm, undefined, 'FAST')
     pdf.setFont('helvetica', 'bold')
-    pdf.text(waText, x + iconMm + WHATSAPP_ICON_GAP, yCur)
-    return yCur - y + lineH
+    pdf.text(waText, x + telWa.iconMm + WHATSAPP_ICON_GAP, yCur)
+    return yCur - y + telWa.lineH
   }
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.text(SISTEBIT_TEL, centerX, yCur, { align: 'center' })
-  yCur += lineH
-  let x2 = centerX - wWa / 2
-  const top2 = yCur - iconMm * 0.88
-  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x2, top2, iconMm, iconMm, undefined, 'FAST')
   pdf.setFont('helvetica', 'bold')
-  pdf.text(waText, x2 + iconMm + WHATSAPP_ICON_GAP, yCur)
-  return yCur - y + lineH
+  pdf.text(SISTEBIT_TEL, centerX, yCur, { align: 'center' })
+  yCur += telWa.lineH
+  const x2 = centerX - wWa / 2
+  const top2 = yCur - telWa.iconMm * 0.88
+  pdf.addImage(WHATSAPP_ICON_DATA_URL, 'PNG', x2, top2, telWa.iconMm, telWa.iconMm, undefined, 'FAST')
+  pdf.setFont('helvetica', 'bold')
+  pdf.text(waText, x2 + telWa.iconMm + WHATSAPP_ICON_GAP, yCur)
+  return yCur - y + telWa.lineH
 }
 
 /**

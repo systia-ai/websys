@@ -36,7 +36,6 @@ import {
   guardarVerificacionEntregaSupabase,
   agregarEntradaBitacora,
   bloqueaEntregaSinVerificacion,
-  corregirEntregadaIndebidaSiAplica,
   fechasHitosOrdenConVerificacion,
   formatFechaBitacora,
   insertarReparacionSupabase,
@@ -410,15 +409,6 @@ export default function ReparacionesOrden({
         if (!data) {
           onError(`No se encontró la orden #${id} en la base de datos.`)
           return
-        }
-        const estatusAntes = data.estatus
-        data = await corregirEntregadaIndebidaSiAplica(supabase, data)
-        if (
-          estatusEsEntregado(estatusAntes) &&
-          !estatusEsEntregado(data.estatus) &&
-          !estatusDirtyRef.current
-        ) {
-          onNotice?.('La orden estaba entregada por error; se corrigió a INGRESADO.')
         }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
@@ -1045,25 +1035,6 @@ export default function ReparacionesOrden({
             console.warn(
               `Orden #${id}: estatus ENTREGADO pero fecha_entrega no quedó en la base de datos.`,
             )
-          }
-        }
-        if (!estatusEsEntregado(estatusGuardar)) {
-          const { data: ver, error: verErr } = await supabase
-            .from('reparaciones')
-            .select('id, estatus, fecha_entrega')
-            .eq('id', id)
-            .maybeSingle()
-          if (!verErr && ver && estatusEsEntregado(ver.estatus)) {
-            const corregida = await corregirEntregadaIndebidaSiAplica(supabase, ver)
-            if (estatusEsEntregado(corregida.estatus)) {
-              throw new Error(
-                'La base de datos sigue mostrando la orden como entregada. En Supabase ejecute: UPDATE reparaciones SET estatus = \'INGRESADO\', fecha_entrega = NULL WHERE id = ' +
-                  id +
-                  ';',
-              )
-            }
-            setEstatus(corregida.estatus ?? 'INGRESADO')
-            setFechaEntregaOrden(null)
           }
         }
       } else {

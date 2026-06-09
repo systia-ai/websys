@@ -23,6 +23,13 @@ import {
   limpiarFiltrosMonitorSesion,
   marcarVolverMonitorDesdeOrden,
 } from './monitorOrdenesFiltrosSesion.js'
+import {
+  AVISO_IDS,
+  calcularAvisosMonitor,
+  MONITOR_AVISOS_DESDE_YMD,
+  repCoincideAvisoMonitor,
+} from './monitorOrdenesAvisos.js'
+import MonitorOrdenesAvisosPanel from './MonitorOrdenesAvisosPanel.jsx'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -228,6 +235,8 @@ export default function MonitorOrdenesModulo({
   const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => leerTecnicos())
   const [gestionTecnicosAbierto, setGestionTecnicosAbierto] = useState(false)
   const [nuevoTecnico, setNuevoTecnico] = useState('')
+  const [avisosExpandido, setAvisosExpandido] = useState(true)
+  const [filtroAvisoActivo, setFiltroAvisoActivo] = useState(null)
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -344,6 +353,25 @@ export default function MonitorOrdenesModulo({
 
   const tiposServicioLista = TIPOS_SERVICIO_FILTRO
 
+  const avisosMonitor = useMemo(() => calcularAvisosMonitor(reparaciones), [reparaciones])
+
+  function aplicarFiltroAviso(avisoId) {
+    setFiltroAvisoActivo(avisoId)
+    setFechaDesde(MONITOR_AVISOS_DESDE_YMD)
+    setFechaHasta(ymdHoyLocal() ?? '')
+    setBusqueda('')
+    desactivarModosFechaEspeciales()
+    if (avisoId === AVISO_IDS.REPARADAS_SIN_VERIFICAR) {
+      setEstatusSeleccionados(new Set(['REPARADO']))
+    } else {
+      setEstatusSeleccionados(new Set(ESTATUS_ORDEN_MONITOR))
+    }
+  }
+
+  function quitarFiltroAviso() {
+    setFiltroAvisoActivo(null)
+  }
+
   function rangoFechasInvalidoPar(desde, hasta) {
     const d = String(desde ?? '').trim()
     const h = String(hasta ?? '').trim()
@@ -423,6 +451,9 @@ export default function MonitorOrdenesModulo({
         return blob.includes(q)
       })
     }
+    if (filtroAvisoActivo) {
+      filtradas = filtradas.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
+    }
     const conTiempo = filtradas.map((r) => {
       const rid = String(r.id)
       const cuenta = cuentaPorReparaId.get(rid)
@@ -471,6 +502,7 @@ export default function MonitorOrdenesModulo({
     filtroModoVerificadas,
     modoFechaActivo,
     busqueda,
+    filtroAvisoActivo,
     clientes,
     cuentaPorReparaId,
     entregaDesdePagosPorRepara,
@@ -738,6 +770,15 @@ export default function MonitorOrdenesModulo({
 
       <div className="servicios-body">
         <AlertaPermiso mensaje={alertaPermiso} />
+        <MonitorOrdenesAvisosPanel
+          avisos={avisosMonitor}
+          expandido={avisosExpandido}
+          onToggle={() => setAvisosExpandido((v) => !v)}
+          filtroAvisoActivo={filtroAvisoActivo}
+          onAvisoClick={aplicarFiltroAviso}
+          onQuitarFiltroAviso={quitarFiltroAviso}
+          loading={loading}
+        />
         <section className="monitor-ordenes-filtros card-pad">
           <h2 className="monitor-ordenes-filtros-titulo">
             <span className="monitor-ordenes-filtros-titulo-icon" aria-hidden="true">

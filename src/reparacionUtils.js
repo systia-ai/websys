@@ -910,11 +910,17 @@ export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
 }
 
 /**
- * Reparación marcada ENTREGADA/ENTREGADO por error (cuenta aún PENDIENTE y sin pagos).
- * Corrige en BD a INGRESADO y quita fecha_entrega.
+ * Reparación marcada ENTREGADA por error: solo anticipo registrado y aún sin cargos.
+ * No revierte entregas reales (con fecha_entrega, cargos o movimientos en cuenta).
+ * IMPORTANTE: no invocar al abrir/cargar una orden; solo corrección explícita si aplica.
  */
 export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
   if (!supabase?.from || !repRow?.id || !estatusEsEntregado(repRow.estatus)) {
+    return repRow
+  }
+
+  // Entrega ya registrada con fecha: no tocar (evita revertir órdenes entregadas al cliente).
+  if (aYmdLocalDesdeRaw(repRow.fecha_entrega)) {
     return repRow
   }
 
@@ -940,14 +946,44 @@ export async function corregirEntregadaIndebidaSiAplica(supabase, repRow) {
   const pagado = sumPagosCuenta(pagos ?? [])
   const totalVenta = Number(cuenta.total ?? 0)
 
-  // Cargos cubiertos: la orden puede estar entregada aunque la cuenta siga PENDIENTE hasta liquidar.
+  // Cargos cubiertos: puede estar entregada aunque la cuenta siga PENDIENTE hasta liquidar.
   if (totalVenta > 0.0001 && pagado >= totalVenta - 0.01) return repRow
 
-  // Solo anticipo, sin cargos, o cuenta abierta: el equipo no debe figurar como entregado.
+  // Con cargos en la cuenta: la entrega al cliente es válida aunque falte liquidar o pagar saldo.
+  if (totalVenta > 0.0001) return repRow
+
+  // Hay líneas en cuenta/reparación aunque total aún no esté sincronizado.
+  const [rCm, rRm] = await Promise.all([
+    supabase.from('cuentamov').select('id', { count: 'exact', head: true }).eq('cuenta_id', cuenta.id),
+    supabase.from('reparamov').select('id', { count: 'exact', head: true }).eq('repara_id', repRow.id),
+  ])
+  if ((rCm.count ?? 0) > 0 || (rRm.count ?? 0) > 0) return repRow
+
+  // Solo revertir si quedó ENTREGADA con anticipo pero sin cargos de venta/reparación.
+  if (!cuentaTieneSoloAnticipo(totalVenta, pagos ?? [])) return repRow
+
   const now = new Date().toISOString()
-  const patch = { estatus: 'INGRESADO', fecha_entrega: null, updated_at: now }
+  const patch = {
+    estatus: 'INGRESADO',
+    fecha_entrega: null,
+    verificado_entrega: false,
+    fecha_verificacion_entrega: null,
+    updated_at: now,
+  }
   await actualizarReparacionSupabase(supabase, repRow.id, patch)
   return { ...repRow, ...patch }
+}
+
+/** True si la orden entregada no debe revertirse automáticamente (solo lectura, sin escribir BD). */
+export function ordenEntregadaProtegidaContraAutoRevert(repRow, cuenta, pagos = []) {
+  if (!repRow || !estatusEsEntregado(repRow.estatus)) return false
+  if (aYmdLocalDesdeRaw(repRow.fecha_entrega)) return true
+  if (!cuenta?.id) return true
+  const estCuenta = String(cuenta.estatus ?? '').trim().toUpperCase()
+  if (estCuenta === 'LIQUIDADA' || estCuenta === 'PAGADA') return true
+  const totalVenta = Number(cuenta.total ?? 0)
+  if (totalVenta > 0.0001) return true
+  return !cuentaTieneSoloAnticipo(totalVenta, pagos)
 }
 
 /** Suma de pagos/anticipos registrados en la cuenta. */
