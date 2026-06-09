@@ -13,6 +13,7 @@ import {
   fechaIngresoYmd,
   fechaReparadoYmd,
   repCoincideFiltroMonitor,
+  tecnicoRepCoincideFiltro,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
   ymdHoyLocal,
@@ -429,13 +430,7 @@ export default function MonitorOrdenesModulo({
     if (tecnicoFiltro === TECNICO_SIN) {
       filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
     } else if (tecnicoFiltro !== TECNICO_TODAS) {
-      const want = tecnicoFiltro.trim().toUpperCase()
-      filtradas = filtradas.filter((r) => {
-        const t = String(r.tecnico ?? '').trim().toUpperCase()
-        if (!t) return false
-        const partes = t.split(/\s*&\s*/).map((x) => x.trim()).filter(Boolean)
-        return partes.includes(want)
-      })
+      filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
     }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
     const qTexto = String(busqueda ?? '').trim()
@@ -992,7 +987,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaIngreso()
                   }}
-                  title="Solo órdenes ingresadas en el rango de fechas de arriba"
+                  title="Órdenes con fecha_ingreso en el rango de arriba (solo columna fecha_ingreso)."
                 >
                   Solo
                 </button>
@@ -1015,7 +1010,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaEntrega()
                   }}
-                  title="Solo órdenes entregadas en el rango de fechas de arriba"
+                  title="Órdenes con fecha_entrega en el rango de arriba (solo columna fecha_entrega)."
                 >
                   Solo
                 </button>
@@ -1038,7 +1033,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaReparado()
                   }}
-                  title="Solo órdenes reparadas en el rango de fechas de arriba"
+                  title="Órdenes con fecha_reparado en el rango de arriba (solo columna fecha_reparado)."
                 >
                   Solo
                 </button>
