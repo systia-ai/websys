@@ -16,6 +16,7 @@ export function filtrosMonitorPorDefecto() {
     fechaHasta: hoy,
     filtroModoFechaIngreso: false,
     filtroModoFechaEntrega: false,
+    filtroModoFechaReparado: false,
     filtroModoVerificadas: false,
     busqueda: '',
   }
@@ -37,6 +38,7 @@ function parseFiltrosGuardados(saved) {
     fechaHasta: saved.fechaHasta ?? defaults.fechaHasta,
     filtroModoFechaIngreso: !!saved.filtroModoFechaIngreso,
     filtroModoFechaEntrega: !!saved.filtroModoFechaEntrega,
+    filtroModoFechaReparado: !!saved.filtroModoFechaReparado,
     filtroModoVerificadas: !!saved.filtroModoVerificadas,
     busqueda: typeof saved.busqueda === 'string' ? saved.busqueda : defaults.busqueda,
   }

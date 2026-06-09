@@ -795,58 +795,22 @@ function ymdEnRango(ymd, desde, hasta) {
   return true
 }
 
-/** Estatus cuyo rango de fechas en el monitor puede usar también `updated_at` (p. ej. reparadas hoy). */
-const ESTATUS_RANGO_USA_ACTUALIZACION = new Set([
-  'REPARADO',
-  'EN REVISION',
-  'EN ESPERA POR REFACCION',
-  'SIN REPARACION',
-])
-
-/** Máx. días entre ingreso y actualización para contar `updated_at` en el filtro por mes. */
-const DIAS_MAX_INGRESO_VS_ACTUALIZACION_MONITOR = 90
-
-function diasEntreYmd(a, b) {
-  if (!a || !b || a.length < 10 || b.length < 10) return null
-  const [ya, ma, da] = a.slice(0, 10).split('-').map(Number)
-  const [yb, mb, db] = b.slice(0, 10).split('-').map(Number)
-  const ta = Date.UTC(ya, ma - 1, da)
-  const tb = Date.UTC(yb, mb - 1, db)
-  return Math.round(Math.abs(tb - ta) / 86400000)
-}
-
 /**
- * Fechas que cuentan para el rango del monitor (ingreso, entrega y/o última actualización).
+ * Fecha del hito que corresponde al estatus actual (filtro por rango en el monitor).
+ * REPARADO → fecha_reparado; EN REVISION → fecha_revision; ENTREGADO → fecha_entrega; etc.
  */
-export function fechasRangoMonitor(rep, cuentaVinculada = null, ymdDesdePagos = null) {
-  const ing = fechaIngresoYmd(rep)
-  const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
-  const rev = fechaRevisionYmd(rep)
-  const repa = fechaReparadoYmd(rep)
+export function fechaHitoEstatusMonitor(rep, cuentaVinculada = null, ymdDesdePagos = null) {
   const st = normalizarEstatusOrden(rep?.estatus)
-  const fechas = []
-  if (ing) fechas.push(ing)
-  if (rev) fechas.push(rev)
-  if (repa) fechas.push(repa)
-  if (ent) fechas.push(ent)
-  if (ESTATUS_RANGO_USA_ACTUALIZACION.has(st)) {
-    const act = aYmdLocalDesdeRaw(rep?.updated_at)
-    if (act && !fechas.includes(act)) {
-      const dias = ing ? diasEntreYmd(ing, act) : null
-      if (
-        !ing ||
-        (dias != null && dias <= DIAS_MAX_INGRESO_VS_ACTUALIZACION_MONITOR)
-      ) {
-        fechas.push(act)
-      }
-    }
-  }
-  return fechas
+  if (estatusEsEntregado(st)) return fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
+  if (estatusEsReparado(st)) return fechaReparadoYmd(rep)
+  if (estatusEsEnRevision(st)) return fechaRevisionYmd(rep)
+  if (estatusEsIngresado(st)) return fechaIngresoYmd(rep)
+  return fechaRevisionYmd(rep) ?? fechaIngresoYmd(rep)
 }
 
 /**
  * Rango Desde/Hasta del monitor.
- * @param {'todas'|'ingreso'|'entrega'|'ambas'} modo
+ * @param {'todas'|'ingreso'|'entrega'|'reparado'|'ambas'} modo
  */
 export function repEnRangoFechasMonitor(
   rep,
@@ -864,16 +828,16 @@ export function repEnRangoFechasMonitor(
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
   if (modo === 'ingreso') return ymdEnRango(ing, d, h)
   if (modo === 'entrega') return ymdEnRango(ent, d, h)
-  const fechas = fechasRangoMonitor(rep, cuentaVinculada, ymdDesdePagos)
-  if (fechas.length === 0) return false
-  return fechas.some((ymd) => ymdEnRango(ymd, d, h))
+  if (modo === 'reparado') return ymdEnRango(fechaReparadoYmd(rep), d, h)
+  const ymd = fechaHitoEstatusMonitor(rep, cuentaVinculada, ymdDesdePagos)
+  return ymdEnRango(ymd, d, h)
 }
 
 /**
  * ¿La orden cumple el filtro del monitor?
- * - `modoFecha` 'ingreso' | 'entrega': usa el rango superior y omite estatus.
+ * - `modoFecha` 'ingreso' | 'entrega' | 'reparado': usa el rango superior y omite estatus (salvo entrega/reparado).
  * - `modoFecha` 'verificadas': órdenes verificadas y aún no entregadas; el rango aplica a fecha_verificacion_entrega.
- * - Sin `modoFecha`: filtra por estatus y, si hay rango, por ingreso o entrega (ambas).
+ * - Sin `modoFecha`: filtra por estatus y, si hay rango, por la fecha del hito de ese estatus.
  */
 export function repCoincideFiltroMonitor(
   rep,
@@ -891,9 +855,10 @@ export function repCoincideFiltroMonitor(
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
 
-  if (modoFecha === 'ingreso' || modoFecha === 'entrega') {
+  if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
     if (modoFecha === 'entrega' && !estatusEsEntregado(rep?.estatus)) return false
+    if (modoFecha === 'reparado' && !estatusEsReparado(rep?.estatus)) return false
     return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)
   }
 
@@ -901,10 +866,7 @@ export function repCoincideFiltroMonitor(
     if (!repEsVerificadaListaEntrega(rep)) return false
     if (!hayRango) return true
     const ymdVer = fechaVerificacionEntregaYmd(rep)
-    if (ymdVer) return ymdEnRango(ymdVer, d, h)
-    const ymdAct = aYmdLocalDesdeRaw(rep?.updated_at)
-    if (ymdAct) return ymdEnRango(ymdAct, d, h)
-    return true
+    return ymdVer ? ymdEnRango(ymdVer, d, h) : false
   }
 
   const sel = estatusSeleccionados
