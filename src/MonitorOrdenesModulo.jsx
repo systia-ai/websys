@@ -215,7 +215,7 @@ export default function MonitorOrdenesModulo({
   const [ordenFecha, setOrdenFecha] = useState(filtrosIniciales.ordenFecha)
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(filtrosIniciales.tecnicoFiltro)
-  /** Rango de fechas (arriba); lo usan los modos «Fecha ingresado» / «Fecha entrega». */
+  /** Rango de fechas (arriba); lo usan «Fecha registrado» / «Fecha entrega» / «Fecha reparado». */
   const [fechaDesde, setFechaDesde] = useState(filtrosIniciales.fechaDesde)
   const [fechaHasta, setFechaHasta] = useState(filtrosIniciales.fechaHasta)
   /** Activo: filtra por ingreso en el rango superior (ignora estatus). */
@@ -979,7 +979,7 @@ export default function MonitorOrdenesModulo({
                   checked={filtroModoFechaIngreso}
                   onChange={() => toggleModoFechaIngreso()}
                 />
-                <span className="monitor-ordenes-check-text">Fecha ingresado</span>
+                <span className="monitor-ordenes-check-text">Fecha registrado</span>
                 <button
                   type="button"
                   className="monitor-ordenes-solo"
@@ -987,7 +987,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaIngreso()
                   }}
-                  title="Órdenes con fecha_ingreso en el rango (cualquier estatus actual; solo columna fecha_ingreso)."
+                  title="Órdenes con fecha_ingreso en el rango. Respeta los chips de estatus seleccionados (no confundir con el chip Ingresado)."
                 >
                   Solo
                 </button>
@@ -1010,7 +1010,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaEntrega()
                   }}
-                  title="Órdenes ENTREGADO/A con fecha_entrega en el rango (solo columna fecha_entrega)."
+                  title="Órdenes con estatus ENTREGADO/A y fecha_entrega en el rango."
                 >
                   Solo
                 </button>
@@ -1033,7 +1033,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaReparado()
                   }}
-                  title="Órdenes con fecha_reparado en el rango de arriba (solo columna fecha_reparado)."
+                  title="Órdenes con estatus REPARADO y fecha_reparado en el rango."
                 >
                   Solo
                 </button>
@@ -1064,7 +1064,7 @@ export default function MonitorOrdenesModulo({
             </div>
             {modoFechaSinRango ? (
               <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="alert">
-                Indique «Desde» y/o «Hasta» en el rango de fechas de arriba para usar «Fecha ingresado», «Fecha
+                Indique «Desde» y/o «Hasta» en el rango de fechas de arriba para usar «Fecha registrado», «Fecha
                 entrega» o «Fecha reparado».
               </p>
             ) : null}

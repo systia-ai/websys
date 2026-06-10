@@ -752,12 +752,11 @@ export function patchCompletarFechasHitosFaltantes(rep) {
 }
 
 /**
- * Graba fecha_revision / fecha_reparado la primera vez que entra a ese estatus.
- * También completa hitos anteriores si la orden ya avanzó sin guardarlos.
+ * Graba fecha_ingreso / fecha_revision / fecha_reparado / fecha_entrega al cambiar de estatus.
+ * Siempre asigna la fecha del hito que corresponde; el completado automático solo en órdenes del sistema web.
  */
 export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   const patch = {}
-  if (!ordenUsaSistemaWeb(repActual)) return patch
   const hoy = ymdFechaEntregaParaGuardar(null)
   if (estatusEsIngresado(estatusNuevo) && !fechaIngresoFiltroYmd(repActual)) {
     patch.fecha_ingreso = hoy
@@ -768,8 +767,19 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   if (estatusEsReparado(estatusNuevo) && !fechaReparadoYmd(repActual)) {
     patch.fecha_reparado = hoy
   }
+  if (estatusEsEntregado(estatusNuevo) && !fechaEntregaFiltroYmd(repActual)) {
+    patch.fecha_entrega = ymdFechaEntregaParaGuardar(
+      repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
+    )
+  }
   const repMerged = { ...repActual, ...patch, estatus: estatusNuevo }
-  return { ...patch, ...patchCompletarFechasHitosFaltantes(repMerged) }
+  if (ordenUsaSistemaWeb(repMerged)) {
+    const extra = patchCompletarFechasHitosFaltantes(repMerged)
+    for (const [k, v] of Object.entries(extra)) {
+      if (!(k in patch)) patch[k] = v
+    }
+  }
+  return patch
 }
 
 /** Persiste en BD las fechas de hitos inferidas (p. ej. al abrir una orden antigua). */
@@ -881,9 +891,11 @@ export function repEnRangoFechasMonitor(
 
 /**
  * ¿La orden cumple el filtro del monitor?
- * - `modoFecha` 'ingreso' | 'entrega' | 'reparado': rango sobre fecha_ingreso / fecha_entrega / fecha_reparado.
- * - `modoFecha` 'verificadas': órdenes verificadas y aún no entregadas; el rango aplica a fecha_verificacion_entrega.
- * - Sin `modoFecha`: filtra por estatus y, si hay rango, por la fecha del hito de ese estatus.
+ * - Chips de estatus: solo órdenes cuyo estatus actual está seleccionado.
+ * - `modoFecha` 'ingreso' (Fecha registrado): rango sobre fecha_ingreso + respeta chips de estatus.
+ * - `modoFecha` 'entrega' | 'reparado': rango + estatus coherente (ENTREGADO / REPARADO).
+ * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
+ * - Con rango y un solo estatus: usa la columna de fecha de ese estatus.
  */
 export function repCoincideFiltroMonitor(
   rep,
@@ -903,7 +915,6 @@ export function repCoincideFiltroMonitor(
 
   if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
-    if (modoFecha === 'entrega' && !estatusEsEntregado(rep?.estatus)) return false
     if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) return false
     return repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha)
   }
@@ -917,37 +928,21 @@ export function repCoincideFiltroMonitor(
 
   const sel = estatusSeleccionados
   const st = estatusParaFiltroFn(rep)
-
-  // Solo chip INGRESADO + rango: filtrar por fecha_ingreso (aunque ya estén en revisión/reparado).
-  if (hayRango && sel.size === 1 && sel.has('INGRESADO')) {
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ingreso')
-  }
-
-  // Solo chip ENTREGADO + rango: filtrar por fecha_entrega (estatus ENTREGADO/A).
-  if (hayRango && sel.size === 1 && sel.has('ENTREGADO')) {
-    if (!estatusEsEntregado(rep?.estatus)) return false
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
-  }
-
   if (sel.size === 0 || !sel.has(st)) return false
   if (!hayRango) return true
   const modoRango = modoRangoFechaMonitorPorSeleccion(sel, st)
   return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoRango)
 }
 
-/** En modos de fecha especial: ingreso/entrega ya definieron el criterio por columna de BD. */
+/** Respeta chips de estatus; en modos de fecha exige coherencia estatus ↔ columna. */
 function repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha) {
   const sel = estatusSeleccionados
   if (!sel || sel.size === 0) return false
+  const st = estatusParaFiltroFn(rep)
+  if (modoFecha === 'entrega' && !estatusEsEntregado(st)) return false
+  if (modoFecha === 'reparado' && !estatusEsReparado(st)) return false
   const todos = ESTATUS_ORDEN.length > 0 && ESTATUS_ORDEN.every((e) => sel.has(String(e).trim().toUpperCase()))
   if (todos) return true
-  if (modoFecha === 'ingreso' || modoFecha === 'entrega') return true
-  const st = estatusParaFiltroFn(rep)
-  if (modoFecha === 'reparado') {
-    if (sel.has('ENTREGADO')) return estatusEsReparado(st) || estatusEsEntregado(st)
-    if (sel.has('REPARADO')) return estatusEsReparado(st)
-    return sel.has(st)
-  }
   return sel.has(st)
 }
 

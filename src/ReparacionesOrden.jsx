@@ -713,7 +713,10 @@ export default function ReparacionesOrden({
         updated_at: now,
         fecha_ingreso: ymdFechaEntregaParaGuardar(null),
         tipo_reparacion: tipoReparacion || null,
-        ...patchFechasHitosEstatus(estatus, {}),
+        ...patchFechasHitosEstatus(estatus, {
+          fecha_ingreso: ymdFechaEntregaParaGuardar(null),
+          fecha_creacion: now,
+        }),
       }
 
       existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
@@ -792,9 +795,11 @@ export default function ReparacionesOrden({
     setEstatus(v)
     const repActual = {
       estatus: v,
+      fecha_creacion: fechaCreacionOrden,
       fecha_ingreso: fechaIngresoOrden,
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
+      fecha_entrega: fechaEntregaOrden,
       verificado_entrega: verificadoEntrega,
       fecha_verificacion_entrega: fechaVerificacionEntrega,
     }
@@ -803,7 +808,7 @@ export default function ReparacionesOrden({
     if (patchF.fecha_revision) setFechaRevisionOrden(patchF.fecha_revision)
     if (patchF.fecha_reparado) setFechaReparadoOrden(patchF.fecha_reparado)
     if (estatusEsEntregado(v)) {
-      setFechaEntregaOrden(ymdFechaEntregaParaGuardar(fechaEntregaOrden))
+      setFechaEntregaOrden(patchF.fecha_entrega ?? ymdFechaEntregaParaGuardar(fechaEntregaOrden))
     } else {
       setFechaEntregaOrden(null)
       setYmdEntregaDesdePagos(null)
@@ -1033,6 +1038,7 @@ export default function ReparacionesOrden({
     const repParaFechas = {
       ...repActual,
       estatus: estatusGuardar,
+      fecha_creacion: fechaCreacionOrden,
       verificado_entrega: verificadoEntrega || estatusEsEntregado(estatusGuardar),
       fecha_verificacion_entrega: fechaVerificacionEntrega,
       fecha_entrega: fechaEntregaOrden,
