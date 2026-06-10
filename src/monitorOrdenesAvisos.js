@@ -3,7 +3,7 @@ import {
   estatusEsEnRevision,
   estatusEsEntregado,
   estatusEsIngresado,
-  estatusEsReparado,
+  estatusListoParaVerificacionEntrega,
   estaVerificadoEntrega,
   ordenUsaSistemaWeb,
   repEsVerificadaListaEntrega,
@@ -28,7 +28,7 @@ export function repCoincideAvisoMonitor(rep, avisoId) {
   switch (avisoId) {
     case AVISO_IDS.REPARADAS_SIN_VERIFICAR:
       return (
-        estatusEsReparado(rep?.estatus) &&
+        estatusListoParaVerificacionEntrega(rep?.estatus) &&
         !estaVerificadoEntrega(rep) &&
         !estatusEsEntregado(rep?.estatus)
       )
@@ -49,7 +49,7 @@ const DEFINICIONES_AVISOS = [
     prioridad: 1,
     variante: 'warning',
     texto: (n) =>
-      `Tienes (${n}) ${n === 1 ? 'orden reparada sin verificar' : 'órdenes reparadas sin verificar'}`,
+      `Tienes (${n}) ${n === 1 ? 'orden lista sin verificar' : 'órdenes listas sin verificar'} (reparada o sin reparación)`,
   },
   {
     id: AVISO_IDS.VERIFICADAS_PENDIENTES,

@@ -26,7 +26,8 @@ import {
   esOrdenDuplicada,
   estatusEsEntregado,
   estatusPermiteVerificacionEntrega,
-  estatusEsReparado,
+  estatusEsSinReparacion,
+  estatusListoParaVerificacionEntrega,
   estatusSiguientesPermitidos,
   ejecutarInsercionOrdenUnica,
   estaVerificadoEntrega,
@@ -262,6 +263,7 @@ export default function ReparacionesOrden({
   const [fechaIngresoOrden, setFechaIngresoOrden] = useState(null)
   const [fechaRevisionOrden, setFechaRevisionOrden] = useState(null)
   const [fechaReparadoOrden, setFechaReparadoOrden] = useState(null)
+  const [fechaSinReparacionOrden, setFechaSinReparacionOrden] = useState(null)
   const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
   const [cuentaOrden, setCuentaOrden] = useState(null)
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
@@ -272,11 +274,13 @@ export default function ReparacionesOrden({
   const fechaIngresoRef = useRef(null)
   const fechaRevisionRef = useRef(null)
   const fechaReparadoRef = useRef(null)
+  const fechaSinReparacionRef = useRef(null)
   const fechaEntregaRef = useRef(null)
   fechaCreacionRef.current = fechaCreacionOrden
   fechaIngresoRef.current = fechaIngresoOrden
   fechaRevisionRef.current = fechaRevisionOrden
   fechaReparadoRef.current = fechaReparadoOrden
+  fechaSinReparacionRef.current = fechaSinReparacionOrden
   fechaEntregaRef.current = fechaEntregaOrden
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
@@ -308,6 +312,7 @@ export default function ReparacionesOrden({
       fecha_creacion: fechaCreacionOrden,
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
+      fecha_sin_reparacion: fechaSinReparacionOrden,
       fecha_entrega: fechaEntregaOrden,
     }
     return fechasHitosOrdenConVerificacion(rep, {
@@ -322,6 +327,7 @@ export default function ReparacionesOrden({
     fechaCreacionOrden,
     fechaRevisionOrden,
     fechaReparadoOrden,
+    fechaSinReparacionOrden,
     fechaEntregaOrden,
     cuentaOrden,
     ymdEntregaDesdePagos,
@@ -334,6 +340,9 @@ export default function ReparacionesOrden({
     const ingreso = data.fecha_ingreso ?? data.fechaIngreso ?? null
     const revision = aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null)
     const reparado = aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null)
+    const sinReparacion = aYmdLocalDesdeRaw(
+      data.fecha_sin_reparacion ?? data.fechaSinReparacion ?? null,
+    )
     const entrega = aYmdLocalDesdeRaw(
       data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
     )
@@ -341,11 +350,13 @@ export default function ReparacionesOrden({
     fechaIngresoRef.current = ingreso
     fechaRevisionRef.current = revision
     fechaReparadoRef.current = reparado
+    fechaSinReparacionRef.current = sinReparacion
     fechaEntregaRef.current = entrega
     setFechaCreacionOrden(creacion)
     setFechaIngresoOrden(ingreso)
     setFechaRevisionOrden(revision)
     setFechaReparadoOrden(reparado)
+    setFechaSinReparacionOrden(sinReparacion)
     setFechaEntregaOrden(entrega)
   }, [])
 
@@ -356,6 +367,7 @@ export default function ReparacionesOrden({
       fecha_ingreso: fechaIngresoRef.current,
       fecha_revision: fechaRevisionRef.current,
       fecha_reparado: fechaReparadoRef.current,
+      fecha_sin_reparacion: fechaSinReparacionRef.current,
       fecha_entrega: fechaEntregaRef.current,
       verificado_entrega: verificadoEntrega,
       fecha_verificacion_entrega: fechaVerificacionEntrega,
@@ -374,6 +386,10 @@ export default function ReparacionesOrden({
     if (patchF.fecha_reparado != null) {
       fechaReparadoRef.current = patchF.fecha_reparado
       setFechaReparadoOrden(patchF.fecha_reparado)
+    }
+    if (patchF.fecha_sin_reparacion != null) {
+      fechaSinReparacionRef.current = patchF.fecha_sin_reparacion
+      setFechaSinReparacionOrden(patchF.fecha_sin_reparacion)
     }
     if (estatusEsEntregado(estatusVal)) {
       const ent = patchF.fecha_entrega ?? ymdFechaEntregaParaGuardar(fechaEntregaRef.current)
@@ -863,7 +879,7 @@ export default function ReparacionesOrden({
     const repActual = repSnapshotParaFechas(v)
     const patchF = patchPrecomputado ?? patchFechasHitosEstatus(v, repActual)
     aplicarPatchFechasAlEstado(patchF, v)
-    if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
+    if (!estatusListoParaVerificacionEntrega(v) && !estatusEsEntregado(v)) {
       setVerificadoEntrega(false)
       setFechaVerificacionEntrega(null)
     }
@@ -905,7 +921,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eSel } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, estatus, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -946,7 +962,8 @@ export default function ReparacionesOrden({
     const estatusActual = estatusRef.current ?? estatus
     setErrorVerificacion('')
     if (!estatusPermiteVerificacionEntrega(estatusActual)) {
-      const msg = 'Solo puede verificar equipos con estatus REPARADO. Guarde la orden con estatus REPARADO e intente de nuevo.'
+      const msg =
+        'Solo puede verificar equipos con estatus REPARADO o SIN REPARACION. Guarde la orden con uno de esos estatus e intente de nuevo.'
       setErrorVerificacion(msg)
       onError?.(msg)
       return
@@ -964,7 +981,7 @@ export default function ReparacionesOrden({
     }
     setMarcandoVerificacion(true)
     const patchExtra = {}
-    if (estatusDirtyRef.current && estatusEsReparado(estatusActual)) {
+    if (estatusDirtyRef.current && estatusPermiteVerificacionEntrega(estatusActual)) {
       patchExtra.estatus = estatusActual
     }
     try {
@@ -974,6 +991,7 @@ export default function ReparacionesOrden({
           fecha_ingreso: fechaIngresoOrden,
           fecha_revision: fechaRevisionOrden,
           fecha_reparado: fechaReparadoOrden,
+          fecha_sin_reparacion: fechaSinReparacionOrden,
           verificado_entrega: false,
           fecha_verificacion_entrega: null,
           fecha_entrega: fechaEntregaOrden,
@@ -999,6 +1017,7 @@ export default function ReparacionesOrden({
           fecha_ingreso: fechaIngresoOrden,
           fecha_revision: fechaRevisionOrden,
           fecha_reparado: fechaReparadoOrden,
+          fecha_sin_reparacion: fechaSinReparacionOrden,
           verificado_entrega: false,
           fecha_entrega: fechaEntregaOrden,
         }
@@ -1153,6 +1172,7 @@ export default function ReparacionesOrden({
       fecha_ingreso: fechaIngresoRef.current,
       fecha_revision: fechaRevisionRef.current,
       fecha_reparado: fechaReparadoRef.current,
+      fecha_sin_reparacion: fechaSinReparacionRef.current,
     }
     let bitacoraGuardar = bitacora.trim() ? bitacora : null
     if (bitacoraNueva.trim()) {
@@ -1184,7 +1204,7 @@ export default function ReparacionesOrden({
     if (estatusEsEntregado(estatusGuardar)) {
       patch.verificado_entrega = true
       patch.fecha_verificacion_entrega = fechaVerificacionEntrega || now
-    } else if (!estatusEsReparado(estatusGuardar)) {
+    } else if (!estatusListoParaVerificacionEntrega(estatusGuardar)) {
       patch.verificado_entrega = false
       patch.fecha_verificacion_entrega = null
     }
@@ -1203,7 +1223,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -1262,6 +1282,10 @@ export default function ReparacionesOrden({
       if (patch.fecha_reparado) {
         fechaReparadoRef.current = patch.fecha_reparado
         setFechaReparadoOrden(patch.fecha_reparado)
+      }
+      if (patch.fecha_sin_reparacion) {
+        fechaSinReparacionRef.current = patch.fecha_sin_reparacion
+        setFechaSinReparacionOrden(patch.fecha_sin_reparacion)
       }
       await cargarCuentaYEntregaAux(id)
       if (estatusEsEntregado(estatusGuardar)) {
@@ -2144,8 +2168,17 @@ export default function ReparacionesOrden({
             ) : estatusPermiteVerificacionEntrega(estatus) ? (
               <>
                 <p className="rep-verificacion-entrega-ayuda muted small">
-                  El equipo ya está <strong>REPARADO</strong>. Revíselo una vez más antes de entregarlo al
-                  cliente; al verificar, quedará listo para marcar ENTREGADO.
+                  {estatusEsSinReparacion(estatus) ? (
+                    <>
+                      La orden está en <strong>SIN REPARACION</strong>. Confirme que el equipo puede
+                      entregarse así; al verificar, quedará listo para marcar ENTREGADO.
+                    </>
+                  ) : (
+                    <>
+                      El equipo ya está <strong>REPARADO</strong>. Revíselo una vez más antes de entregarlo al
+                      cliente; al verificar, quedará listo para marcar ENTREGADO.
+                    </>
+                  )}
                 </p>
                 {errorVerificacion ? (
                   <p className="rep-verificacion-entrega-error error" role="alert">
@@ -2163,8 +2196,8 @@ export default function ReparacionesOrden({
               </>
             ) : (
               <p className="rep-verificacion-entrega-pendiente muted small">
-                Cuando el estatus sea <strong>REPARADO</strong>, podrá verificar el equipo antes de marcarlo
-                ENTREGADO.
+                Cuando el estatus sea <strong>REPARADO</strong> o <strong>SIN REPARACION</strong>, podrá
+                verificar el equipo antes de marcarlo ENTREGADO.
               </p>
             )}
           </div>

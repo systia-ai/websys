@@ -58,6 +58,15 @@ export function estatusEsReparado(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'REPARADO'
 }
 
+export function estatusEsSinReparacion(estatus) {
+  return String(estatus ?? '').trim().toUpperCase() === 'SIN REPARACION'
+}
+
+/** REPARADO o SIN REPARACION: puede verificarse antes de ENTREGADO. */
+export function estatusListoParaVerificacionEntrega(estatus) {
+  return estatusEsReparado(estatus) || estatusEsSinReparacion(estatus)
+}
+
 export function estatusEsIngresado(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'INGRESADO'
 }
@@ -91,6 +100,7 @@ export function estatusSiguientesPermitidos(estatusActual) {
   if (ESTATUS_LATERALES_DESDE_REVISION.includes(actual)) {
     opciones.add('EN REVISION')
     opciones.add('REPARADO')
+    if (actual === 'SIN REPARACION') opciones.add('ENTREGADO')
     return [...opciones]
   }
 
@@ -120,7 +130,7 @@ function mensajeTransicionEstatusInvalida(desde, hacia, siguiente) {
     return 'No puede saltar a ese estatus desde Ingresado. El siguiente paso es En revisión.'
   }
   if (d === 'EN REVISION' && h === 'ENTREGADO') {
-    return 'No puede cambiar el estatus de En revisión a Entregado. Primero debe estar en Reparado.'
+    return 'No puede cambiar el estatus de En revisión a Entregado. Primero debe estar en Reparado o Sin reparación.'
   }
   if (d === 'REPARADO' && h === 'INGRESADO') {
     return 'No puede regresar de Reparado a Ingresado. Solo puede retroceder un paso a En revisión.'
@@ -182,17 +192,17 @@ export function fechaVerificacionEntregaYmd(rep) {
   return aYmdLocalDesdeRaw(rep?.fecha_verificacion_entrega ?? rep?.fechaVerificacionEntrega)
 }
 
-/** Solo en REPARADO se puede marcar verificación antes de ENTREGADO. */
+/** En REPARADO o SIN REPARACION se puede marcar verificación antes de ENTREGADO. */
 export function estatusPermiteVerificacionEntrega(estatus) {
-  return estatusEsReparado(estatus)
+  return estatusListoParaVerificacionEntrega(estatus)
 }
 
 export const MENSAJE_VERIFICAR_ANTES_ENTREGADO =
   'Debe verificar el equipo antes de marcar la orden como ENTREGADO. Use el botón «Verificar listo para entrega».'
 
-/** Bloquea ENTREGADO si la orden está REPARADA y aún no se verificó el equipo. */
+/** Bloquea ENTREGADO si está listo para verificación y aún no se verificó. */
 export function bloqueaEntregaSinVerificacion(estatusActual, verificado) {
-  return estatusEsReparado(estatusActual) && !verificado
+  return estatusListoParaVerificacionEntrega(estatusActual) && !verificado
 }
 
 /** Verificada y pendiente de entrega al cliente (misma lógica que filtro del monitor). */
@@ -232,6 +242,10 @@ function reducirPayloadReparacionTrasError(error, payload) {
     const { fecha_reparado: _f, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
   }
+  if ('fecha_sin_reparacion' in payload && esErrorColumnaDesconocida(error, 'fecha_sin_reparacion')) {
+    const { fecha_sin_reparacion: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
   if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
     const { bitacora: _b, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
@@ -255,6 +269,7 @@ const MENSAJE_MIGRACION_VERIFICADO =
   'No se pudo guardar la verificación: en Supabase faltan las columnas verificado_entrega y fecha_verificacion_entrega. En el SQL Editor ejecute supabase/migrations/20260603160000_reparaciones_verificado_entrega.sql, pulse Run y recargue esta página (F5).'
 
 const SELECT_VERIFICACION_CANDIDATOS = [
+  'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus',
   'id, verificado_entrega, estatus',
@@ -275,6 +290,7 @@ function filaVerificacionDesdePayload(reparaId, payload, fechaFallback, dataParc
     fecha_ingreso: dataParcial?.fecha_ingreso ?? payload.fecha_ingreso ?? null,
     fecha_revision: dataParcial?.fecha_revision ?? payload.fecha_revision ?? null,
     fecha_reparado: dataParcial?.fecha_reparado ?? payload.fecha_reparado ?? null,
+    fecha_sin_reparacion: dataParcial?.fecha_sin_reparacion ?? payload.fecha_sin_reparacion ?? null,
     fecha_entrega: dataParcial?.fecha_entrega ?? payload.fecha_entrega ?? null,
   }
 }
@@ -698,6 +714,16 @@ export function fechaRevisionFiltroYmd(rep) {
   return fechaRevisionYmd(rep)
 }
 
+/** Fecha en que la orden pasó a SIN REPARACION (solo columna `fecha_sin_reparacion`). */
+export function fechaSinReparacionYmd(rep) {
+  return aYmdLocalDesdeRaw(rep?.fecha_sin_reparacion ?? rep?.fechaSinReparacion)
+}
+
+/** Alias explícito para filtros (misma columna que fechaSinReparacionYmd). */
+export function fechaSinReparacionFiltroYmd(rep) {
+  return fechaSinReparacionYmd(rep)
+}
+
 /** Fecha en que la orden pasó a REPARADO (solo columna `fecha_reparado`). */
 export function fechaReparadoYmd(rep) {
   return aYmdLocalDesdeRaw(rep?.fecha_reparado ?? rep?.fechaReparado)
@@ -785,11 +811,16 @@ export function patchCompletarFechasHitosFaltantes(rep) {
   const requiereRevision =
     estatusEsEnRevision(st) ||
     estatusEsReparado(st) ||
+    estatusEsSinReparacion(st) ||
     estatusEsEntregado(st) ||
     verificado
 
   if (!fechaRevisionYmd(rep) && requiereRevision) {
     patch.fecha_revision = ingresoExistente || creacionYmd || fallback
+  }
+
+  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st)) {
+    patch.fecha_sin_reparacion = ingresoExistente || creacionYmd || fallback
   }
 
   const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
@@ -821,6 +852,9 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   }
   if (estatusEsReparado(estatusNuevo) && !fechaReparadoYmd(repActual)) {
     patch.fecha_reparado = hoy
+  }
+  if (estatusEsSinReparacion(estatusNuevo) && !fechaSinReparacionYmd(repActual)) {
+    patch.fecha_sin_reparacion = hoy
   }
   if (estatusEsEntregado(estatusNuevo) && !fechaEntregaFiltroYmd(repActual)) {
     patch.fecha_entrega = ymdFechaEntregaParaGuardar(
@@ -860,7 +894,7 @@ export function buildPatchCambioEstatusOrden(
     }
   } else {
     patch.fecha_entrega = null
-    if (!estatusEsReparado(st)) {
+    if (!estatusListoParaVerificacionEntrega(st)) {
       patch.verificado_entrega = false
       patch.fecha_verificacion_entrega = null
     } else if (verificadoEntrega) {
@@ -904,6 +938,8 @@ export function fechasHitosOrdenLegibles(rep, { cuentaVinculada = null, ymdDesde
   if (rev) hitos.push({ clave: 'revision', etiqueta: 'En revisión', texto: fmt(rev) })
   const repa = fechaReparadoYmd(rep)
   if (repa) hitos.push({ clave: 'reparado', etiqueta: 'Reparado', texto: fmt(repa) })
+  const sinRep = fechaSinReparacionYmd(rep)
+  if (sinRep) hitos.push({ clave: 'sin_reparacion', etiqueta: 'Sin reparación', texto: fmt(sinRep) })
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
   if (ent) hitos.push({ clave: 'entrega', etiqueta: 'Entrega', texto: fmt(ent) })
   return hitos
@@ -951,6 +987,7 @@ export function fechaHitoEstatusMonitor(rep) {
   const st = normalizarEstatusOrden(rep?.estatus)
   if (estatusEsEntregado(st)) return fechaEntregaFiltroYmd(rep)
   if (estatusEsReparado(st)) return fechaReparadoFiltroYmd(rep)
+  if (estatusEsSinReparacion(st)) return fechaSinReparacionFiltroYmd(rep)
   if (estatusEsEnRevision(st)) return fechaRevisionFiltroYmd(rep)
   if (estatusEsIngresado(st)) return fechaIngresoFiltroYmd(rep)
   return fechaRevisionFiltroYmd(rep)
@@ -960,6 +997,7 @@ function modoRangoFechaMonitorPorSeleccion(estatusSeleccionados, _estatusOrden) 
   const sel = estatusSeleccionados
   if (!sel || sel.size !== 1) return 'ambas'
   if (sel.has('REPARADO')) return 'reparado'
+  if (sel.has('SIN REPARACION')) return 'sin_reparacion'
   if (sel.has('INGRESADO')) return 'ingreso'
   if (sel.has('ENTREGADO')) return 'entrega'
   if (sel.has('EN REVISION')) return 'revision'
@@ -985,6 +1023,7 @@ export function repEnRangoFechasMonitor(
   if (modo === 'ingreso') return ymdEnRango(fechaIngresoFiltroYmd(rep), d, h)
   if (modo === 'entrega') return ymdEnRango(fechaEntregaFiltroYmd(rep), d, h)
   if (modo === 'reparado') return ymdEnRango(fechaReparadoFiltroYmd(rep), d, h)
+  if (modo === 'sin_reparacion') return ymdEnRango(fechaSinReparacionFiltroYmd(rep), d, h)
   if (modo === 'revision') return ymdEnRango(fechaRevisionFiltroYmd(rep), d, h)
   const ymd = fechaHitoEstatusMonitor(rep)
   return ymdEnRango(ymd, d, h)
@@ -1037,6 +1076,11 @@ export function repCoincideFiltroMonitor(
   /** Solo chip REPARADO + rango: columna fecha_reparado (histórico, sin exigir estatus actual). */
   if (hayRango && sel.size === 1 && sel.has('REPARADO')) {
     return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'reparado')
+  }
+
+  /** Solo chip SIN REPARACION + rango: columna fecha_sin_reparacion. */
+  if (hayRango && sel.size === 1 && sel.has('SIN REPARACION')) {
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'sin_reparacion')
   }
 
   if (sel.size === 0 || !sel.has(st)) return false
@@ -1561,6 +1605,11 @@ export async function insertarReparacionSupabase(supabase, row) {
     }
     if ('fecha_reparado' in payload && esErrorColumnaDesconocida(first.error, 'fecha_reparado')) {
       const { fecha_reparado: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('fecha_sin_reparacion' in payload && esErrorColumnaDesconocida(first.error, 'fecha_sin_reparacion')) {
+      const { fecha_sin_reparacion: _f, ...rest } = payload
       payload = rest
       continue
     }

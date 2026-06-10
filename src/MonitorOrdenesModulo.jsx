@@ -369,7 +369,7 @@ export default function MonitorOrdenesModulo({
     setBusqueda('')
     desactivarModosFechaEspeciales()
     if (avisoId === AVISO_IDS.REPARADAS_SIN_VERIFICAR) {
-      setEstatusSeleccionados(new Set(['REPARADO']))
+      setEstatusSeleccionados(new Set(['REPARADO', 'SIN REPARACION']))
     } else {
       setEstatusSeleccionados(new Set(ESTATUS_ORDEN_MONITOR))
     }
