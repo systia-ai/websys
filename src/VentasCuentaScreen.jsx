@@ -27,6 +27,7 @@ import {
   sumPagosCuenta,
   cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
+  esGarantiaEpsonTipo,
   formatFechaBitacora,
   normalizarReparacionId,
   registrarNotificacionClienteEnBitacora,
@@ -259,6 +260,7 @@ export default function VentasCuentaScreen({
   const [reparaIdCuenta, setReparaIdCuenta] = useState(null)
   /** Orden y equipo ligados a la cuenta (para comprobante PDF). */
   const [reciboOrdenEquipo, setReciboOrdenEquipo] = useState(null)
+  const [tipoReparacionOrden, setTipoReparacionOrden] = useState(null)
   const [lineas, setLineas] = useState([])
   const [mostrarCamposProducto, setMostrarCamposProducto] = useState(false)
   const [modalPago, setModalPago] = useState(false)
@@ -315,12 +317,13 @@ export default function VentasCuentaScreen({
   const saldoAFavor = visiblesCuenta.saldoAFavor
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
+  const esGarantiaEpson = esGarantiaEpsonTipo(tipoReparacionOrden)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const puedeLiquidarCuenta =
     esCuentaExistente &&
     cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
-    totalCargos > 0.0001 &&
-    !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))
+    (esGarantiaEpson ||
+      (totalCargos > 0.0001 && !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))))
   const ordenVinculadaId = useMemo(() => {
     const raw =
       reparaIdCuenta ??
@@ -456,6 +459,7 @@ export default function VentasCuentaScreen({
               }
             : null,
         )
+        setTipoReparacionOrden(repOrden?.tipo_reparacion ?? null)
 
         let pagos = []
         if (cid != null) {
@@ -1045,55 +1049,62 @@ export default function VentasCuentaScreen({
     if (!cuentaId) return false
     const cargos = totalCargosDesdeLineas(lineas)
     const pagosUi = pagosDesdeLineas(lineas)
-    if (cuentaTieneSoloAnticipo(cargos, pagosUi)) {
-      if (avisar) {
-        onError?.(
-          'No se puede liquidar: solo hay anticipo. La cuenta sigue pendiente hasta registrar el servicio y el pago total.',
-        )
+    const esGarantiaCero = esGarantiaEpson && cargos <= 0.0001
+
+    if (!esGarantiaCero) {
+      if (cuentaTieneSoloAnticipo(cargos, pagosUi)) {
+        if (avisar) {
+          onError?.(
+            'No se puede liquidar: solo hay anticipo. La cuenta sigue pendiente hasta registrar el servicio y el pago total.',
+          )
+        }
+        return false
       }
-      return false
-    }
-    if (cargos <= 0.0001) {
-      if (avisar) {
-        onError?.('No se puede liquidar: agregue cargos a la cuenta antes de cerrarla.')
+      if (cargos <= 0.0001) {
+        if (avisar) {
+          onError?.('No se puede liquidar: agregue cargos a la cuenta antes de cerrarla.')
+        }
+        return false
       }
-      return false
-    }
-    const saldoNet =
-      totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas, totalCargos)
-    if (saldoNet > 0.0001) {
-      if (avisar) {
-        onError?.(`No se puede liquidar: aún hay saldo pendiente de $${saldoNet.toFixed(2)}.`)
+      const saldoNet =
+        totalOverride != null ? Number(totalOverride) : calcularSaldoPendiente(lineas, totalCargos)
+      if (saldoNet > 0.0001) {
+        if (avisar) {
+          onError?.(`No se puede liquidar: aún hay saldo pendiente de $${saldoNet.toFixed(2)}.`)
+        }
+        return false
       }
-      return false
-    }
-    const pagosUiTotal = sumMontoPagos(pagosUi)
-    if (pagosUiTotal < cargos - 0.01) {
-      if (avisar) {
-        onError?.(
-          `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUiTotal.toFixed(2)}.`,
-        )
+      const pagosUiTotal = sumMontoPagos(pagosUi)
+      if (pagosUiTotal < cargos - 0.01) {
+        if (avisar) {
+          onError?.(
+            `Registre el pago antes de liquidar: cargos $${cargos.toFixed(2)}, pagos registrados $${pagosUiTotal.toFixed(2)}.`,
+          )
+        }
+        return false
       }
-      return false
-    }
-    if (supabase && cargos > 0.01) {
-      const { data: pagosDb, error: ePag } = await supabase
-        .from('pagosclientes')
-        .select('pago')
-        .eq('cuenta_id', cuentaId)
-      if (!ePag) {
-        const pagadoDb = sumPagosCuenta(pagosDb ?? [])
-        if (pagadoDb < cargos - 0.01) {
-          if (avisar) {
-            onError?.(
-              `Faltan pagos en la base de datos ($${(cargos - pagadoDb).toFixed(2)}). Use «Agregar pago» o «Pagar adeudo total» antes de liquidar.`,
-            )
+      if (supabase && cargos > 0.01) {
+        const { data: pagosDb, error: ePag } = await supabase
+          .from('pagosclientes')
+          .select('pago')
+          .eq('cuenta_id', cuentaId)
+        if (!ePag) {
+          const pagadoDb = sumPagosCuenta(pagosDb ?? [])
+          if (pagadoDb < cargos - 0.01) {
+            if (avisar) {
+              onError?.(
+                `Faltan pagos en la base de datos ($${(cargos - pagadoDb).toFixed(2)}). Use «Agregar pago» o «Pagar adeudo total» antes de liquidar.`,
+              )
+            }
+            return false
           }
-          return false
         }
       }
     }
-    const totalCuenta = Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
+
+    const totalCuenta = esGarantiaCero
+      ? 0
+      : Math.max(totalCargosDesdeLineas(lineas), Number(cuentaInfo?.total ?? 0))
     const nowLiq = new Date().toISOString()
     const patchLiq = {
       total: totalCuenta,
@@ -1104,7 +1115,7 @@ export default function VentasCuentaScreen({
     }
     if (supabase) {
       await actualizarCuentaSupabase(supabase, cuentaId, patchLiq)
-      if (reparaIdCuenta != null) {
+      if (reparaIdCuenta != null && !esGarantiaEpson) {
         await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
       }
       estatusElegidoManualRef.current = 'LIQUIDADA'
@@ -1120,10 +1131,15 @@ export default function VentasCuentaScreen({
       if (reparaIdCuenta != null) {
         const lr = readLs(LS_REP, [])
         const repRow = lr.find((r) => sameId(r.id, reparaIdCuenta)) ?? {}
-        const patchEnt = patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus })
+        const patchEnt = esGarantiaEpson
+          ? null
+          : patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus })
         writeLs(
           LS_REP,
-          lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),
+          lr.map((r) => {
+            if (!sameId(r.id, reparaIdCuenta)) return r
+            return patchEnt ? { ...r, ...patchEnt } : r
+          }),
         )
       }
       estatusElegidoManualRef.current = 'LIQUIDADA'
@@ -1364,15 +1380,26 @@ export default function VentasCuentaScreen({
           <input value={cuentaEstatus || '—'} readOnly className="readonly-field" />
         </label>
 
+        {esGarantiaEpson ? (
+          <p className="ventas-garantia-epson-aviso" role="status">
+            <strong>Garantía Epson</strong> — sin cobro. Puede liquidar la cuenta en{' '}
+            <strong>$0.00</strong>; el estatus de entrega se marca en la orden de servicio.
+          </p>
+        ) : null}
+
         <div className="ventas-acciones">
           {puedeLiquidarCuenta ? (
             <button
               type="button"
               className="btn-liquidar-cuenta"
               onClick={() => void liquidarCuenta()}
-              title="Cierra la cuenta y marca la orden como entregada"
+              title={
+                esGarantiaEpson
+                  ? 'Cierra la cuenta de garantía Epson en $0 (la orden se entrega desde servicio)'
+                  : 'Cierra la cuenta y marca la orden como entregada'
+              }
             >
-              ✅ LIQUIDAR CUENTA
+              {esGarantiaEpson ? '✅ LIQUIDAR GARANTÍA ($0)' : '✅ LIQUIDAR CUENTA'}
             </button>
           ) : null}
           {esCuentaExistente ? (

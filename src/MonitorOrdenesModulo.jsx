@@ -14,6 +14,7 @@ import {
   fechaReparadoYmd,
   nombresTecnicosEnOrden,
   ordenUsaSistemaWeb,
+  ORDEN_SISTEMA_DESDE_YMD,
   repCoincideFiltroMonitor,
   repCoincideBusquedaTextoMonitor,
   tecnicoRepCoincideFiltro,
@@ -868,12 +869,16 @@ export default function MonitorOrdenesModulo({
             >
               <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
               <span className="monitor-ordenes-filtros-grupo-titulo">Rango de fechas</span>
+              <p className="monitor-ordenes-rango-nota muted small">
+                Solo órdenes desde el 1° de mayo de 2026; fechas anteriores no se incluyen en los filtros.
+              </p>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha monitor-ordenes-tile-inner">
                   <span>Desde</span>
                   <input
                     type="date"
                     value={fechaDesde}
+                    min={ORDEN_SISTEMA_DESDE_YMD}
                     max={fechaHasta || undefined}
                     onChange={(e) => setFechaDesde(e.target.value)}
                     aria-label="Fecha inicial del rango"

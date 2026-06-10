@@ -52,6 +52,8 @@ import {
   persistirCambioEstatusOrdenSupabase,
   persistirFechasHitosFaltantesSupabase,
   registrarOrdenCreadaEnSesion,
+  esGarantiaEpsonTipo,
+  TIPO_GARANTIA_EPSON,
   validarTransicionEstatus,
   validarTransicionEstatusAlGuardar,
   ymdFechaEntregaParaGuardar,
@@ -298,6 +300,19 @@ export default function ReparacionesOrden({
     () => estatusSiguientesPermitidos(estatus),
     [estatus],
   )
+
+  const esGarantiaEpsonActiva = useMemo(
+    () => esGarantiaEpsonTipo(tipoReparacion),
+    [tipoReparacion],
+  )
+
+  function toggleGarantiaEpson() {
+    if (esGarantiaEpsonActiva) {
+      setTipoReparacion('')
+    } else {
+      setTipoReparacion(TIPO_GARANTIA_EPSON)
+    }
+  }
 
   const aplicarVerificacionDesdeReparacion = useCallback((data) => {
     setVerificadoEntrega(estaVerificadoEntrega(data))
@@ -1982,16 +1997,36 @@ export default function ReparacionesOrden({
           />
         </div>
 
-        <div className="rep-block">
+        <div className={`rep-block rep-garantia-epson-block${esGarantiaEpsonActiva ? ' rep-garantia-epson-block--activa' : ''}`}>
           <label>Tipo Reparacion</label>
-          <select value={tipoReparacion} onChange={(e) => setTipoReparacion(e.target.value)}>
-            <option value="">Seleccionar tipo</option>
-            {TIPOS_REPARACION.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <div className="rep-tipo-servicio-fila">
+            <button
+              type="button"
+              className={`btn-garantia-epson${esGarantiaEpsonActiva ? ' btn-garantia-epson--activa' : ''}`}
+              onClick={toggleGarantiaEpson}
+              title="Garantía Epson: sin cobro; cuenta en $0 y flujo normal de orden"
+            >
+              {esGarantiaEpsonActiva ? '✓ Garantía Epson' : 'Garantía Epson'}
+            </button>
+            <select
+              value={tipoReparacion}
+              onChange={(e) => setTipoReparacion(e.target.value)}
+              aria-label="Tipo de reparación"
+            >
+              <option value="">Seleccionar tipo</option>
+              {TIPOS_REPARACION.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          {esGarantiaEpsonActiva ? (
+            <p className="rep-garantia-epson-aviso muted small" role="status">
+              Sin cobro al cliente. Al registrar la orden se crea su cuenta; en Cuentas puede liquidarla en{' '}
+              <strong>$0.00</strong> y seguir el estatus en esta orden (reparado, verificado, entregado).
+            </p>
+          ) : null}
         </div>
 
         <div className="rep-block highlight">

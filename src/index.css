@@ -6399,6 +6399,52 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 1rem;
 }
 
+.rep-garantia-epson-block--activa {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid #00897b;
+  background: #e0f2f1;
+}
+
+.rep-tipo-servicio-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.rep-tipo-servicio-fila select {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.btn-garantia-epson {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: 2px solid #00897b;
+  background: #fff;
+  color: #00695c;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-garantia-epson:hover {
+  background: #e0f2f1;
+}
+
+.btn-garantia-epson--activa {
+  background: #00897b;
+  color: #fff;
+}
+
+.rep-garantia-epson-aviso {
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
 .rep-block--bitacora label {
   color: #e65100;
   font-size: 1rem;
@@ -7556,6 +7602,17 @@ input.full {
 
 .btn-liquidar-cuenta:hover:not(:disabled) {
   background: #1b5e20;
+}
+
+.ventas-garantia-epson-aviso {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #00897b;
+  background: #e0f2f1;
+  color: #004d40;
+  font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .btn-notificar-cliente {

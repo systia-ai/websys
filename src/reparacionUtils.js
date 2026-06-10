@@ -33,6 +33,17 @@ export function claveCanonicaTipoServicio(raw) {
   return null
 }
 
+export const TIPO_GARANTIA_EPSON = 'GARANTIA EPSON'
+
+export function esGarantiaEpsonTipo(tipo) {
+  return claveCanonicaTipoServicio(tipo) === TIPO_GARANTIA_EPSON
+}
+
+/** Orden marcada como garantía Epson (sin cobro al cliente). */
+export function esGarantiaEpsonRep(rep) {
+  return esGarantiaEpsonTipo(rep?.tipo_reparacion)
+}
+
 /**
  * Tipo de servicio de la orden. Por defecto solo `reparaciones.tipo_reparacion`
  * (no hereda del equipo, para que el filtro del monitor coincida con la orden).
@@ -657,15 +668,33 @@ export function fechaIngresoFiltroYmd(rep) {
 /** Órdenes anteriores a esta fecha no usaban el sistema web (sin auto-correcciones ni inferencias). */
 export const ORDEN_SISTEMA_DESDE_YMD = '2026-05-01'
 
-/** True si la orden pertenece al periodo con sistema web (creación o ingreso ≥ 1° may 2026). */
-export function ordenUsaSistemaWeb(rep) {
-  const creacionYmd = aYmdLocalDesdeRaw(
+/** YMD de alta de la orden (no usa updated_at ni respaldos de UI). */
+export function ymdCreacionOrden(rep) {
+  return aYmdLocalDesdeRaw(
     rep?.fecha_creacion ?? rep?.created_at ?? rep?.fecha_registro,
   )
+}
+
+/** True si un YMD de hito pertenece al periodo del monitor (≥ 1° may 2026). */
+export function ymdEnPeriodoMonitor(ymd) {
+  const y = aYmdLocalDesdeRaw(ymd)
+  return !!(y && y.length >= 10 && y >= ORDEN_SISTEMA_DESDE_YMD)
+}
+
+/** Desde efectivo en filtros de fecha: nunca anterior al 1° may 2026. */
+export function desdeEfectivoMonitorFiltro(desde) {
+  const d = String(desde ?? '').trim()
+  if (!d) return ORDEN_SISTEMA_DESDE_YMD
+  return d < ORDEN_SISTEMA_DESDE_YMD ? ORDEN_SISTEMA_DESDE_YMD : d
+}
+
+/** True si la orden pertenece al periodo con sistema web (alta ≥ 1° may 2026). */
+export function ordenUsaSistemaWeb(rep) {
+  const creacionYmd = ymdCreacionOrden(rep)
   if (creacionYmd && creacionYmd.length >= 10) {
     return creacionYmd >= ORDEN_SISTEMA_DESDE_YMD
   }
-  const ingresoYmd = fechaIngresoFiltroYmd(rep) ?? fechaIngresoYmd(rep)
+  const ingresoYmd = fechaIngresoFiltroYmd(rep)
   if (!ingresoYmd || ingresoYmd.length < 10) return false
   return ingresoYmd >= ORDEN_SISTEMA_DESDE_YMD
 }
@@ -1040,8 +1069,13 @@ export function fechaHitoEstatusMonitor(rep) {
   return fechaRevisionFiltroYmd(rep)
 }
 
+function ymdEnRangoMonitor(ymd, desde, hasta) {
+  if (!ymdEnPeriodoMonitor(ymd)) return false
+  return ymdEnRango(ymd, desdeEfectivoMonitorFiltro(desde), hasta)
+}
+
 /**
- * Rango Desde/Hasta del monitor (solo columnas de hitos en BD).
+ * Rango Desde/Hasta del monitor (solo columnas de hitos en BD; omite fechas antes del 1° may 2026).
  * @param {'todas'|'ingreso'|'entrega'|'reparado'|'revision'|'ambas'} modo
  */
 export function repEnRangoFechasMonitor(
@@ -1056,13 +1090,13 @@ export function repEnRangoFechasMonitor(
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   if (!d && !h) return true
-  if (modo === 'ingreso') return ymdEnRango(fechaIngresoFiltroYmd(rep), d, h)
-  if (modo === 'entrega') return ymdEnRango(fechaEntregaFiltroYmd(rep), d, h)
-  if (modo === 'reparado') return ymdEnRango(fechaReparadoFiltroYmd(rep), d, h)
-  if (modo === 'sin_reparacion') return ymdEnRango(fechaSinReparacionFiltroYmd(rep), d, h)
-  if (modo === 'revision') return ymdEnRango(fechaRevisionFiltroYmd(rep), d, h)
+  if (modo === 'ingreso') return ymdEnRangoMonitor(fechaIngresoFiltroYmd(rep), d, h)
+  if (modo === 'entrega') return ymdEnRangoMonitor(fechaEntregaFiltroYmd(rep), d, h)
+  if (modo === 'reparado') return ymdEnRangoMonitor(fechaReparadoFiltroYmd(rep), d, h)
+  if (modo === 'sin_reparacion') return ymdEnRangoMonitor(fechaSinReparacionFiltroYmd(rep), d, h)
+  if (modo === 'revision') return ymdEnRangoMonitor(fechaRevisionFiltroYmd(rep), d, h)
   const ymd = fechaHitoEstatusMonitor(rep)
-  return ymdEnRango(ymd, d, h)
+  return ymdEnRangoMonitor(ymd, d, h)
 }
 
 /**
@@ -1076,6 +1110,7 @@ export function repEnRangoFechasMonitor(
  *   (cuántas se entregaron ese día, sin importar otros filtros de estatus).
  * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
  * - Sin chip de fecha especial: solo filtra por chips de estatus (el rango Desde/Hasta no aplica).
+ * - Solo órdenes dadas de alta desde el 1° may 2026; fechas de hito anteriores se omiten.
  */
 export function repCoincideFiltroMonitor(
   rep,
@@ -1089,13 +1124,18 @@ export function repCoincideFiltroMonitor(
     estatusParaFiltroFn = (r) => String(r?.estatus ?? '').trim().toUpperCase(),
   },
 ) {
+  if (!ordenUsaSistemaWeb(rep)) return false
+
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
+  const desdeEf = desdeEfectivoMonitorFiltro(d)
 
   if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
-    if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) return false
+    if (!repEnRangoFechasMonitor(rep, desdeEf, h, cuentaVinculada, ymdDesdePagos, modoFecha)) {
+      return false
+    }
     return true
   }
 
@@ -1103,7 +1143,7 @@ export function repCoincideFiltroMonitor(
     if (!repEsVerificadaListaEntrega(rep)) return false
     if (!hayRango) return true
     const ymdVer = fechaVerificacionEntregaYmd(rep)
-    return ymdVer ? ymdEnRango(ymdVer, d, h) : false
+    return ymdVer ? ymdEnRangoMonitor(ymdVer, desdeEf, h) : false
   }
 
   const sel = estatusSeleccionados
