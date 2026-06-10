@@ -111,16 +111,30 @@ function mensajeTransicionEstatusInvalida(desde, hacia, siguiente) {
   const d = normalizarEstatusOrden(desde)
   const h = normalizarEstatusOrden(hacia)
   if (d === 'INGRESADO' && h === 'REPARADO') {
-    return 'El equipo debe estar En Revisión antes de ser reparado.'
+    return 'No puede cambiar el estatus de Ingresado a Reparado. Primero debe estar en Revisión para poder estar en Reparado.'
   }
   if (d === 'INGRESADO' && h === 'ENTREGADO') {
-    return 'El equipo debe pasar por En Revisión y Reparado antes de ser entregado.'
+    return 'No puede cambiar el estatus de Ingresado a Entregado. Debe pasar por En revisión y Reparado, en ese orden.'
+  }
+  if (d === 'INGRESADO' && (h === 'EN ESPERA POR REFACCION' || h === 'SIN REPARACION')) {
+    return 'No puede saltar a ese estatus desde Ingresado. El siguiente paso es En revisión.'
   }
   if (d === 'EN REVISION' && h === 'ENTREGADO') {
-    return 'El equipo debe estar Reparado antes de ser entregado.'
+    return 'No puede cambiar el estatus de En revisión a Entregado. Primero debe estar en Reparado.'
+  }
+  if (d === 'REPARADO' && h === 'INGRESADO') {
+    return 'No puede regresar de Reparado a Ingresado. Solo puede retroceder un paso a En revisión.'
   }
   if (siguiente) {
-    return `El siguiente estatus permitido es ${siguiente}. No puede saltar etapas del proceso.`
+    const sigLegible =
+      siguiente === 'EN REVISION'
+        ? 'En revisión'
+        : siguiente === 'REPARADO'
+          ? 'Reparado'
+          : siguiente === 'ENTREGADO'
+            ? 'Entregado'
+            : siguiente
+    return `No puede saltar etapas. El siguiente estatus permitido es ${sigLegible}.`
   }
   return 'No puede cambiar a ese estatus desde el estatus actual.'
 }

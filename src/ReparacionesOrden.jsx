@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { TEXTO_VERIFICAR_DATOS } from './confirmarDatosUtils.js'
 import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
-import { ESTATUS_ORDEN, NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
+import { NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import ModalAlerta from './ModalAlerta.jsx'
 import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
@@ -27,6 +27,7 @@ import {
   estatusEsEntregado,
   estatusPermiteVerificacionEntrega,
   estatusEsReparado,
+  estatusSiguientesPermitidos,
   ejecutarInsercionOrdenUnica,
   estaVerificadoEntrega,
   formatFechaLegibleEsMx,
@@ -48,6 +49,8 @@ import {
   patchVerificadoEntrega,
   persistirFechasHitosFaltantesSupabase,
   registrarOrdenCreadaEnSesion,
+  validarTransicionEstatus,
+  validarTransicionEstatusAlGuardar,
   ymdFechaEntregaParaGuardar,
 } from './reparacionUtils.js'
 
@@ -227,6 +230,8 @@ export default function ReparacionesOrden({
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
   const [confirmActualizarAbierto, setConfirmActualizarAbierto] = useState(false)
   const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
+  const [alertaTransicionEstatusAbierto, setAlertaTransicionEstatusAbierto] = useState(false)
+  const [mensajeTransicionEstatus, setMensajeTransicionEstatus] = useState('')
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [guardandoOrden, setGuardandoOrden] = useState(false)
@@ -269,6 +274,11 @@ export default function ReparacionesOrden({
     (esOrdenExistente || idReparacion != null) &&
     estatusPermiteVerificacionEntrega(estatus) &&
     !verificadoEntrega
+
+  const estatusOpcionesPermitidas = useMemo(
+    () => estatusSiguientesPermitidos(estatus),
+    [estatus],
+  )
 
   const aplicarVerificacionDesdeReparacion = useCallback((data) => {
     setVerificadoEntrega(estaVerificadoEntrega(data))
@@ -822,6 +832,13 @@ export default function ReparacionesOrden({
   function cambiarEstatusDesdeSelect(v) {
     if (!v) return
     const actual = estatusRef.current ?? estatus
+    const val = validarTransicionEstatus(actual, v)
+    if (!val.ok) {
+      setMensajeTransicionEstatus(val.mensaje)
+      setAlertaTransicionEstatusAbierto(true)
+      onError?.(val.mensaje)
+      return
+    }
     if (estatusEsEntregado(v) && bloqueaEntregaSinVerificacion(actual, verificadoEntrega)) {
       setAlertaVerificarEntregaAbierto(true)
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
@@ -985,6 +1002,25 @@ export default function ReparacionesOrden({
     }
   }
 
+  function validarEstatusAntesDeGuardar(estatusGuardar) {
+    const valTransicion = validarTransicionEstatusAlGuardar(
+      estatusPersistidoRef.current,
+      estatusGuardar,
+    )
+    if (!valTransicion.ok) {
+      setMensajeTransicionEstatus(valTransicion.mensaje)
+      setAlertaTransicionEstatusAbierto(true)
+      onError?.(valTransicion.mensaje)
+      return false
+    }
+    if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
+      setAlertaVerificarEntregaAbierto(true)
+      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
+      return false
+    }
+    return true
+  }
+
   function solicitarActualizarOrden() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
@@ -995,11 +1031,7 @@ export default function ReparacionesOrden({
       return
     }
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
-    if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
-      setAlertaVerificarEntregaAbierto(true)
-      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
-      return
-    }
+    if (!validarEstatusAntesDeGuardar(estatusGuardar)) return
     setConfirmActualizarAbierto(true)
   }
 
@@ -1015,9 +1047,7 @@ export default function ReparacionesOrden({
     actualizandoRef.current = true
     setActualizandoOrden(true)
     const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
-    if (estatusEsEntregado(estatusGuardar) && !verificadoEntrega) {
-      setAlertaVerificarEntregaAbierto(true)
-      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
+    if (!validarEstatusAntesDeGuardar(estatusGuardar)) {
       actualizandoRef.current = false
       setActualizandoOrden(false)
       return
@@ -1948,6 +1978,7 @@ export default function ReparacionesOrden({
             <select
               className="estatus-select"
               value=""
+              disabled={estatusOpcionesPermitidas.length === 0}
               onChange={(e) => {
                 const v = e.target.value
                 if (!v) return
@@ -1955,8 +1986,12 @@ export default function ReparacionesOrden({
                 e.target.value = ''
               }}
             >
-              <option value="">Seleccionar</option>
-              {ESTATUS_ORDEN.map((st) => (
+              <option value="">
+                {estatusOpcionesPermitidas.length === 0
+                  ? 'Sin cambios disponibles'
+                  : 'Seleccionar siguiente estatus'}
+              </option>
+              {estatusOpcionesPermitidas.map((st) => (
                 <option key={st} value={st}>
                   {st}
                 </option>
@@ -2281,6 +2316,15 @@ export default function ReparacionesOrden({
         mensaje={MENSAJE_VERIFICAR_ANTES_ENTREGADO}
         variante="warning"
         tituloId="alerta-verificar-entrega-titulo"
+      />
+
+      <ModalAlerta
+        open={alertaTransicionEstatusAbierto}
+        onClose={() => setAlertaTransicionEstatusAbierto(false)}
+        titulo="Cambio de estatus no permitido"
+        mensaje={mensajeTransicionEstatus}
+        variante="warning"
+        tituloId="alerta-transicion-estatus-titulo"
       />
 
       <ModalAlerta
