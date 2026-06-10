@@ -1,4 +1,5 @@
 import { ESTATUS_ORDEN, TIPOS_REPARACION } from './catalogos.js'
+import { sameId } from './clienteUtils.js'
 
 /** Claves del catálogo en mayúsculas (SERVICIO, GARANTIA EPSON, GARANTIA SISTEBIT). */
 export const TIPOS_SERVICIO_CANONICOS = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
@@ -701,6 +702,46 @@ export function tecnicoRepCoincideFiltro(tecnicoRep, filtro) {
   if (!t) return false
   const partes = t.split(/\s*&\s*/).map((x) => x.trim()).filter(Boolean)
   return partes.some((p) => p === want || p.startsWith(`${want} `) || p.split(/\s+/)[0] === want)
+}
+
+function textoBusquedaMonitorNorm(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
+
+/**
+ * Buscador del monitor: cliente, #orden, problema, equipo, técnico, estatus.
+ * Ignora filtros de estatus/fecha (se aplica sobre todas las órdenes cargadas).
+ */
+export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], equipoPorId = null) {
+  const q = textoBusquedaMonitorNorm(queryRaw)
+  if (!q) return true
+  const qSinHash = q.replace(/^#+\s*/, '').trim()
+  const idStr = String(rep?.id ?? '').trim()
+  if (idStr && (textoBusquedaMonitorNorm(idStr) === qSinHash || idStr.includes(qSinHash))) {
+    return true
+  }
+  const c = (clientes ?? []).find((x) => sameId(x.id, rep?.cliente_id))
+  const nombre = textoBusquedaMonitorNorm(c?.nombre ?? c?.Nombre ?? '')
+  if (nombre && (nombre.includes(q) || (qSinHash && nombre.includes(qSinHash)))) return true
+  const tipoCanon = tipoServicioDeRep(rep, equipoPorId) ?? ''
+  const blob = textoBusquedaMonitorNorm(
+    [
+      nombre,
+      idStr,
+      rep?.problemas_reportados,
+      rep?.descripcion_equipo,
+      rep?.tecnico,
+      rep?.estatus,
+      tipoCanon,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+  return blob.includes(q) || (qSinHash !== q && qSinHash && blob.includes(qSinHash))
 }
 
 /**

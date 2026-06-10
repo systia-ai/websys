@@ -13,6 +13,7 @@ import {
   fechaIngresoYmd,
   fechaReparadoYmd,
   repCoincideFiltroMonitor,
+  repCoincideBusquedaTextoMonitor,
   tecnicoRepCoincideFiltro,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
@@ -403,59 +404,51 @@ export default function MonitorOrdenesModulo({
 
   const filasOrdenadas = useMemo(() => {
     if (hayRangoFechaInvalido || modoFechaSinRango) return []
-    const sel = estatusSeleccionados
-    const desde = String(fechaDesde ?? '').trim()
-    const hasta = String(fechaHasta ?? '').trim()
-    let filtradas = reparaciones.filter((r) => {
-      const rid = String(r.id)
-      return repCoincideFiltroMonitor(r, {
-        estatusSeleccionados: sel,
-        desde,
-        hasta,
-        modoFecha: modoFechaActivo,
-        cuentaVinculada: cuentaPorReparaId.get(rid),
-        ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
-        estatusParaFiltroFn: estatusParaFiltro,
-      })
-    })
-    const tiposSel = tiposServicioSeleccionados
-    if (tiposSel.size === 0) {
-      filtradas = []
-    } else if (!todosTiposServicioSeleccionados(tiposSel)) {
-      filtradas = filtradas.filter((r) => {
-        const t = tipoServicioDeRep(r, equipoPorId)
-        return t != null && tiposSel.has(t)
-      })
-    }
-    if (tecnicoFiltro === TECNICO_SIN) {
-      filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
-    } else if (tecnicoFiltro !== TECNICO_TODAS) {
-      filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
-    }
     const diasExactos = parsearFiltroDiasExactos(busqueda)
     const qTexto = String(busqueda ?? '').trim()
-    if (diasExactos != null) {
-      filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
-    } else if (qTexto) {
-      const q = qTexto.toLowerCase()
-      filtradas = filtradas.filter((r) => {
-        const c = clientes.find((x) => sameId(x.id, r.cliente_id))
-        const nombre = String(c?.nombre ?? '').toLowerCase()
-        const tipoCanon = tipoServicioDeRep(r, equipoPorId) ?? ''
-        const blob = [
-          nombre,
-          String(r.id ?? ''),
-          String(r.problemas_reportados ?? '').toLowerCase(),
-          String(r.descripcion_equipo ?? '').toLowerCase(),
-          String(r.tecnico ?? '').toLowerCase(),
-          String(r.estatus ?? '').toLowerCase(),
-          tipoCanon.toLowerCase(),
-        ].join(' ')
-        return blob.includes(q)
+    const busquedaLibreActiva = Boolean(qTexto) && diasExactos == null
+
+    let filtradas
+    if (busquedaLibreActiva) {
+      filtradas = reparaciones.filter((r) =>
+        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
+      )
+    } else {
+      const sel = estatusSeleccionados
+      const desde = String(fechaDesde ?? '').trim()
+      const hasta = String(fechaHasta ?? '').trim()
+      filtradas = reparaciones.filter((r) => {
+        const rid = String(r.id)
+        return repCoincideFiltroMonitor(r, {
+          estatusSeleccionados: sel,
+          desde,
+          hasta,
+          modoFecha: modoFechaActivo,
+          cuentaVinculada: cuentaPorReparaId.get(rid),
+          ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
+          estatusParaFiltroFn: estatusParaFiltro,
+        })
       })
-    }
-    if (filtroAvisoActivo) {
-      filtradas = filtradas.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
+      const tiposSel = tiposServicioSeleccionados
+      if (tiposSel.size === 0) {
+        filtradas = []
+      } else if (!todosTiposServicioSeleccionados(tiposSel)) {
+        filtradas = filtradas.filter((r) => {
+          const t = tipoServicioDeRep(r, equipoPorId)
+          return t != null && tiposSel.has(t)
+        })
+      }
+      if (tecnicoFiltro === TECNICO_SIN) {
+        filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
+      } else if (tecnicoFiltro !== TECNICO_TODAS) {
+        filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
+      }
+      if (diasExactos != null) {
+        filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
+      }
+      if (filtroAvisoActivo) {
+        filtradas = filtradas.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
+      }
     }
     const conTiempo = filtradas.map((r) => {
       const rid = String(r.id)
@@ -739,6 +732,8 @@ export default function MonitorOrdenesModulo({
   const filtroReparadoActivo = filtroModoFechaReparado
   const filtroVerificadasActivo = filtroModoVerificadas
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
+  const busquedaLibreActivaUi =
+    filtroBusquedaActivo && parsearFiltroDiasExactos(busqueda) == null
 
   function badgeEstatus(rep) {
     const ent = estatusEsEntregado(rep?.estatus)
@@ -919,8 +914,8 @@ export default function MonitorOrdenesModulo({
                   className="monitor-ordenes-busqueda-input"
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Ej. 10 días, nombre cliente, #orden…"
-                  aria-label="Buscador: texto libre o filtro exacto por días en taller"
+                  placeholder="Nombre cliente, #469, problema… (ignora filtros de estatus/fecha)"
+                  aria-label="Buscador: cliente, número de orden o texto libre"
                 />
                 <button
                   type="button"
@@ -1114,14 +1109,21 @@ export default function MonitorOrdenesModulo({
               <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
               <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
               <span className="monitor-ordenes-conteo-texto">
-                {filasOrdenadas.length === 1 ? 'orden listada' : 'órdenes listadas'} según filtros actuales
+                {filasOrdenadas.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
+                {busquedaLibreActivaUi
+                  ? ` para «${String(busqueda).trim()}» (sin filtros de estatus ni fechas)`
+                  : ' según filtros actuales'}
               </span>
             </p>
 
             <div className="monitor-ordenes-listado-wrap">
               {filasOrdenadas.length === 0 ? (
                 <div className="monitor-ordenes-vacio-card empty-card">
-                  <p>No hay órdenes con los filtros seleccionados.</p>
+                  <p>
+                    {busquedaLibreActivaUi
+                      ? `No se encontró ninguna orden para «${String(busqueda).trim()}».`
+                      : 'No hay órdenes con los filtros seleccionados.'}
+                  </p>
                 </div>
               ) : (
                 <TablaScrollSuperior
