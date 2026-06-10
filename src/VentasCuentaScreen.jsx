@@ -27,7 +27,8 @@ import {
   sumPagosCuenta,
   cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
-  esGarantiaEpsonTipo,
+  esGarantiaSinCobroTipo,
+  etiquetaGarantiaSinCobro,
   formatFechaBitacora,
   normalizarReparacionId,
   registrarNotificacionClienteEnBitacora,
@@ -317,12 +318,12 @@ export default function VentasCuentaScreen({
   const saldoAFavor = visiblesCuenta.saldoAFavor
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
-  const esGarantiaEpson = esGarantiaEpsonTipo(tipoReparacionOrden)
+  const esGarantiaSinCobro = esGarantiaSinCobroTipo(tipoReparacionOrden)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const puedeLiquidarCuenta =
     esCuentaExistente &&
     cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
-    (esGarantiaEpson ||
+    (esGarantiaSinCobro ||
       (totalCargos > 0.0001 && !cuentaTieneSoloAnticipo(totalCargos, pagosDesdeLineas(lineas))))
   const ordenVinculadaId = useMemo(() => {
     const raw =
@@ -1049,7 +1050,7 @@ export default function VentasCuentaScreen({
     if (!cuentaId) return false
     const cargos = totalCargosDesdeLineas(lineas)
     const pagosUi = pagosDesdeLineas(lineas)
-    const esGarantiaCero = esGarantiaEpson && cargos <= 0.0001
+    const esGarantiaCero = esGarantiaSinCobro && cargos <= 0.0001
 
     if (!esGarantiaCero) {
       if (cuentaTieneSoloAnticipo(cargos, pagosUi)) {
@@ -1115,7 +1116,7 @@ export default function VentasCuentaScreen({
     }
     if (supabase) {
       await actualizarCuentaSupabase(supabase, cuentaId, patchLiq)
-      if (reparaIdCuenta != null && !esGarantiaEpson) {
+      if (reparaIdCuenta != null && !esGarantiaSinCobro) {
         await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
       }
       estatusElegidoManualRef.current = 'LIQUIDADA'
@@ -1131,7 +1132,7 @@ export default function VentasCuentaScreen({
       if (reparaIdCuenta != null) {
         const lr = readLs(LS_REP, [])
         const repRow = lr.find((r) => sameId(r.id, reparaIdCuenta)) ?? {}
-        const patchEnt = esGarantiaEpson
+        const patchEnt = esGarantiaSinCobro
           ? null
           : patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus })
         writeLs(
@@ -1380,9 +1381,9 @@ export default function VentasCuentaScreen({
           <input value={cuentaEstatus || '—'} readOnly className="readonly-field" />
         </label>
 
-        {esGarantiaEpson ? (
-          <p className="ventas-garantia-epson-aviso" role="status">
-            <strong>Garantía Epson</strong> — sin cobro. Puede liquidar la cuenta en{' '}
+        {esGarantiaSinCobro ? (
+          <p className="ventas-garantia-sin-cobro-aviso" role="status">
+            <strong>{etiquetaGarantiaSinCobro(tipoReparacionOrden)}</strong> — sin cobro. Puede liquidar la cuenta en{' '}
             <strong>$0.00</strong>; el estatus de entrega se marca en la orden de servicio.
           </p>
         ) : null}
@@ -1394,12 +1395,12 @@ export default function VentasCuentaScreen({
               className="btn-liquidar-cuenta"
               onClick={() => void liquidarCuenta()}
               title={
-                esGarantiaEpson
-                  ? 'Cierra la cuenta de garantía Epson en $0 (la orden se entrega desde servicio)'
+                esGarantiaSinCobro
+                  ? `Cierra la cuenta de ${etiquetaGarantiaSinCobro(tipoReparacionOrden)} en $0 (la orden se entrega desde servicio)`
                   : 'Cierra la cuenta y marca la orden como entregada'
               }
             >
-              {esGarantiaEpson ? '✅ LIQUIDAR GARANTÍA ($0)' : '✅ LIQUIDAR CUENTA'}
+              {esGarantiaSinCobro ? '✅ LIQUIDAR GARANTÍA ($0)' : '✅ LIQUIDAR CUENTA'}
             </button>
           ) : null}
           {esCuentaExistente ? (

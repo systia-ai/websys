@@ -6399,6 +6399,7 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   font-size: 1rem;
 }
 
+.rep-garantia-sin-cobro-block--activa,
 .rep-garantia-epson-block--activa {
   padding: 10px 12px;
   border-radius: 8px;
@@ -6418,6 +6419,7 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   min-width: 0;
 }
 
+.btn-garantia-marca,
 .btn-garantia-epson {
   flex: 0 0 auto;
   padding: 10px 16px;
@@ -6431,15 +6433,33 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   white-space: nowrap;
 }
 
+.btn-garantia-marca--sistebit {
+  border-color: #1565c0;
+  color: #0d47a1;
+}
+
+.btn-garantia-marca:hover,
 .btn-garantia-epson:hover {
   background: #e0f2f1;
 }
 
+.btn-garantia-marca--sistebit:hover {
+  background: #e3f2fd;
+}
+
+.btn-garantia-marca--activa,
 .btn-garantia-epson--activa {
   background: #00897b;
   color: #fff;
 }
 
+.btn-garantia-marca--sistebit.btn-garantia-marca--activa {
+  background: #1565c0;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.rep-garantia-sin-cobro-aviso,
 .rep-garantia-epson-aviso {
   margin: 4px 0 0;
   line-height: 1.45;
@@ -7604,6 +7624,7 @@ input.full {
   background: #1b5e20;
 }
 
+.ventas-garantia-sin-cobro-aviso,
 .ventas-garantia-epson-aviso {
   margin: 0 0 12px;
   padding: 10px 12px;

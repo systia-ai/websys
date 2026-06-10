@@ -34,12 +34,33 @@ export function claveCanonicaTipoServicio(raw) {
 }
 
 export const TIPO_GARANTIA_EPSON = 'GARANTIA EPSON'
+export const TIPO_GARANTIA_SISTEBIT = 'GARANTIA SISTEBIT'
+
+/** Tipos de orden sin cobro al cliente (cuenta liquidable en $0). */
+export const TIPOS_GARANTIA_SIN_COBRO = [TIPO_GARANTIA_EPSON, TIPO_GARANTIA_SISTEBIT]
+
+export function esGarantiaSinCobroTipo(tipo) {
+  const c = claveCanonicaTipoServicio(tipo)
+  return c != null && TIPOS_GARANTIA_SIN_COBRO.includes(c)
+}
+
+export function esGarantiaSinCobroRep(rep) {
+  return esGarantiaSinCobroTipo(rep?.tipo_reparacion)
+}
+
+/** Etiqueta legible para garantías sin cobro. */
+export function etiquetaGarantiaSinCobro(tipo) {
+  const c = claveCanonicaTipoServicio(tipo)
+  if (c === TIPO_GARANTIA_EPSON) return 'Garantía Epson'
+  if (c === TIPO_GARANTIA_SISTEBIT) return 'Garantía Sistebit'
+  return 'Garantía'
+}
 
 export function esGarantiaEpsonTipo(tipo) {
   return claveCanonicaTipoServicio(tipo) === TIPO_GARANTIA_EPSON
 }
 
-/** Orden marcada como garantía Epson (sin cobro al cliente). */
+/** @deprecated use esGarantiaSinCobroRep */
 export function esGarantiaEpsonRep(rep) {
   return esGarantiaEpsonTipo(rep?.tipo_reparacion)
 }
