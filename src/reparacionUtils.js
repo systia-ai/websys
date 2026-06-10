@@ -837,6 +837,53 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
   return patch
 }
 
+/** Patch al cambiar estatus: estatus + fechas de hito (columnas fecha_* en BD). */
+export function buildPatchCambioEstatusOrden(
+  estatusNuevo,
+  repActual = {},
+  { verificadoEntrega = false, fechaVerificacionEntrega = null } = {},
+) {
+  const st = normalizarEstatusOrden(estatusNuevo)
+  const now = new Date().toISOString()
+  const patch = {
+    estatus: st,
+    updated_at: now,
+    ...patchFechasHitosEstatus(st, repActual),
+  }
+  if (estatusEsEntregado(st)) {
+    patch.verificado_entrega = true
+    patch.fecha_verificacion_entrega = fechaVerificacionEntrega || now
+    if (!patch.fecha_entrega) {
+      patch.fecha_entrega = ymdFechaEntregaParaGuardar(
+        repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
+      )
+    }
+  } else {
+    patch.fecha_entrega = null
+    if (!estatusEsReparado(st)) {
+      patch.verificado_entrega = false
+      patch.fecha_verificacion_entrega = null
+    } else if (verificadoEntrega) {
+      patch.verificado_entrega = true
+      patch.fecha_verificacion_entrega = fechaVerificacionEntrega
+    }
+  }
+  return patch
+}
+
+/** Persiste estatus + fechas de hito al cambiar de estatus en la orden. */
+export async function persistirCambioEstatusOrdenSupabase(
+  supabase,
+  reparaId,
+  estatusNuevo,
+  repActual,
+  opts = {},
+) {
+  const patch = buildPatchCambioEstatusOrden(estatusNuevo, repActual, opts)
+  await actualizarReparacionSupabase(supabase, reparaId, patch)
+  return patch
+}
+
 /** Persiste en BD las fechas de hitos inferidas (p. ej. al abrir una orden antigua). */
 export async function persistirFechasHitosFaltantesSupabase(supabase, repRow) {
   if (!supabase?.from || !repRow?.id || !ordenUsaSistemaWeb(repRow)) return repRow

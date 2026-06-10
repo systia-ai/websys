@@ -45,8 +45,10 @@ import {
   MENSAJE_VERIFICAR_ANTES_ENTREGADO,
   parseBitacora,
   patchFechasHitosEstatus,
+  buildPatchCambioEstatusOrden,
   patchCompletarFechasHitosFaltantes,
   patchVerificadoEntrega,
+  persistirCambioEstatusOrdenSupabase,
   persistirFechasHitosFaltantesSupabase,
   registrarOrdenCreadaEnSesion,
   validarTransicionEstatus,
@@ -263,6 +265,19 @@ export default function ReparacionesOrden({
   const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
   const [cuentaOrden, setCuentaOrden] = useState(null)
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
+  const [guardandoEstatus, setGuardandoEstatus] = useState(false)
+
+  /** Refs sincronizados con fechas de hitos (evitan desfase al guardar justo tras cambiar estatus). */
+  const fechaCreacionRef = useRef(null)
+  const fechaIngresoRef = useRef(null)
+  const fechaRevisionRef = useRef(null)
+  const fechaReparadoRef = useRef(null)
+  const fechaEntregaRef = useRef(null)
+  fechaCreacionRef.current = fechaCreacionOrden
+  fechaIngresoRef.current = fechaIngresoOrden
+  fechaRevisionRef.current = fechaRevisionOrden
+  fechaReparadoRef.current = fechaReparadoOrden
+  fechaEntregaRef.current = fechaEntregaOrden
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
 
@@ -315,20 +330,61 @@ export default function ReparacionesOrden({
   ])
 
   const aplicarFechasDesdeReparacion = useCallback((data) => {
-    setFechaCreacionOrden(data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null)
-    setFechaIngresoOrden(data.fecha_ingreso ?? data.fechaIngreso ?? null)
-    setFechaRevisionOrden(
-      aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null),
+    const creacion = data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null
+    const ingreso = data.fecha_ingreso ?? data.fechaIngreso ?? null
+    const revision = aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null)
+    const reparado = aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null)
+    const entrega = aYmdLocalDesdeRaw(
+      data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
     )
-    setFechaReparadoOrden(
-      aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null),
-    )
-    setFechaEntregaOrden(
-      aYmdLocalDesdeRaw(
-        data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
-      ),
-    )
+    fechaCreacionRef.current = creacion
+    fechaIngresoRef.current = ingreso
+    fechaRevisionRef.current = revision
+    fechaReparadoRef.current = reparado
+    fechaEntregaRef.current = entrega
+    setFechaCreacionOrden(creacion)
+    setFechaIngresoOrden(ingreso)
+    setFechaRevisionOrden(revision)
+    setFechaReparadoOrden(reparado)
+    setFechaEntregaOrden(entrega)
   }, [])
+
+  function repSnapshotParaFechas(estatusVal) {
+    return {
+      estatus: estatusVal,
+      fecha_creacion: fechaCreacionRef.current,
+      fecha_ingreso: fechaIngresoRef.current,
+      fecha_revision: fechaRevisionRef.current,
+      fecha_reparado: fechaReparadoRef.current,
+      fecha_entrega: fechaEntregaRef.current,
+      verificado_entrega: verificadoEntrega,
+      fecha_verificacion_entrega: fechaVerificacionEntrega,
+    }
+  }
+
+  function aplicarPatchFechasAlEstado(patchF, estatusVal) {
+    if (patchF.fecha_ingreso != null) {
+      fechaIngresoRef.current = patchF.fecha_ingreso
+      setFechaIngresoOrden(patchF.fecha_ingreso)
+    }
+    if (patchF.fecha_revision != null) {
+      fechaRevisionRef.current = patchF.fecha_revision
+      setFechaRevisionOrden(patchF.fecha_revision)
+    }
+    if (patchF.fecha_reparado != null) {
+      fechaReparadoRef.current = patchF.fecha_reparado
+      setFechaReparadoOrden(patchF.fecha_reparado)
+    }
+    if (estatusEsEntregado(estatusVal)) {
+      const ent = patchF.fecha_entrega ?? ymdFechaEntregaParaGuardar(fechaEntregaRef.current)
+      fechaEntregaRef.current = ent
+      setFechaEntregaOrden(ent)
+    } else {
+      fechaEntregaRef.current = null
+      setFechaEntregaOrden(null)
+      setYmdEntregaDesdePagos(null)
+    }
+  }
 
   const cargarCuentaYEntregaAux = useCallback(
     async (reparaId) => {
@@ -800,36 +856,20 @@ export default function ReparacionesOrden({
     }
   }
 
-  function aplicarCambioEstatusLocal(v) {
+  function aplicarCambioEstatusLocal(v, patchPrecomputado = null) {
     estatusDirtyRef.current = true
+    estatusRef.current = v
     setEstatus(v)
-    const repActual = {
-      estatus: v,
-      fecha_creacion: fechaCreacionOrden,
-      fecha_ingreso: fechaIngresoOrden,
-      fecha_revision: fechaRevisionOrden,
-      fecha_reparado: fechaReparadoOrden,
-      fecha_entrega: fechaEntregaOrden,
-      verificado_entrega: verificadoEntrega,
-      fecha_verificacion_entrega: fechaVerificacionEntrega,
-    }
-    const patchF = patchFechasHitosEstatus(v, repActual)
-    if (patchF.fecha_ingreso) setFechaIngresoOrden(patchF.fecha_ingreso)
-    if (patchF.fecha_revision) setFechaRevisionOrden(patchF.fecha_revision)
-    if (patchF.fecha_reparado) setFechaReparadoOrden(patchF.fecha_reparado)
-    if (estatusEsEntregado(v)) {
-      setFechaEntregaOrden(patchF.fecha_entrega ?? ymdFechaEntregaParaGuardar(fechaEntregaOrden))
-    } else {
-      setFechaEntregaOrden(null)
-      setYmdEntregaDesdePagos(null)
-    }
+    const repActual = repSnapshotParaFechas(v)
+    const patchF = patchPrecomputado ?? patchFechasHitosEstatus(v, repActual)
+    aplicarPatchFechasAlEstado(patchF, v)
     if (!estatusEsReparado(v) && !estatusEsEntregado(v)) {
       setVerificadoEntrega(false)
       setFechaVerificacionEntrega(null)
     }
   }
 
-  function cambiarEstatusDesdeSelect(v) {
+  async function cambiarEstatusDesdeSelect(v) {
     if (!v) return
     const actual = estatusRef.current ?? estatus
     const val = validarTransicionEstatus(actual, v)
@@ -844,7 +884,62 @@ export default function ReparacionesOrden({
       onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
       return
     }
-    aplicarCambioEstatusLocal(v)
+
+    const repActual = repSnapshotParaFechas(actual)
+    const patchEstatus = buildPatchCambioEstatusOrden(v, repActual, {
+      verificadoEntrega,
+      fechaVerificacionEntrega,
+    })
+    aplicarCambioEstatusLocal(v, patchEstatus)
+
+    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!id) return
+
+    setGuardandoEstatus(true)
+    try {
+      if (supabase) {
+        await persistirCambioEstatusOrdenSupabase(supabase, id, v, repActual, {
+          verificadoEntrega,
+          fechaVerificacionEntrega,
+        })
+        const { data: guardada, error: eSel } = await supabase
+          .from('reparaciones')
+          .select(
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, estatus, verificado_entrega, fecha_verificacion_entrega',
+          )
+          .eq('id', id)
+          .maybeSingle()
+        if (eSel) throw eSel
+        if (guardada) {
+          aplicarFechasDesdeReparacion(guardada)
+          aplicarVerificacionDesdeReparacion(guardada)
+          estatusRef.current = guardada.estatus ?? v
+          setEstatus(guardada.estatus ?? v)
+        }
+        if (estatusEsEntregado(v)) {
+          await cargarCuentaYEntregaAux(id)
+          try {
+            await liquidarCuentaPagadaAlEntregarOrden(supabase, id)
+          } catch (eLiq) {
+            console.warn('No se pudo liquidar cuenta PAGADA al entregar:', eLiq.message)
+          }
+        }
+      } else {
+        const all = readLs(LS_REP, [])
+        writeLs(
+          LS_REP,
+          all.map((r) => (r.id === id ? { ...r, ...patchEstatus } : r)),
+        )
+      }
+      estatusPersistidoRef.current = v
+      estatusRef.current = v
+      estatusDirtyRef.current = false
+      onNotice?.(`Estatus actualizado a ${v}.`)
+    } catch (e) {
+      onError?.(`No se pudo guardar el estatus: ${e.message}`)
+    } finally {
+      setGuardandoEstatus(false)
+    }
   }
 
   async function marcarVerificadoEntrega() {
@@ -1055,9 +1150,9 @@ export default function ReparacionesOrden({
     const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const repActual = {
-      fecha_ingreso: fechaIngresoOrden,
-      fecha_revision: fechaRevisionOrden,
-      fecha_reparado: fechaReparadoOrden,
+      fecha_ingreso: fechaIngresoRef.current,
+      fecha_revision: fechaRevisionRef.current,
+      fecha_reparado: fechaReparadoRef.current,
     }
     let bitacoraGuardar = bitacora.trim() ? bitacora : null
     if (bitacoraNueva.trim()) {
@@ -1068,11 +1163,12 @@ export default function ReparacionesOrden({
     const repParaFechas = {
       ...repActual,
       estatus: estatusGuardar,
-      fecha_creacion: fechaCreacionOrden,
+      fecha_creacion: fechaCreacionRef.current,
       verificado_entrega: verificadoEntrega || estatusEsEntregado(estatusGuardar),
       fecha_verificacion_entrega: fechaVerificacionEntrega,
-      fecha_entrega: fechaEntregaOrden,
+      fecha_entrega: fechaEntregaRef.current,
     }
+    const patchFechas = patchFechasHitosEstatus(estatusGuardar, repParaFechas)
     const patch = {
       estatus: estatusGuardar,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
@@ -1083,7 +1179,7 @@ export default function ReparacionesOrden({
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
       updated_at: now,
-      ...patchFechasHitosEstatus(estatusGuardar, repParaFechas),
+      ...patchFechas,
     }
     if (estatusEsEntregado(estatusGuardar)) {
       patch.verificado_entrega = true
@@ -1093,10 +1189,12 @@ export default function ReparacionesOrden({
       patch.fecha_verificacion_entrega = null
     }
     if (estatusEsEntregado(estatusGuardar)) {
-      patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaOrden)
+      patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaRef.current)
+      fechaEntregaRef.current = patch.fecha_entrega
       setFechaEntregaOrden(patch.fecha_entrega)
     } else {
       patch.fecha_entrega = null
+      fechaEntregaRef.current = null
       setFechaEntregaOrden(null)
     }
     try {
@@ -1151,10 +1249,20 @@ export default function ReparacionesOrden({
 
       estatusDirtyRef.current = false
       estatusPersistidoRef.current = estatusGuardar
+      estatusRef.current = estatusGuardar
       setEstatus(estatusGuardar)
-      if (patch.fecha_ingreso) setFechaIngresoOrden(patch.fecha_ingreso)
-      if (patch.fecha_revision) setFechaRevisionOrden(patch.fecha_revision)
-      if (patch.fecha_reparado) setFechaReparadoOrden(patch.fecha_reparado)
+      if (patch.fecha_ingreso) {
+        fechaIngresoRef.current = patch.fecha_ingreso
+        setFechaIngresoOrden(patch.fecha_ingreso)
+      }
+      if (patch.fecha_revision) {
+        fechaRevisionRef.current = patch.fecha_revision
+        setFechaRevisionOrden(patch.fecha_revision)
+      }
+      if (patch.fecha_reparado) {
+        fechaReparadoRef.current = patch.fecha_reparado
+        setFechaReparadoOrden(patch.fecha_reparado)
+      }
       await cargarCuentaYEntregaAux(id)
       if (estatusEsEntregado(estatusGuardar)) {
         if (supabase) {
@@ -1978,18 +2086,20 @@ export default function ReparacionesOrden({
             <select
               className="estatus-select"
               value=""
-              disabled={estatusOpcionesPermitidas.length === 0}
+              disabled={guardandoEstatus || estatusOpcionesPermitidas.length === 0}
               onChange={(e) => {
                 const v = e.target.value
                 if (!v) return
-                cambiarEstatusDesdeSelect(v)
+                void cambiarEstatusDesdeSelect(v)
                 e.target.value = ''
               }}
             >
               <option value="">
-                {estatusOpcionesPermitidas.length === 0
-                  ? 'Sin cambios disponibles'
-                  : 'Seleccionar siguiente estatus'}
+                {guardandoEstatus
+                  ? 'Guardando estatus…'
+                  : estatusOpcionesPermitidas.length === 0
+                    ? 'Sin cambios disponibles'
+                    : 'Seleccionar siguiente estatus'}
               </option>
               {estatusOpcionesPermitidas.map((st) => (
                 <option key={st} value={st}>
