@@ -6788,6 +6788,92 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   color: #5d4037;
 }
 
+.rep-aviso-vincular-cuenta,
+.ventas-aviso-vincular-cuenta {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #5d4037;
+}
+
+.rep-aviso-vincular-cuenta-titulo,
+.ventas-aviso-vincular-cuenta-titulo {
+  margin: 0 0 6px;
+  color: #e65100;
+}
+
+.rep-aviso-vincular-cuenta-texto,
+.ventas-aviso-vincular-cuenta-texto {
+  margin: 0;
+}
+
+.rep-aviso-vincular-cuenta-lista {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rep-aviso-vincular-cuenta-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 6px;
+  border: 1px solid #ffcc80;
+}
+
+.btn-vincular-cuenta-orden {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #9c27b0;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.btn-vincular-cuenta-orden:hover:not(:disabled) {
+  background: #8e24aa;
+}
+
+.btn-vincular-cuenta-orden:disabled {
+  background: #ce93d8;
+  cursor: not-allowed;
+}
+
+.ventas-aviso-vincular-cuenta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ventas-aviso-vincular-cuenta-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.ventas-aviso-vincular-cuenta-input {
+  width: 7rem;
+  padding: 8px 10px;
+  border: 1px solid #ffb74d;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
 .rep-actions {
   display: flex;
   flex-direction: column;

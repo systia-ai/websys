@@ -1383,6 +1383,60 @@ export function formatMontoCuenta(value) {
   return `$${abs}`
 }
 
+/** True si la fila cuenta existe pero no tiene orden de servicio (repara_id) vinculada. */
+export function cuentaSinOrdenVinculada(cuenta) {
+  if (!cuenta?.id) return false
+  const rid = cuenta.repara_id ?? cuenta.reparacion_id
+  return rid == null || String(rid).trim() === ''
+}
+
+/**
+ * Vincula una cuenta a una orden de servicio (mismo cliente; la orden no debe tener otra cuenta).
+ * @returns {Promise<object>} fila cuenta actualizada
+ */
+export async function vincularCuentaAOrdenSupabase(supabase, cuentaId, reparaId) {
+  if (!supabase) throw new Error('Supabase no configurado')
+  const cid = Number(cuentaId)
+  const rid = Number(reparaId)
+  if (!Number.isFinite(cid) || cid <= 0) throw new Error('ID de cuenta inválido')
+  if (!Number.isFinite(rid) || rid <= 0) throw new Error('Número de orden inválido')
+
+  const { data: rep, error: eRep } = await supabase
+    .from('reparaciones')
+    .select('id, cliente_id')
+    .eq('id', rid)
+    .maybeSingle()
+  if (eRep) throw eRep
+  if (!rep?.id) throw new Error(`No se encontró la orden #${rid}.`)
+
+  const { data: cuenta, error: eCuenta } = await supabase.from('cuentas').select('*').eq('id', cid).maybeSingle()
+  if (eCuenta) throw eCuenta
+  if (!cuenta?.id) throw new Error(`No se encontró la cuenta #${cid}.`)
+  if (!sameId(rep.cliente_id, cuenta.cliente_id)) {
+    throw new Error('La cuenta y la orden deben ser del mismo cliente.')
+  }
+
+  const { data: otra, error: eOtra } = await supabase
+    .from('cuentas')
+    .select('id')
+    .eq('repara_id', rid)
+    .neq('id', cid)
+    .limit(1)
+  if (eOtra) throw eOtra
+  if (otra?.length) {
+    throw new Error(`La orden #${rid} ya tiene vinculada la cuenta #${otra[0].id}.`)
+  }
+
+  const { data, error } = await supabase
+    .from('cuentas')
+    .update({ repara_id: rid })
+    .eq('id', cid)
+    .select('*')
+    .single()
+  if (error) throw error
+  return data
+}
+
 /**
  * Total y saldo visibles en listados y ventas.
  * Anticipo sin adeudo: Total negativo (anticipo a favor), Saldo $0.

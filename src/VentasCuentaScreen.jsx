@@ -32,6 +32,8 @@ import {
   formatFechaBitacora,
   normalizarReparacionId,
   registrarNotificacionClienteEnBitacora,
+  cuentaSinOrdenVinculada,
+  vincularCuentaAOrdenSupabase,
 } from './reparacionUtils.js'
 import { buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
 import { buildWhatsAppUrl } from './whatsappUtils.js'
@@ -294,6 +296,10 @@ export default function VentasCuentaScreen({
   const [detalleExitoNotificacion, setDetalleExitoNotificacion] = useState('')
   const [pagandoAdeudoTotal, setPagandoAdeudoTotal] = useState(false)
   const pagandoAdeudoRef = useRef(false)
+  const [ordenVinculoInput, setOrdenVinculoInput] = useState(() =>
+    context?.reparacionOrdenId != null ? String(context.reparacionOrdenId) : '',
+  )
+  const [vinculandoOrden, setVinculandoOrden] = useState(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
 
@@ -343,6 +349,8 @@ export default function VentasCuentaScreen({
     context?.monitorReparacionId,
     reciboOrdenEquipo?.orden,
   ])
+  const cuentaRequiereVinculoOrden =
+    esCuentaExistente && cuentaSinOrdenVinculada(cuentaInfo ?? cuentaInicial)
   const subtotalProdV = useMemo(() => {
     const c = Number(cantProd)
     const p = Number(precioProd)
@@ -1264,6 +1272,44 @@ export default function VentasCuentaScreen({
     }
   }
 
+  async function vincularCuentaAOrdenServicio() {
+    if (!cuentaId) {
+      onError?.('No hay cuenta para vincular')
+      return
+    }
+    const rid = normalizarReparacionId(ordenVinculoInput)
+    if (rid == null) {
+      onError?.('Indique el número de orden de servicio válido')
+      return
+    }
+    setVinculandoOrden(true)
+    try {
+      if (supabase) {
+        const vinculada = await vincularCuentaAOrdenSupabase(supabase, cuentaId, rid)
+        setCuentaInfo(vinculada)
+        setReparaIdCuenta(rid)
+        await cargarTodo(cuentaId, rid)
+      } else {
+        const list = readLs(LS_CUENTAS, [])
+        const idx = list.findIndex((c) => sameId(c.id, cuentaId))
+        if (idx < 0) throw new Error(`No se encontró la cuenta #${cuentaId}.`)
+        const vinculada = { ...list[idx], repara_id: rid }
+        writeLs(
+          LS_CUENTAS,
+          list.map((c) => (sameId(c.id, cuentaId) ? vinculada : c)),
+        )
+        setCuentaInfo(vinculada)
+        setReparaIdCuenta(rid)
+        await cargarTodo(cuentaId, rid)
+      }
+      onNotice?.(`Cuenta #${cuentaId} vinculada a la orden #${rid}.`)
+    } catch (e) {
+      onError?.(`No se pudo vincular: ${e.message}`)
+    } finally {
+      setVinculandoOrden(false)
+    }
+  }
+
   return (
     <div className="ventas-cuenta-root">
       <AlertaPermiso mensaje={alertaPermiso} />
@@ -1290,6 +1336,41 @@ export default function VentasCuentaScreen({
             </div>
           )}
         </section>
+
+        {cuentaRequiereVinculoOrden ? (
+          <section className="ventas-aviso-vincular-cuenta" role="alert">
+            <p className="ventas-aviso-vincular-cuenta-titulo">
+              <strong>Vincular cuenta a orden de servicio</strong>
+            </p>
+            <p className="ventas-aviso-vincular-cuenta-texto muted small">
+              La cuenta #{cuentaId} no está ligada a ninguna orden. Indique el número de orden del mismo cliente y
+              confirme la vinculación.
+            </p>
+            <div className="ventas-aviso-vincular-cuenta-row">
+              <label className="ventas-aviso-vincular-cuenta-label" htmlFor="ventas-orden-vinculo">
+                No. de orden
+              </label>
+              <input
+                id="ventas-orden-vinculo"
+                type="text"
+                inputMode="numeric"
+                className="ventas-aviso-vincular-cuenta-input"
+                value={ordenVinculoInput}
+                disabled={vinculandoOrden}
+                onChange={(e) => setOrdenVinculoInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="Ej. 422"
+              />
+              <button
+                type="button"
+                className="btn-vincular-cuenta-orden"
+                disabled={vinculandoOrden || !String(ordenVinculoInput ?? '').trim()}
+                onClick={() => void vincularCuentaAOrdenServicio()}
+              >
+                {vinculandoOrden ? 'Vinculando…' : 'Vincular cuenta'}
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         <section className="ventas-seccion">
           <h3 className="ventas-seccion-titulo">Lista de Productos (Ventas + Reparaciones)</h3>

@@ -59,7 +59,10 @@ import {
   TIPO_GARANTIA_SISTEBIT,
   validarTransicionEstatus,
   validarTransicionEstatusAlGuardar,
+  vincularCuentaAOrdenSupabase,
   ymdFechaEntregaParaGuardar,
+  cuentaSinOrdenVinculada,
+  formatMontoCuenta,
 } from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -184,9 +187,7 @@ function cuentaParaVentas(cuenta) {
   }
 }
 
-/** Ventana para vincular cuenta huérfana (sin repara_id) a una orden del mismo cliente. */
-const VENTANA_CUENTA_HUERFANA_MS = 14 * 24 * 60 * 60 * 1000
-
+/** Elige la cuenta más reciente entre varias filas. */
 function elegirCuentaMasReciente(lista) {
   let cuenta = null
   for (const c of lista ?? []) {
@@ -289,6 +290,9 @@ export default function ReparacionesOrden({
   const [fechaSinReparacionOrden, setFechaSinReparacionOrden] = useState(null)
   const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
   const [cuentaOrden, setCuentaOrden] = useState(null)
+  /** Cuentas del mismo cliente sin repara_id (requieren vinculación manual). */
+  const [cuentasHuerfanasDetectadas, setCuentasHuerfanasDetectadas] = useState([])
+  const [vinculandoCuentaId, setVinculandoCuentaId] = useState(null)
   const [ymdEntregaDesdePagos, setYmdEntregaDesdePagos] = useState(null)
   const [guardandoEstatus, setGuardandoEstatus] = useState(false)
 
@@ -438,16 +442,26 @@ export default function ReparacionesOrden({
     }
   }
 
-  const buscarCuentaVinculadaOrden = useCallback(
+  const obtenerCuentaDirectaOrden = useCallback(
     async (reparaId) => {
       if (reparaId == null || !Number.isFinite(Number(reparaId))) return null
       const rid = Number(reparaId)
       if (supabase) {
         const { data: cuentas, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
         if (error) throw error
-        const directa = elegirCuentaMasReciente(cuentas ?? [])
-        if (directa?.id) return directa
+        return elegirCuentaMasReciente(cuentas ?? [])
+      }
+      const directas = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
+      return elegirCuentaMasReciente(directas)
+    },
+    [supabase],
+  )
 
+  const listarCuentasHuerfanasParaOrden = useCallback(
+    async (reparaId) => {
+      if (reparaId == null || !Number.isFinite(Number(reparaId))) return []
+      const rid = Number(reparaId)
+      if (supabase) {
         const { data: rep, error: eRep } = await supabase
           .from('reparaciones')
           .select('cliente_id, fecha_creacion, created_at')
@@ -455,63 +469,33 @@ export default function ReparacionesOrden({
           .maybeSingle()
         if (eRep) throw eRep
         const cid = rep?.cliente_id
-        if (cid == null) return null
+        if (cid == null) return []
 
         const { data: huerfanas, error: eH } = await supabase
           .from('cuentas')
           .select('*')
           .eq('cliente_id', cid)
           .is('repara_id', null)
+          .order('created_at', { ascending: false })
         if (eH) throw eH
         const lista = huerfanas ?? []
-        if (!lista.length) return null
+        if (!lista.length) return []
 
         const tOrden = new Date(rep.fecha_creacion ?? rep.created_at ?? 0).getTime()
-        let elegida = null
-        if (lista.length === 1) {
-          elegida = lista[0]
-        } else if (Number.isFinite(tOrden) && tOrden > 0) {
-          const candidatas = lista.filter((c) => {
-            const tC = new Date(c.created_at ?? 0).getTime()
-            return Math.abs(tC - tOrden) <= VENTANA_CUENTA_HUERFANA_MS
-          })
-          if (candidatas.length === 1) elegida = candidatas[0]
-        }
-        if (!elegida?.id) return null
-
-        const { data: vinculada, error: eUp } = await supabase
-          .from('cuentas')
-          .update({ repara_id: rid })
-          .eq('id', elegida.id)
-          .select('*')
-          .single()
-        if (eUp) {
-          if (esViolacionUnica(eUp)) {
-            const { data: retry } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
-            return elegirCuentaMasReciente(retry ?? [])
-          }
-          throw eUp
-        }
-        return vinculada
+        if (!Number.isFinite(tOrden) || tOrden <= 0) return lista
+        return [...lista].sort((a, b) => {
+          const da = Math.abs(new Date(a.created_at ?? 0).getTime() - tOrden)
+          const db = Math.abs(new Date(b.created_at ?? 0).getTime() - tOrden)
+          return da - db
+        })
       }
-
-      const directas = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
-      const directa = elegirCuentaMasReciente(directas)
-      if (directa?.id) return directa
 
       const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
       const cid = rep?.cliente_id
-      if (cid == null) return null
-      const huerfanas = readLs(LS_CUENTAS, []).filter(
+      if (cid == null) return []
+      return readLs(LS_CUENTAS, []).filter(
         (c) => sameId(c.cliente_id, cid) && (c.repara_id == null || c.reparacion_id == null),
       )
-      if (huerfanas.length !== 1) return null
-      const elegida = { ...huerfanas[0], repara_id: rid }
-      writeLs(
-        LS_CUENTAS,
-        readLs(LS_CUENTAS, []).map((c) => (sameId(c.id, elegida.id) ? elegida : c)),
-      )
-      return elegida
     },
     [supabase],
   )
@@ -520,17 +504,21 @@ export default function ReparacionesOrden({
     async (reparaId) => {
       if (reparaId == null || !Number.isFinite(Number(reparaId))) {
         setCuentaOrden(null)
+        setCuentasHuerfanasDetectadas([])
         setYmdEntregaDesdePagos(null)
         return
       }
       const rid = Number(reparaId)
       try {
-        const cuenta = await buscarCuentaVinculadaOrden(rid)
+        const cuenta = await obtenerCuentaDirectaOrden(rid)
         setCuentaOrden(cuenta)
         if (!cuenta?.id) {
+          const huerfanas = await listarCuentasHuerfanasParaOrden(rid)
+          setCuentasHuerfanasDetectadas(huerfanas)
           setYmdEntregaDesdePagos(null)
           return
         }
+        setCuentasHuerfanasDetectadas([])
         if (supabase) {
           const { data: pagos, error: eP } = await supabase
             .from('pagosclientes')
@@ -555,10 +543,11 @@ export default function ReparacionesOrden({
       } catch (e) {
         console.warn('No se cargaron datos de entrega para la orden:', e.message)
         setCuentaOrden(null)
+        setCuentasHuerfanasDetectadas([])
         setYmdEntregaDesdePagos(null)
       }
     },
-    [supabase, buscarCuentaVinculadaOrden],
+    [supabase, obtenerCuentaDirectaOrden, listarCuentasHuerfanasParaOrden],
   )
 
   const cargarReparacion = useCallback(async (idOverride) => {
@@ -833,7 +822,7 @@ export default function ReparacionesOrden({
       if (supabase) {
         const { data, error } = await supabase.from('cuentas').insert(row).select('*').single()
         if (error) {
-          if (esViolacionUnica(error)) return buscarCuentaVinculadaOrden(rid)
+          if (esViolacionUnica(error)) return obtenerCuentaDirectaOrden(rid)
           throw error
         }
         return data
@@ -842,8 +831,41 @@ export default function ReparacionesOrden({
       writeLs(LS_CUENTAS, [nuevo, ...readLs(LS_CUENTAS, [])])
       return nuevo
     },
-    [supabase, buscarCuentaVinculadaOrden],
+    [supabase, obtenerCuentaDirectaOrden],
   )
+
+  async function vincularCuentaHuerfanaAOrden(cuentaId) {
+    const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+    if (!rid) {
+      onError?.('Primero registre o cargue la orden de servicio.')
+      return
+    }
+    if (cuentaId == null) return
+    setVinculandoCuentaId(cuentaId)
+    try {
+      let vinculada
+      if (supabase) {
+        vinculada = await vincularCuentaAOrdenSupabase(supabase, cuentaId, rid)
+      } else {
+        const list = readLs(LS_CUENTAS, [])
+        const idx = list.findIndex((c) => sameId(c.id, cuentaId))
+        if (idx < 0) throw new Error(`No se encontró la cuenta #${cuentaId}.`)
+        vinculada = { ...list[idx], repara_id: rid }
+        writeLs(
+          LS_CUENTAS,
+          list.map((c) => (sameId(c.id, cuentaId) ? vinculada : c)),
+        )
+      }
+      setCuentaOrden(vinculada)
+      setCuentasHuerfanasDetectadas([])
+      await cargarCuentaYEntregaAux(rid)
+      onNotice?.(`Cuenta #${cuentaId} vinculada a la orden #${rid}.`)
+    } catch (e) {
+      onError?.(`No se pudo vincular la cuenta: ${e.message}`)
+    } finally {
+      setVinculandoCuentaId(null)
+    }
+  }
 
   async function cargarClientePorId(cid) {
     if (cid == null) return null
@@ -1672,12 +1694,19 @@ export default function ReparacionesOrden({
       let cuenta = cuentaOrden?.id ? cuentaOrden : null
       if (!cuenta?.id) {
         try {
-          cuenta = await buscarCuentaVinculadaOrden(rid)
+          cuenta = await obtenerCuentaDirectaOrden(rid)
           if (cuenta) setCuentaOrden(cuenta)
         } catch (e) {
           onError?.(`No se pudo consultar la cuenta: ${e.message}`)
           return
         }
+      }
+
+      if (!cuenta?.id && cuentasHuerfanasDetectadas.length > 0) {
+        onError?.(
+          'Hay cuenta(s) del cliente sin vincular. Use el aviso «Vincular cuenta a orden de servicio» antes de continuar.',
+        )
+        return
       }
 
       let cliente
@@ -1782,7 +1811,7 @@ export default function ReparacionesOrden({
   async function obtenerCuentaOrdenConPagos() {
     const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!rid) return { cuenta: null, pagos: [] }
-    const cuenta = await buscarCuentaVinculadaOrden(rid)
+    const cuenta = await obtenerCuentaDirectaOrden(rid)
     if (!cuenta?.id) return { cuenta: null, pagos: [] }
     if (supabase) {
       const { data: pagos, error: eP } = await supabase
@@ -2536,6 +2565,43 @@ export default function ReparacionesOrden({
           {domClienteUi ? <span>Dir: {domClienteUi}</span> : null}
           {correoClienteUi ? <span>Email: {correoClienteUi}</span> : null}
         </div>
+
+        {!cuentaOrden?.id && cuentasHuerfanasDetectadas.length > 0 && (esOrdenExistente || idReparacion != null) ? (
+          <div className="rep-aviso-vincular-cuenta" role="alert">
+            <p className="rep-aviso-vincular-cuenta-titulo">
+              <strong>Vincular cuenta a orden de servicio</strong>
+            </p>
+            <p className="rep-aviso-vincular-cuenta-texto">
+              La orden #{idReparacion ?? numeroOrden ?? repIdStr} no tiene cuenta vinculada. Este cliente tiene{' '}
+              {cuentasHuerfanasDetectadas.length === 1 ? 'una cuenta' : `${cuentasHuerfanasDetectadas.length} cuentas`}{' '}
+              sin orden asignada:
+            </p>
+            <ul className="rep-aviso-vincular-cuenta-lista">
+              {cuentasHuerfanasDetectadas.map((c) => {
+                const ymd = aYmdLocalDesdeRaw(c.created_at)
+                const fechaTxt = ymd ? formatFechaLegibleEsMx(ymd) : '—'
+                return (
+                  <li key={c.id} className="rep-aviso-vincular-cuenta-item">
+                    <span>
+                      Cuenta <strong>#{c.id}</strong> · {formatMontoCuenta(c.total ?? 0)} · {String(c.estatus ?? '—')} ·{' '}
+                      {fechaTxt}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-vincular-cuenta-orden"
+                      disabled={vinculandoCuentaId != null}
+                      onClick={() => void vincularCuentaHuerfanaAOrden(c.id)}
+                    >
+                      {vinculandoCuentaId === c.id
+                        ? 'Vinculando…'
+                        : `Vincular a orden #${idReparacion ?? numeroOrden ?? repIdStr}`}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="rep-actions">
           <button
