@@ -12,6 +12,7 @@ import {
   fechaEntregaYmd,
   fechaIngresoYmd,
   fechaReparadoYmd,
+  nombresTecnicosEnOrden,
   repCoincideFiltroMonitor,
   repCoincideBusquedaTextoMonitor,
   tecnicoRepCoincideFiltro,
@@ -352,7 +353,11 @@ export default function MonitorOrdenesModulo({
 
   const tecnicosLista = useMemo(() => {
     const haySin = reparaciones.some((r) => !String(r.tecnico ?? '').trim())
-    const nombres = [...tecnicosCatalogo].sort((a, b) =>
+    const desdeReps = new Set()
+    for (const r of reparaciones) {
+      for (const n of nombresTecnicosEnOrden(r.tecnico)) desdeReps.add(n)
+    }
+    const nombres = [...new Set([...tecnicosCatalogo, ...desdeReps])].sort((a, b) =>
       a.localeCompare(b, 'es', { sensitivity: 'base' }),
     )
     return { nombres, haySin }
@@ -1005,7 +1010,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaEntrega()
                   }}
-                  title="Órdenes con estatus ENTREGADO/A y fecha_entrega en el rango."
+                  title="Órdenes con fecha_entrega en el rango (todas las entregadas ese día, sin importar los chips de estatus)."
                 >
                   Solo
                 </button>

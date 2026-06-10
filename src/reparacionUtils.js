@@ -1,5 +1,6 @@
 import { ESTATUS_ORDEN, TIPOS_REPARACION } from './catalogos.js'
 import { sameId } from './clienteUtils.js'
+import { separarTecnicos } from './tecnicosCatalogo.js'
 
 /** Claves del catálogo en mayúsculas (SERVICIO, GARANTIA EPSON, GARANTIA SISTEBIT). */
 export const TIPOS_SERVICIO_CANONICOS = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
@@ -735,13 +736,35 @@ export function fechaReparadoFiltroYmd(rep) {
 }
 
 /** ¿El técnico asignado a la orden coincide con el filtro del monitor? */
+function normalizarNombreTecnico(t) {
+  return String(t ?? '').trim().toUpperCase()
+}
+
+/** Técnicos asignados en la orden (1 o 2, formato «JUAN» o «JUAN & VERO»). */
+export function nombresTecnicosEnOrden(tecnicoRep) {
+  const raw = String(tecnicoRep ?? '').trim()
+  if (!raw) return []
+  const [t1, t2] = separarTecnicos(raw)
+  const out = []
+  for (const t of [t1, t2]) {
+    const n = normalizarNombreTecnico(t)
+    if (n && !out.includes(n)) out.push(n)
+  }
+  return out
+}
+
 export function tecnicoRepCoincideFiltro(tecnicoRep, filtro) {
-  const want = String(filtro ?? '').trim().toUpperCase()
+  const want = normalizarNombreTecnico(filtro)
   if (!want) return true
-  const t = String(tecnicoRep ?? '').trim().toUpperCase()
-  if (!t) return false
-  const partes = t.split(/\s*&\s*/).map((x) => x.trim()).filter(Boolean)
-  return partes.some((p) => p === want || p.startsWith(`${want} `) || p.split(/\s+/)[0] === want)
+  const asignados = nombresTecnicosEnOrden(tecnicoRep)
+  if (asignados.length === 0) return false
+  return asignados.some((nombre) => {
+    if (nombre === want) return true
+    if (nombre.startsWith(`${want} `)) return true
+    const tokens = nombre.split(/\s+/).filter(Boolean)
+    if (tokens[0] === want) return true
+    return tokens.includes(want)
+  })
 }
 
 function textoBusquedaMonitorNorm(s) {
@@ -838,30 +861,38 @@ export function patchCompletarFechasHitosFaltantes(rep) {
 }
 
 /**
- * Graba fecha_ingreso / fecha_revision / fecha_reparado / fecha_entrega al cambiar de estatus.
- * Siempre asigna la fecha del hito que corresponde; el completado automático solo en órdenes del sistema web.
+ * Graba fecha_ingreso / fecha_revision / fecha_reparado / fecha_sin_reparacion / fecha_entrega
+ * al cambiar de estatus. Si hubo cambio de estatus, asigna la fecha del hito que corresponde;
+ * si no cambió, solo completa columnas vacías.
  */
-export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
+export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnterior = null) {
   const patch = {}
   const hoy = ymdFechaEntregaParaGuardar(null)
-  if (estatusEsIngresado(estatusNuevo) && !fechaIngresoFiltroYmd(repActual)) {
-    patch.fecha_ingreso = hoy
+  const stNuevo = normalizarEstatusOrden(estatusNuevo)
+  const stAnt =
+    estatusAnterior != null && String(estatusAnterior).trim() !== ''
+      ? normalizarEstatusOrden(estatusAnterior)
+      : repActual?.estatus != null && String(repActual.estatus).trim() !== ''
+        ? normalizarEstatusOrden(repActual.estatus)
+        : null
+  const cambioEstatus = stAnt == null || stAnt !== stNuevo
+
+  function asignarHito(esHito, ymdExistente, col, valor = hoy) {
+    if (!esHito(stNuevo)) return
+    if (cambioEstatus || !ymdExistente(repActual)) patch[col] = valor
   }
-  if (estatusEsEnRevision(estatusNuevo) && !fechaRevisionYmd(repActual)) {
-    patch.fecha_revision = hoy
-  }
-  if (estatusEsReparado(estatusNuevo) && !fechaReparadoYmd(repActual)) {
-    patch.fecha_reparado = hoy
-  }
-  if (estatusEsSinReparacion(estatusNuevo) && !fechaSinReparacionYmd(repActual)) {
-    patch.fecha_sin_reparacion = hoy
-  }
-  if (estatusEsEntregado(estatusNuevo) && !fechaEntregaFiltroYmd(repActual)) {
+
+  asignarHito(estatusEsIngresado, fechaIngresoFiltroYmd, 'fecha_ingreso')
+  asignarHito(estatusEsEnRevision, fechaRevisionYmd, 'fecha_revision')
+  asignarHito(estatusEsReparado, fechaReparadoYmd, 'fecha_reparado')
+  asignarHito(estatusEsSinReparacion, fechaSinReparacionYmd, 'fecha_sin_reparacion')
+  if (estatusEsEntregado(stNuevo) && (cambioEstatus || !fechaEntregaFiltroYmd(repActual))) {
     patch.fecha_entrega = ymdFechaEntregaParaGuardar(
       repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
     )
   }
-  const repMerged = { ...repActual, ...patch, estatus: estatusNuevo }
+
+  const repMerged = { ...repActual, ...patch, estatus: stNuevo }
   if (ordenUsaSistemaWeb(repMerged)) {
     const extra = patchCompletarFechasHitosFaltantes(repMerged)
     for (const [k, v] of Object.entries(extra)) {
@@ -875,14 +906,18 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}) {
 export function buildPatchCambioEstatusOrden(
   estatusNuevo,
   repActual = {},
-  { verificadoEntrega = false, fechaVerificacionEntrega = null } = {},
+  { verificadoEntrega = false, fechaVerificacionEntrega = null, estatusAnterior = null } = {},
 ) {
   const st = normalizarEstatusOrden(estatusNuevo)
+  const ant =
+    estatusAnterior != null && String(estatusAnterior).trim() !== ''
+      ? normalizarEstatusOrden(estatusAnterior)
+      : repActual?.estatus
   const now = new Date().toISOString()
   const patch = {
     estatus: st,
     updated_at: now,
-    ...patchFechasHitosEstatus(st, repActual),
+    ...patchFechasHitosEstatus(st, repActual, ant),
   }
   if (estatusEsEntregado(st)) {
     patch.verificado_entrega = true
@@ -913,7 +948,10 @@ export async function persistirCambioEstatusOrdenSupabase(
   repActual,
   opts = {},
 ) {
-  const patch = buildPatchCambioEstatusOrden(estatusNuevo, repActual, opts)
+  const patch = buildPatchCambioEstatusOrden(estatusNuevo, repActual, {
+    ...opts,
+    estatusAnterior: opts.estatusAnterior ?? repActual?.estatus ?? null,
+  })
   await actualizarReparacionSupabase(supabase, reparaId, patch)
   return patch
 }
@@ -993,17 +1031,6 @@ export function fechaHitoEstatusMonitor(rep) {
   return fechaRevisionFiltroYmd(rep)
 }
 
-function modoRangoFechaMonitorPorSeleccion(estatusSeleccionados, _estatusOrden) {
-  const sel = estatusSeleccionados
-  if (!sel || sel.size !== 1) return 'ambas'
-  if (sel.has('REPARADO')) return 'reparado'
-  if (sel.has('SIN REPARACION')) return 'sin_reparacion'
-  if (sel.has('INGRESADO')) return 'ingreso'
-  if (sel.has('ENTREGADO')) return 'entrega'
-  if (sel.has('EN REVISION')) return 'revision'
-  return 'ambas'
-}
-
 /**
  * Rango Desde/Hasta del monitor (solo columnas de hitos en BD).
  * @param {'todas'|'ingreso'|'entrega'|'reparado'|'revision'|'ambas'} modo
@@ -1036,9 +1063,10 @@ export function repEnRangoFechasMonitor(
  *   (cuántas órdenes entraron ese día, aunque ya estén reparadas o entregadas).
  * - `modoFecha` 'reparado' (Fecha reparado): rango sobre fecha_reparado; ignora chips de estatus
  *   (cuántas pasaron a reparado ese día, aunque ya estén entregadas).
- * - `modoFecha` 'entrega': rango + estatus ENTREGADO.
+ * - `modoFecha` 'entrega' (Fecha entrega): rango sobre fecha_entrega; ignora chips de estatus
+ *   (cuántas se entregaron ese día, sin importar otros filtros de estatus).
  * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
- * - Con rango y un solo estatus: usa la columna de fecha de ese estatus.
+ * - Sin chip de fecha especial: solo filtra por chips de estatus (el rango Desde/Hasta no aplica).
  */
 export function repCoincideFiltroMonitor(
   rep,
@@ -1059,8 +1087,7 @@ export function repCoincideFiltroMonitor(
   if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
     if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) return false
-    if (modoFecha === 'ingreso' || modoFecha === 'reparado') return true
-    return repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha)
+    return true
   }
 
   if (modoFecha === 'verificadas') {
@@ -1072,44 +1099,22 @@ export function repCoincideFiltroMonitor(
 
   const sel = estatusSeleccionados
   const st = estatusParaFiltroFn(rep)
-
-  /** Solo chip REPARADO + rango: columna fecha_reparado (histórico, sin exigir estatus actual). */
-  if (hayRango && sel.size === 1 && sel.has('REPARADO')) {
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'reparado')
-  }
-
-  /** Solo chip SIN REPARACION + rango: columna fecha_sin_reparacion. */
-  if (hayRango && sel.size === 1 && sel.has('SIN REPARACION')) {
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'sin_reparacion')
-  }
-
   if (sel.size === 0 || !sel.has(st)) return false
-  if (!hayRango) return true
-  const modoRango = modoRangoFechaMonitorPorSeleccion(sel, st)
-  return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoRango)
+  return true
 }
 
-/** Respeta chips de estatus; en modos de fecha exige coherencia estatus ↔ columna. */
-function repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha) {
-  const sel = estatusSeleccionados
-  if (!sel || sel.size === 0) return false
-  const st = estatusParaFiltroFn(rep)
-  if (modoFecha === 'entrega' && !estatusEsEntregado(st)) return false
-  if (modoFecha === 'reparado' && !estatusEsReparado(st)) return false
-  const todos = ESTATUS_ORDEN.length > 0 && ESTATUS_ORDEN.every((e) => sel.has(String(e).trim().toUpperCase()))
-  if (todos) return true
-  return sel.has(st)
+/** Campos al marcar orden entregada (Ventas / liquidación). Incluye fechas de hitos. */
+export function patchReparacionEntregada(repActual = {}, opts = {}) {
+  const rep = repActual && typeof repActual === 'object' ? repActual : {}
+  return buildPatchCambioEstatusOrden('ENTREGADO', rep, {
+    verificadoEntrega: estaVerificadoEntrega(rep) || !!opts.verificadoEntrega,
+    fechaVerificacionEntrega: rep.fecha_verificacion_entrega ?? opts.fechaVerificacionEntrega ?? null,
+    estatusAnterior: opts.estatusAnterior ?? rep.estatus ?? null,
+  })
 }
 
-/** Campos al marcar orden entregada (Ventas / actualización de estatus). */
-export function patchReparacionEntregada(estatus = 'ENTREGADA', fechaEntregaExistente = null) {
-  const now = new Date().toISOString()
-  return {
-    estatus,
-    updated_at: now,
-    fecha_entrega: ymdFechaEntregaParaGuardar(fechaEntregaExistente),
-  }
-}
+const SELECT_REPARACION_FECHAS_HITOS =
+  'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, verificado_entrega, fecha_verificacion_entrega, fecha_creacion, created_at, updated_at'
 
 function esErrorColumnaDesconocida(error, nombreColumna) {
   const msg = String(error?.message ?? error ?? '').toLowerCase()
@@ -1170,18 +1175,22 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
   throw new Error('No se pudo actualizar la orden tras varios intentos.')
 }
 
-/** Actualiza reparación a entregada; conserva fecha_entrega ya guardada. */
+/** Actualiza reparación a entregada con todas las fechas de hito correspondientes. */
 export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
-  let fechaPrev = null
-  if (supabase?.from && reparaId != null) {
+  const rid = normalizarReparacionId(reparaId)
+  if (rid == null) throw new Error('ID de orden inválido.')
+  let rep = {}
+  if (supabase?.from) {
     const { data } = await supabase
       .from('reparaciones')
-      .select('fecha_entrega')
-      .eq('id', reparaId)
+      .select(SELECT_REPARACION_FECHAS_HITOS)
+      .eq('id', rid)
       .maybeSingle()
-    fechaPrev = data?.fecha_entrega ?? null
+    rep = data ?? {}
   }
-  await actualizarReparacionSupabase(supabase, reparaId, patchReparacionEntregada('ENTREGADA', fechaPrev))
+  const patch = patchReparacionEntregada(rep, { estatusAnterior: rep.estatus })
+  await actualizarReparacionSupabase(supabase, rid, patch)
+  return patch
 }
 
 /**

@@ -1119,7 +1119,8 @@ export default function VentasCuentaScreen({
       )
       if (reparaIdCuenta != null) {
         const lr = readLs(LS_REP, [])
-        const patchEnt = patchReparacionEntregada()
+        const repRow = lr.find((r) => sameId(r.id, reparaIdCuenta)) ?? {}
+        const patchEnt = patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus })
         writeLs(
           LS_REP,
           lr.map((r) => (sameId(r.id, reparaIdCuenta) ? { ...r, ...patchEnt } : r)),

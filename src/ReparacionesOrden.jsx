@@ -798,7 +798,7 @@ export default function ReparacionesOrden({
         ...patchFechasHitosEstatus(estatus, {
           fecha_ingreso: ymdFechaEntregaParaGuardar(null),
           fecha_creacion: now,
-        }),
+        }, null),
       }
 
       existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
@@ -905,6 +905,7 @@ export default function ReparacionesOrden({
     const patchEstatus = buildPatchCambioEstatusOrden(v, repActual, {
       verificadoEntrega,
       fechaVerificacionEntrega,
+      estatusAnterior: actual,
     })
     aplicarCambioEstatusLocal(v, patchEstatus)
 
@@ -917,6 +918,7 @@ export default function ReparacionesOrden({
         await persistirCambioEstatusOrdenSupabase(supabase, id, v, repActual, {
           verificadoEntrega,
           fechaVerificacionEntrega,
+          estatusAnterior: actual,
         })
         const { data: guardada, error: eSel } = await supabase
           .from('reparaciones')
@@ -1166,7 +1168,6 @@ export default function ReparacionesOrden({
       setActualizandoOrden(false)
       return
     }
-    const now = new Date().toISOString()
     const niveles = combineNiveles(nivelB, nivelY, nivelC, nivelM, nivelClight, nivelMlight)
     const repActual = {
       fecha_ingreso: fechaIngresoRef.current,
@@ -1188,9 +1189,13 @@ export default function ReparacionesOrden({
       fecha_verificacion_entrega: fechaVerificacionEntrega,
       fecha_entrega: fechaEntregaRef.current,
     }
-    const patchFechas = patchFechasHitosEstatus(estatusGuardar, repParaFechas)
+    const patchEstatusFechas = buildPatchCambioEstatusOrden(estatusGuardar, repParaFechas, {
+      verificadoEntrega,
+      fechaVerificacionEntrega,
+      estatusAnterior: estatusPersistidoRef.current,
+    })
     const patch = {
-      estatus: estatusGuardar,
+      ...patchEstatusFechas,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
       descripcion_equipo: descripcionEquipo || null,
       problemas_reportados: problemasReportados || null,
@@ -1198,22 +1203,11 @@ export default function ReparacionesOrden({
       bitacora: bitacoraGuardar,
       tipo_reparacion: tipoReparacion || null,
       niveles_tinta: niveles,
-      updated_at: now,
-      ...patchFechas,
     }
-    if (estatusEsEntregado(estatusGuardar)) {
-      patch.verificado_entrega = true
-      patch.fecha_verificacion_entrega = fechaVerificacionEntrega || now
-    } else if (!estatusListoParaVerificacionEntrega(estatusGuardar)) {
-      patch.verificado_entrega = false
-      patch.fecha_verificacion_entrega = null
-    }
-    if (estatusEsEntregado(estatusGuardar)) {
-      patch.fecha_entrega = ymdFechaEntregaParaGuardar(fechaEntregaRef.current)
+    if (patch.fecha_entrega) {
       fechaEntregaRef.current = patch.fecha_entrega
       setFechaEntregaOrden(patch.fecha_entrega)
-    } else {
-      patch.fecha_entrega = null
+    } else if (!estatusEsEntregado(estatusGuardar)) {
       fechaEntregaRef.current = null
       setFechaEntregaOrden(null)
     }
