@@ -13,6 +13,7 @@ import {
   fechaIngresoYmd,
   fechaReparadoYmd,
   nombresTecnicosEnOrden,
+  ordenUsaSistemaWeb,
   repCoincideFiltroMonitor,
   repCoincideBusquedaTextoMonitor,
   tecnicoRepCoincideFiltro,
@@ -409,20 +410,21 @@ export default function MonitorOrdenesModulo({
 
   const filasOrdenadas = useMemo(() => {
     if (hayRangoFechaInvalido || modoFechaSinRango) return []
+    const reparacionesMonitor = reparaciones.filter(ordenUsaSistemaWeb)
     const diasExactos = parsearFiltroDiasExactos(busqueda)
     const qTexto = String(busqueda ?? '').trim()
     const busquedaLibreActiva = Boolean(qTexto) && diasExactos == null
 
     let filtradas
     if (busquedaLibreActiva) {
-      filtradas = reparaciones.filter((r) =>
+      filtradas = reparacionesMonitor.filter((r) =>
         repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
       )
     } else {
       const sel = estatusSeleccionados
       const desde = String(fechaDesde ?? '').trim()
       const hasta = String(fechaHasta ?? '').trim()
-      filtradas = reparaciones.filter((r) => {
+      filtradas = reparacionesMonitor.filter((r) => {
         const rid = String(r.id)
         return repCoincideFiltroMonitor(r, {
           estatusSeleccionados: sel,

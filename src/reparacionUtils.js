@@ -657,13 +657,22 @@ export function fechaIngresoFiltroYmd(rep) {
 /** Órdenes anteriores a esta fecha no usaban el sistema web (sin auto-correcciones ni inferencias). */
 export const ORDEN_SISTEMA_DESDE_YMD = '2026-05-01'
 
-/** True si la orden pertenece al periodo con sistema web (ingreso o creación ≥ 1° may 2026). */
+/** True si la orden pertenece al periodo con sistema web (creación o ingreso ≥ 1° may 2026). */
 export function ordenUsaSistemaWeb(rep) {
-  const ymd =
-    fechaIngresoYmd(rep) ??
-    aYmdLocalDesdeRaw(rep?.fecha_creacion ?? rep?.created_at ?? rep?.fecha_registro)
-  if (!ymd || ymd.length < 10) return false
-  return ymd >= ORDEN_SISTEMA_DESDE_YMD
+  const creacionYmd = aYmdLocalDesdeRaw(
+    rep?.fecha_creacion ?? rep?.created_at ?? rep?.fecha_registro,
+  )
+  if (creacionYmd && creacionYmd.length >= 10) {
+    return creacionYmd >= ORDEN_SISTEMA_DESDE_YMD
+  }
+  const ingresoYmd = fechaIngresoFiltroYmd(rep) ?? fechaIngresoYmd(rep)
+  if (!ingresoYmd || ingresoYmd.length < 10) return false
+  return ingresoYmd >= ORDEN_SISTEMA_DESDE_YMD
+}
+
+/** Monitor de órdenes: solo filas del periodo web (desde 1° may 2026). */
+export function repVisibleEnMonitorOrdenes(rep) {
+  return ordenUsaSistemaWeb(rep)
 }
 
 /**
