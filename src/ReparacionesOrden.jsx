@@ -184,6 +184,23 @@ function cuentaParaVentas(cuenta) {
   }
 }
 
+/** Ventana para vincular cuenta huérfana (sin repara_id) a una orden del mismo cliente. */
+const VENTANA_CUENTA_HUERFANA_MS = 14 * 24 * 60 * 60 * 1000
+
+function elegirCuentaMasReciente(lista) {
+  let cuenta = null
+  for (const c of lista ?? []) {
+    if (!cuenta) {
+      cuenta = c
+      continue
+    }
+    const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+    const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
+    if (tNew >= tPrev) cuenta = c
+  }
+  return cuenta
+}
+
 export default function ReparacionesOrden({
   supabase,
   session,
@@ -257,6 +274,7 @@ export default function ReparacionesOrden({
   const [waMenuAbierto, setWaMenuAbierto] = useState(false)
   const [enviandoWa, setEnviandoWa] = useState(false)
   const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
+  const [abriendoCuentaCliente, setAbriendoCuentaCliente] = useState(false)
   /** Evita reenviar el mismo tipo de mensaje WA en la misma sesión de orden. */
   const [waEnviados, setWaEnviados] = useState({ orden: false, anticipo: false, liquidacion: false })
   const [waExitoVisible, setWaExitoVisible] = useState(false)
@@ -420,6 +438,84 @@ export default function ReparacionesOrden({
     }
   }
 
+  const buscarCuentaVinculadaOrden = useCallback(
+    async (reparaId) => {
+      if (reparaId == null || !Number.isFinite(Number(reparaId))) return null
+      const rid = Number(reparaId)
+      if (supabase) {
+        const { data: cuentas, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
+        if (error) throw error
+        const directa = elegirCuentaMasReciente(cuentas ?? [])
+        if (directa?.id) return directa
+
+        const { data: rep, error: eRep } = await supabase
+          .from('reparaciones')
+          .select('cliente_id, fecha_creacion, created_at')
+          .eq('id', rid)
+          .maybeSingle()
+        if (eRep) throw eRep
+        const cid = rep?.cliente_id
+        if (cid == null) return null
+
+        const { data: huerfanas, error: eH } = await supabase
+          .from('cuentas')
+          .select('*')
+          .eq('cliente_id', cid)
+          .is('repara_id', null)
+        if (eH) throw eH
+        const lista = huerfanas ?? []
+        if (!lista.length) return null
+
+        const tOrden = new Date(rep.fecha_creacion ?? rep.created_at ?? 0).getTime()
+        let elegida = null
+        if (lista.length === 1) {
+          elegida = lista[0]
+        } else if (Number.isFinite(tOrden) && tOrden > 0) {
+          const candidatas = lista.filter((c) => {
+            const tC = new Date(c.created_at ?? 0).getTime()
+            return Math.abs(tC - tOrden) <= VENTANA_CUENTA_HUERFANA_MS
+          })
+          if (candidatas.length === 1) elegida = candidatas[0]
+        }
+        if (!elegida?.id) return null
+
+        const { data: vinculada, error: eUp } = await supabase
+          .from('cuentas')
+          .update({ repara_id: rid })
+          .eq('id', elegida.id)
+          .select('*')
+          .single()
+        if (eUp) {
+          if (esViolacionUnica(eUp)) {
+            const { data: retry } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
+            return elegirCuentaMasReciente(retry ?? [])
+          }
+          throw eUp
+        }
+        return vinculada
+      }
+
+      const directas = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
+      const directa = elegirCuentaMasReciente(directas)
+      if (directa?.id) return directa
+
+      const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
+      const cid = rep?.cliente_id
+      if (cid == null) return null
+      const huerfanas = readLs(LS_CUENTAS, []).filter(
+        (c) => sameId(c.cliente_id, cid) && (c.repara_id == null || c.reparacion_id == null),
+      )
+      if (huerfanas.length !== 1) return null
+      const elegida = { ...huerfanas[0], repara_id: rid }
+      writeLs(
+        LS_CUENTAS,
+        readLs(LS_CUENTAS, []).map((c) => (sameId(c.id, elegida.id) ? elegida : c)),
+      )
+      return elegida
+    },
+    [supabase],
+  )
+
   const cargarCuentaYEntregaAux = useCallback(
     async (reparaId) => {
       if (reparaId == null || !Number.isFinite(Number(reparaId))) {
@@ -429,28 +525,13 @@ export default function ReparacionesOrden({
       }
       const rid = Number(reparaId)
       try {
+        const cuenta = await buscarCuentaVinculadaOrden(rid)
+        setCuentaOrden(cuenta)
+        if (!cuenta?.id) {
+          setYmdEntregaDesdePagos(null)
+          return
+        }
         if (supabase) {
-          const { data: cuentas, error } = await supabase
-            .from('cuentas')
-            .select('*')
-            .eq('repara_id', rid)
-          if (error) throw error
-          const lista = cuentas ?? []
-          let cuenta = null
-          for (const c of lista) {
-            if (!cuenta) {
-              cuenta = c
-              continue
-            }
-            const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
-            const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
-            if (tNew >= tPrev) cuenta = c
-          }
-          setCuentaOrden(cuenta)
-          if (!cuenta?.id) {
-            setYmdEntregaDesdePagos(null)
-            return
-          }
           const { data: pagos, error: eP } = await supabase
             .from('pagosclientes')
             .select('*')
@@ -463,22 +544,6 @@ export default function ReparacionesOrden({
           }
           setYmdEntregaDesdePagos(ymd)
         } else {
-          const lista = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
-          let cuenta = null
-          for (const c of lista) {
-            if (!cuenta) {
-              cuenta = c
-              continue
-            }
-            const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
-            const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
-            if (tNew >= tPrev) cuenta = c
-          }
-          setCuentaOrden(cuenta)
-          if (!cuenta?.id) {
-            setYmdEntregaDesdePagos(null)
-            return
-          }
           const pagos = readLs(LS_PAGOS, []).filter((p) => sameId(p.cuenta_id, cuenta.id))
           let ymd = null
           for (const p of pagos) {
@@ -493,7 +558,7 @@ export default function ReparacionesOrden({
         setYmdEntregaDesdePagos(null)
       }
     },
-    [supabase],
+    [supabase, buscarCuentaVinculadaOrden],
   )
 
   const cargarReparacion = useCallback(async (idOverride) => {
@@ -746,6 +811,113 @@ export default function ReparacionesOrden({
     if (error) throw new Error(error)
     if (id != null) setEquipoIdSesion(id)
     return id
+  }
+
+  const crearCuentaVinculadaOrden = useCallback(
+    async (reparaId, clienteId) => {
+      if (reparaId == null || clienteId == null) return null
+      const rid = Number(reparaId)
+      const cid = Number(clienteId)
+      if (!Number.isFinite(rid) || !Number.isFinite(cid)) return null
+      const now = new Date().toISOString()
+      const row = {
+        cliente_id: cid,
+        total: 0,
+        saldo: 0,
+        estatus: 'PENDIENTE',
+        created_at: now,
+        fecha_liquidada: null,
+        repara_id: rid,
+        tipo_pago: null,
+      }
+      if (supabase) {
+        const { data, error } = await supabase.from('cuentas').insert(row).select('*').single()
+        if (error) {
+          if (esViolacionUnica(error)) return buscarCuentaVinculadaOrden(rid)
+          throw error
+        }
+        return data
+      }
+      const nuevo = { id: nextLocalId(), ...row }
+      writeLs(LS_CUENTAS, [nuevo, ...readLs(LS_CUENTAS, [])])
+      return nuevo
+    },
+    [supabase, buscarCuentaVinculadaOrden],
+  )
+
+  async function cargarClientePorId(cid) {
+    if (cid == null) return null
+    if (supabase) {
+      const { data: cx, error } = await supabase.from('clientes').select('*').eq('id', cid).maybeSingle()
+      if (error) throw error
+      return cx ? normalizeClienteRow(cx) : null
+    }
+    const cl = readLs(LS_CLIENTES, []).find((c) => sameId(c.id, cid))
+    return cl ? normalizeClienteRow(cl) : null
+  }
+
+  async function resolverClienteParaIrCuenta(cuenta) {
+    let cid =
+      clienteDesdeBd?.id ??
+      clienteIdNum ??
+      parseClienteIdFromSession(s) ??
+      cuenta?.cliente_id ??
+      null
+    if (cid == null) {
+      const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
+      if (rid != null) {
+        if (supabase) {
+          const { data: rep, error } = await supabase
+            .from('reparaciones')
+            .select('cliente_id')
+            .eq('id', rid)
+            .maybeSingle()
+          if (error) throw error
+          cid = rep?.cliente_id ?? null
+        } else {
+          const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
+          cid = rep?.cliente_id ?? null
+        }
+      }
+    }
+    if (cid == null) {
+      cid = await resolverClienteId()
+    }
+    if (cid == null) return null
+
+    let row = null
+    if (clienteDesdeBd?.id != null && sameId(clienteDesdeBd.id, cid)) {
+      row = clienteDesdeBd
+    } else {
+      row = await cargarClientePorId(cid)
+      if (row?.id != null) {
+        setClienteDesdeBd(row)
+        setClienteIdNum(row.id)
+      }
+    }
+
+    if (row?.id != null) {
+      return normalizeClienteRow({
+        ...row,
+        nombre: row.nombre || clienteDesdeBd?.nombre || s.clienteNombre || '',
+        telefono: row.telefono || clienteDesdeBd?.telefono || s.clienteTelefono || '',
+        domicilio: row.domicilio || clienteDesdeBd?.domicilio || s.clienteDomicilio || '',
+        correo: row.correo || clienteDesdeBd?.correo || s.clienteCorreo || '',
+      })
+    }
+
+    const nom = (clienteDesdeBd?.nombre || s.clienteNombre || '').trim()
+    const tel = (clienteDesdeBd?.telefono || s.clienteTelefono || '').trim()
+    if (nom || tel) {
+      return normalizeClienteRow({
+        id: cid,
+        nombre: nom,
+        telefono: tel,
+        domicilio: clienteDesdeBd?.domicilio || s.clienteDomicilio || '',
+        correo: clienteDesdeBd?.correo || s.clienteCorreo || '',
+      })
+    }
+    return null
   }
 
   /**
@@ -1495,42 +1667,70 @@ export default function ReparacionesOrden({
       onError?.('Primero registre o cargue la orden de servicio.')
       return
     }
-    let cuenta = cuentaOrden
-    if (!cuenta?.id) {
+    setAbriendoCuentaCliente(true)
+    try {
+      let cuenta = cuentaOrden?.id ? cuentaOrden : null
+      if (!cuenta?.id) {
+        try {
+          cuenta = await buscarCuentaVinculadaOrden(rid)
+          if (cuenta) setCuentaOrden(cuenta)
+        } catch (e) {
+          onError?.(`No se pudo consultar la cuenta: ${e.message}`)
+          return
+        }
+      }
+
+      let cliente
       try {
-        const res = await obtenerCuentaOrdenConPagos()
-        cuenta = res.cuenta
-        if (cuenta) setCuentaOrden(cuenta)
+        cliente = await resolverClienteParaIrCuenta(cuenta)
       } catch (e) {
-        onError?.(`No se pudo consultar la cuenta: ${e.message}`)
+        onError?.(`No se pudo consultar el cliente: ${e.message}`)
         return
       }
+
+      if (!cuenta?.id) {
+        if (!cliente?.id) {
+          onError?.('No se encontró el cliente de esta orden.')
+          return
+        }
+        try {
+          cuenta = await crearCuentaVinculadaOrden(rid, cliente.id)
+          if (cuenta) setCuentaOrden(cuenta)
+        } catch (e) {
+          onError?.(`No se pudo crear la cuenta vinculada: ${e.message}`)
+          return
+        }
+      }
+
+      if (!cuenta?.id) {
+        onError?.('Esta orden no tiene una cuenta vinculada.')
+        return
+      }
+
+      if (!cliente?.id) {
+        try {
+          cliente = await resolverClienteParaIrCuenta(cuenta)
+        } catch (e) {
+          onError?.(`No se pudo consultar el cliente: ${e.message}`)
+          return
+        }
+      }
+      if (!cliente?.id) {
+        onError?.('No se encontró el cliente de esta orden.')
+        return
+      }
+
+      onIrCuentaCliente({
+        cliente,
+        cuenta: {
+          ...cuentaParaVentas(cuenta),
+          repara_id: cuenta.repara_id ?? rid,
+        },
+        reparacionOrdenId: rid,
+      })
+    } finally {
+      setAbriendoCuentaCliente(false)
     }
-    if (!cuenta?.id) {
-      onError?.('Esta orden no tiene una cuenta vinculada.')
-      return
-    }
-    const cid = clienteDesdeBd?.id ?? clienteIdNum ?? s.clienteId ?? s.cliente_id
-    const cliente = normalizeClienteRow({
-      id: cid,
-      nombre: nombreClienteUi,
-      telefono: telClienteUi,
-      domicilio: domClienteUi,
-      correo: correoClienteUi,
-      ...(clienteDesdeBd ?? {}),
-    })
-    if (!cliente?.id) {
-      onError?.('No se encontró el cliente de esta orden.')
-      return
-    }
-    onIrCuentaCliente({
-      cliente,
-      cuenta: {
-        ...cuentaParaVentas(cuenta),
-        repara_id: cuenta.repara_id ?? rid,
-      },
-      reparacionOrdenId: rid,
-    })
   }
 
   async function imprimirEtiquetas() {
@@ -1582,16 +1782,9 @@ export default function ReparacionesOrden({
   async function obtenerCuentaOrdenConPagos() {
     const rid = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!rid) return { cuenta: null, pagos: [] }
+    const cuenta = await buscarCuentaVinculadaOrden(rid)
+    if (!cuenta?.id) return { cuenta: null, pagos: [] }
     if (supabase) {
-      const { data: cuentas, error: eC } = await supabase
-        .from('cuentas')
-        .select('*')
-        .eq('repara_id', rid)
-        .order('id', { ascending: false })
-        .limit(1)
-      if (eC) throw eC
-      const cuenta = cuentas?.[0] ?? null
-      if (!cuenta?.id) return { cuenta: null, pagos: [] }
       const { data: pagos, error: eP } = await supabase
         .from('pagosclientes')
         .select('*')
@@ -1600,17 +1793,6 @@ export default function ReparacionesOrden({
       if (eP) throw eP
       return { cuenta, pagos: pagos ?? [] }
     }
-    const matches = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
-    const cuenta =
-      matches.length === 0
-        ? null
-        : [...matches].sort((a, b) => {
-            const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime()
-            const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime()
-            if (tb !== ta) return tb - ta
-            return Number(b.id ?? 0) - Number(a.id ?? 0)
-          })[0]
-    if (!cuenta?.id) return { cuenta: null, pagos: [] }
     const pagos = readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) === Number(cuenta.id))
     return { cuenta, pagos }
   }
@@ -2381,7 +2563,7 @@ export default function ReparacionesOrden({
             <button
               type="button"
               className="btn-cuenta-cliente-orden wide"
-              disabled={!puedeIrCuentaCliente}
+              disabled={!puedeIrCuentaCliente || abriendoCuentaCliente}
               onClick={() => void irACuentaCliente()}
               title={
                 puedeIrCuentaCliente
@@ -2389,7 +2571,7 @@ export default function ReparacionesOrden({
                   : 'Registre la orden para abrir su cuenta'
               }
             >
-              💳 Cuenta del cliente
+              {abriendoCuentaCliente ? 'Abriendo cuenta…' : '💳 Cuenta del cliente'}
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
