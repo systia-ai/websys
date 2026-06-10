@@ -982,7 +982,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaIngreso()
                   }}
-                  title="Órdenes con fecha_ingreso en el rango. Respeta los chips de estatus seleccionados (no confundir con el chip Ingresado)."
+                  title="Órdenes con fecha_ingreso en el rango (todas las que entraron ese día, sin importar el estatus actual)."
                 >
                   Solo
                 </button>
@@ -1028,7 +1028,7 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoFechaReparado()
                   }}
-                  title="Órdenes con estatus REPARADO y fecha_reparado en el rango."
+                  title="Órdenes con fecha_reparado en el rango (todas las que pasaron a reparado ese día, sin importar el estatus actual)."
                 >
                   Solo
                 </button>

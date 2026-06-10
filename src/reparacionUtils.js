@@ -956,14 +956,13 @@ export function fechaHitoEstatusMonitor(rep) {
   return fechaRevisionFiltroYmd(rep)
 }
 
-function modoRangoFechaMonitorPorSeleccion(estatusSeleccionados, estatusOrden) {
+function modoRangoFechaMonitorPorSeleccion(estatusSeleccionados, _estatusOrden) {
   const sel = estatusSeleccionados
   if (!sel || sel.size !== 1) return 'ambas'
-  const st = String(estatusOrden ?? '').trim().toUpperCase()
-  if (sel.has('REPARADO') && st === 'REPARADO') return 'reparado'
-  if (sel.has('INGRESADO') && st === 'INGRESADO') return 'ingreso'
-  if (sel.has('ENTREGADO') && st === 'ENTREGADO') return 'entrega'
-  if (sel.has('EN REVISION') && st === 'EN REVISION') return 'revision'
+  if (sel.has('REPARADO')) return 'reparado'
+  if (sel.has('INGRESADO')) return 'ingreso'
+  if (sel.has('ENTREGADO')) return 'entrega'
+  if (sel.has('EN REVISION')) return 'revision'
   return 'ambas'
 }
 
@@ -994,8 +993,11 @@ export function repEnRangoFechasMonitor(
 /**
  * ¿La orden cumple el filtro del monitor?
  * - Chips de estatus: solo órdenes cuyo estatus actual está seleccionado.
- * - `modoFecha` 'ingreso' (Fecha registrado): rango sobre fecha_ingreso + respeta chips de estatus.
- * - `modoFecha` 'entrega' | 'reparado': rango + estatus coherente (ENTREGADO / REPARADO).
+ * - `modoFecha` 'ingreso' (Fecha registrado): rango sobre fecha_ingreso; ignora chips de estatus
+ *   (cuántas órdenes entraron ese día, aunque ya estén reparadas o entregadas).
+ * - `modoFecha` 'reparado' (Fecha reparado): rango sobre fecha_reparado; ignora chips de estatus
+ *   (cuántas pasaron a reparado ese día, aunque ya estén entregadas).
+ * - `modoFecha` 'entrega': rango + estatus ENTREGADO.
  * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
  * - Con rango y un solo estatus: usa la columna de fecha de ese estatus.
  */
@@ -1018,6 +1020,7 @@ export function repCoincideFiltroMonitor(
   if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
     if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) return false
+    if (modoFecha === 'ingreso' || modoFecha === 'reparado') return true
     return repPasaFiltroEstatusMonitor(rep, estatusSeleccionados, estatusParaFiltroFn, modoFecha)
   }
 
@@ -1030,6 +1033,12 @@ export function repCoincideFiltroMonitor(
 
   const sel = estatusSeleccionados
   const st = estatusParaFiltroFn(rep)
+
+  /** Solo chip REPARADO + rango: columna fecha_reparado (histórico, sin exigir estatus actual). */
+  if (hayRango && sel.size === 1 && sel.has('REPARADO')) {
+    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'reparado')
+  }
+
   if (sel.size === 0 || !sel.has(st)) return false
   if (!hayRango) return true
   const modoRango = modoRangoFechaMonitorPorSeleccion(sel, st)
