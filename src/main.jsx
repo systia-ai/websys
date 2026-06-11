@@ -5,6 +5,7 @@ import './setPublicAssetsBase.js'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './AuthContext.jsx'
+import { AppConfigProvider } from './AppConfigContext.jsx'
 import EtiquetaPublica from './EtiquetaPublica.jsx'
 
 export function Root() {
@@ -15,9 +16,11 @@ export function Root() {
         <Route
           path="/*"
           element={
-            <AuthProvider>
-              <App />
-            </AuthProvider>
+            <AppConfigProvider>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </AppConfigProvider>
           }
         />
       </Routes>

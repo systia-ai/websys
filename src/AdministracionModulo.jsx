@@ -3,7 +3,7 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { ETIQUETAS_ROL, ROLES_SISTEMA } from './permisosConfig.js'
-import AdministracionConfiguracionPanel from './AdministracionConfiguracionPanel.jsx'
+import AdministracionConfiguracionTabs from './AdministracionConfiguracionTabs.jsx'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -241,7 +241,7 @@ export default function AdministracionModulo({
             )}
           </>
         ) : (
-          <AdministracionConfiguracionPanel
+          <AdministracionConfiguracionTabs
             supabase={supabase}
             puedeConfigurar={puedeConfigurarPermisos}
             onError={onError}

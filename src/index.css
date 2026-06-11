@@ -2,11 +2,28 @@
   box-sizing: border-box;
 }
 
+:root {
+  --app-color-primary: #1976d2;
+  --app-color-primary-dark: #0d47a1;
+  --app-color-accent: #1565c0;
+  --app-color-bg: #f0f4f8;
+  --app-color-text: #1f2937;
+  --app-color-surface: #ffffff;
+  --app-color-muted: #455a64;
+}
+
+:root[data-theme='dark'] {
+  --app-color-bg: #0f172a;
+  --app-color-text: #e2e8f0;
+  --app-color-surface: #1e293b;
+  --app-color-muted: #94a3b8;
+}
+
 body {
   margin: 0;
   font-family: Arial, sans-serif;
-  background: #f0f4f8;
-  color: #1f2937;
+  background: var(--app-color-bg);
+  color: var(--app-color-text);
 }
 
 #root {
@@ -20,7 +37,7 @@ body {
   padding: 24px;
   border-radius: 16px;
   color: #fff;
-  background: linear-gradient(180deg, #1976d2, #0d47a1);
+  background: linear-gradient(180deg, var(--app-color-primary), var(--app-color-primary-dark));
 }
 
 .header h1 {
@@ -163,13 +180,44 @@ body {
 }
 
 .header.home-header h1 {
-  color: #0d47a1;
+  color: var(--app-color-primary-dark);
   font-size: clamp(1.35rem, 2.5vw, 2rem);
 }
 
 .header.home-header p {
-  color: #455a64;
+  color: var(--app-color-muted);
   margin-top: 6px;
+}
+
+:root[data-theme='dark'] .header.home-header {
+  background: rgba(30, 41, 59, 0.94);
+  color: var(--app-color-text);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+:root[data-theme='dark'] .header.home-header h1 {
+  color: #93c5fd;
+}
+
+:root[data-theme='dark'] .header.home-header p {
+  color: var(--app-color-muted);
+}
+
+:root[data-theme='dark'] .home-header-signout {
+  background: #334155;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .module,
+:root[data-theme='dark'] .card,
+:root[data-theme='dark'] .card-pad {
+  background: var(--app-color-surface);
+  color: var(--app-color-text);
+}
+
+:root[data-theme='dark'] .servicios-appbar {
+  background: linear-gradient(180deg, #1e3a5f 0%, #0f172a 100%);
 }
 
 .home-header-brand {
@@ -8147,7 +8195,7 @@ input.full {
   padding: 12px 16px;
   border: none;
   border-radius: 8px;
-  background: #646cff;
+  background: var(--app-color-primary);
   color: #fff;
   font-size: 1rem;
   font-weight: 600;
@@ -8155,7 +8203,7 @@ input.full {
 }
 
 .auth-login-submit:hover:not(:disabled) {
-  background: #535bf2;
+  background: var(--app-color-primary-dark);
 }
 
 .auth-login-submit:disabled {
@@ -8492,4 +8540,237 @@ input.full {
   font-size: 0.92rem;
   font-weight: 800;
   line-height: 1.45;
+}
+
+/* —— Configuración del sistema (admin) —— */
+.administracion-config-tabs-root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.administracion-config-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.administracion-config-subtab {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 2px solid #90caf9;
+  background: #fff;
+  color: #1565c0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.administracion-config-subtab--active {
+  background: linear-gradient(180deg, var(--app-color-primary) 0%, var(--app-color-primary-dark) 100%);
+  border-color: var(--app-color-primary-dark);
+  color: #fff;
+}
+
+.admin-app-config-panel {
+  margin-top: 0;
+}
+
+.admin-app-config-seccion {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(144, 202, 249, 0.45);
+}
+
+.admin-app-config-seccion-titulo {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  color: var(--app-color-primary-dark);
+}
+
+.admin-app-config-grid {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .admin-app-config-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-app-config-grid--colores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-app-config-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-app-config-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #37474f;
+}
+
+.admin-app-config-campo input,
+.admin-app-config-campo textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #b3e5fc;
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+
+.admin-app-config-campo textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.admin-app-config-hint {
+  display: block;
+}
+
+.admin-app-config-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-app-config-color-row input[type='color'] {
+  width: 48px;
+  height: 40px;
+  padding: 2px;
+  border: 2px solid #b3e5fc;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.admin-app-config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-app-config-imagenes-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .admin-app-config-imagenes-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.admin-app-config-imagen {
+  padding: 14px;
+  border: 2px dashed #90caf9;
+  border-radius: 14px;
+  background: #f5fbff;
+}
+
+.admin-app-config-imagen h4 {
+  margin: 0 0 4px;
+}
+
+.admin-app-config-imagen-preview {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e3f2fd;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-app-config-imagen-preview img {
+  max-width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.admin-app-config-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--app-color-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.admin-app-config-upload-btn input {
+  display: none;
+}
+
+.admin-app-config-vista-previa {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f5fbff 100%);
+  border: 1px solid #90caf9;
+}
+
+.admin-app-config-preview-row {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .admin-app-config-preview-row {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+.admin-app-config-preview-banner {
+  min-height: 100px;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  box-shadow: inset 0 0 0 9999px rgba(0, 31, 63, 0.45);
+}
+
+.admin-app-config-preview-logo {
+  max-height: 56px;
+  max-width: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.admin-app-config-preview-login {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(42, 42, 42, 0.92);
+  color: #fff;
+}
+
+.auth-login-logo-wrap {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-login-logo-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
 }

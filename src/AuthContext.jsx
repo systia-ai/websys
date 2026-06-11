@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { getSupabaseClient } from './supabaseClient.js'
+import { useAppConfig } from './AppConfigContext.jsx'
 
 const AuthContext = createContext(null)
 
@@ -11,16 +12,24 @@ export function useAuth() {
   return ctx
 }
 
-function LoginAvatar() {
+function LoginAvatar({ letra, logoUrl }) {
+  if (logoUrl) {
+    return (
+      <div className="auth-login-logo-wrap">
+        <img src={logoUrl} alt="" className="auth-login-logo-img" />
+      </div>
+    )
+  }
   return (
     <div className="auth-login-avatar" aria-hidden>
       <span className="auth-login-avatar-orbit" />
-      <span className="auth-login-avatar-s">S</span>
+      <span className="auth-login-avatar-s">{letra}</span>
     </div>
   )
 }
 
 function LoginScreen({ supabase, onSignedIn }) {
+  const { config, loginLogoUrl } = useAppConfig()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -61,30 +70,30 @@ function LoginScreen({ supabase, onSignedIn }) {
       <div className="home-page-bg" aria-hidden />
       <div className="auth-login-inner home-page-inner">
       <div className="auth-login-card">
-        <LoginAvatar />
-        <h1 className="auth-login-title">Sistefix Web</h1>
-        <p className="auth-login-sub">Acceso para personal del taller</p>
+        <LoginAvatar letra={config.loginAvatarLetra} logoUrl={loginLogoUrl} />
+        <h1 className="auth-login-title">{config.loginTitulo}</h1>
+        <p className="auth-login-sub">{config.loginSubtitulo}</p>
         <form className="auth-login-form" onSubmit={handleSubmit}>
           <label className="auth-login-field">
-            <span>Correo</span>
+            <span>{config.loginLabelCorreo}</span>
             <input
               type="email"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@ejemplo.com"
+              placeholder={config.loginPlaceholderCorreo}
               disabled={loading}
               required
             />
           </label>
           <label className="auth-login-field">
-            <span>Contraseña</span>
+            <span>{config.loginLabelPassword}</span>
             <input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder={config.loginPlaceholderPassword}
               disabled={loading}
               required
             />
@@ -95,12 +104,10 @@ function LoginScreen({ supabase, onSignedIn }) {
             </p>
           ) : null}
           <button type="submit" className="auth-login-submit" disabled={loading}>
-            {loading ? 'Entrando…' : 'Iniciar sesión'}
+            {loading ? 'Entrando…' : config.loginBoton}
           </button>
         </form>
-        <p className="auth-login-hint muted small">
-          Si no tiene cuenta, pida al administrador que la cree en Supabase (Authentication → Users).
-        </p>
+        <p className="auth-login-hint muted small">{config.loginHint}</p>
       </div>
       </div>
     </div>

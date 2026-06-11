@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from './AuthContext.jsx'
+import { useAppConfig } from './AppConfigContext.jsx'
 import { normalizeClienteRow } from './clienteUtils.js'
 import ServiciosEquipos from './ServiciosEquipos.jsx'
 import ClientesModulo from './ClientesModulo.jsx'
@@ -43,6 +44,7 @@ const homeMenuItems = [
 
 function App() {
   const { supabase, user, signOut, requiresAuth } = useAuth()
+  const { config, logoUrl } = useAppConfig()
   const [activeModule, setActiveModule] = useState('home')
   /** Cliente elegido en el módulo Clientes para preasignar en Servicios (equipos), como `savedStateHandle` en Android. */
   const [clienteVinculoServicios, setClienteVinculoServicios] = useState(null)
@@ -395,14 +397,14 @@ function App() {
             <div className="home-header-brand">
               <img
                 className="home-logo-sistebit"
-                src={`${import.meta.env.BASE_URL}assets/sistebit-logo.png`}
-                alt="Sistebit"
+                src={logoUrl}
+                alt={config.nombreApp}
                 decoding="async"
                 fetchPriority="high"
               />
               <div className="home-header-text">
-                <h1>Sistefix Web</h1>
-                <p>Centro de Servicio EPSON · Sistema de gestión integral</p>
+                <h1>{config.nombreApp}</h1>
+                <p>{config.subtituloInicio}</p>
               </div>
             </div>
             {requiresAuth && user ? (
@@ -438,10 +440,15 @@ function App() {
           ))}
           </section>
           <p className="home-photo-credit">
-            Logotipo:{' '}
-            <a href="https://www.sistebit.com" target="_blank" rel="noopener noreferrer">
-              sistebit.com
-            </a>
+            {config.pieInicioUrl ? (
+              <>
+                <a href={config.pieInicioUrl} target="_blank" rel="noopener noreferrer">
+                  {config.pieInicioTexto}
+                </a>
+              </>
+            ) : (
+              config.pieInicioTexto
+            )}
           </p>
         </div>
       </div>
