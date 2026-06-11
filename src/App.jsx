@@ -14,7 +14,13 @@ import AdministracionModulo from './AdministracionModulo.jsx'
 import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import AlertaPermiso from './AlertaPermiso.jsx'
-import { esRolAdmin, rolDesdeFilaUserRoles } from './permisosUtils.js'
+import {
+  puedeAccederModulo,
+  permisosEfectivosRol,
+  rolDesdeFilaUserRoles,
+  tienePermiso,
+} from './permisosUtils.js'
+import { cargarPermisosRolesServidor } from './permisosRolesApi.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { limpiarFiltrosMonitorSesion } from './monitorOrdenesFiltrosSesion.js'
 
@@ -60,6 +66,8 @@ function App() {
   const [monitorRetornoVentas, setMonitorRetornoVentas] = useState(null)
   const [rolUsuario, setRolUsuario] = useState('ADMIN')
   const [rolesReady, setRolesReady] = useState(false)
+  const [permisosPorRol, setPermisosPorRol] = useState(null)
+  const [permisosReady, setPermisosReady] = useState(false)
 
   const limpiarRetornoVentasClientes = useCallback(() => {
     setClientesRetornoVentas(null)
@@ -84,24 +92,41 @@ function App() {
     activeModuleRef.current = activeModule
   }, [activeModule])
 
+  const recargarPermisosRoles = useCallback(async () => {
+    try {
+      const data = await cargarPermisosRolesServidor(supabase)
+      setPermisosPorRol(data)
+    } catch {
+      setPermisosPorRol(null)
+    } finally {
+      setPermisosReady(true)
+    }
+  }, [supabase])
+
   useEffect(() => {
     let cancelado = false
-    async function cargarRolUsuario() {
+    async function cargarRolYPermisos() {
+      setRolesReady(false)
+      setPermisosReady(false)
       if (!supabase || !user?.id) {
         if (!cancelado) {
           setRolUsuario('ADMIN')
+          setPermisosPorRol(null)
           setRolesReady(true)
+          setPermisosReady(true)
         }
         return
       }
       try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('rol')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        const [{ data, error }, permisos] = await Promise.all([
+          supabase.from('user_roles').select('rol').eq('user_id', user.id).maybeSingle(),
+          cargarPermisosRolesServidor(supabase),
+        ])
         if (error) throw error
-        if (!cancelado) setRolUsuario(rolDesdeFilaUserRoles(data))
+        if (!cancelado) {
+          setRolUsuario(rolDesdeFilaUserRoles(data))
+          setPermisosPorRol(permisos)
+        }
       } catch (e) {
         const msg = String(e?.message ?? '')
         if (/relation .*user_roles.* does not exist/i.test(msg)) {
@@ -111,23 +136,59 @@ function App() {
           setError(`No se pudo verificar rol de usuario: ${msg}`)
           setTimeout(() => setError(''), 6000)
         }
+        if (!cancelado) {
+          try {
+            setPermisosPorRol(await cargarPermisosRolesServidor(supabase))
+          } catch {
+            setPermisosPorRol(null)
+          }
+        }
       } finally {
-        if (!cancelado) setRolesReady(true)
+        if (!cancelado) {
+          setRolesReady(true)
+          setPermisosReady(true)
+        }
       }
     }
-    setRolesReady(false)
-    void cargarRolUsuario()
+    void cargarRolYPermisos()
     return () => {
       cancelado = true
     }
   }, [supabase, user?.id])
 
-  const esAdmin = esRolAdmin(rolUsuario)
-  const puedeEliminar = esAdmin
+  const permisosUsuario = useMemo(
+    () => permisosEfectivosRol(rolUsuario, permisosPorRol),
+    [rolUsuario, permisosPorRol],
+  )
+
+  const puedeEliminar = tienePermiso(permisosUsuario, 'accion.eliminar')
+  const puedeCambiarRoles = tienePermiso(permisosUsuario, 'accion.cambiar_roles')
+  const puedeConfigurarPermisos = tienePermiso(permisosUsuario, 'accion.configurar_permisos')
+  const puedeReportesFechas = tienePermiso(permisosUsuario, 'accion.reportes_fechas')
+  const puedeCorteFechas = tienePermiso(permisosUsuario, 'accion.corte_fechas')
+  const puedeGestionarTecnicos = tienePermiso(permisosUsuario, 'accion.gestion_tecnicos')
+  const puedeLiquidarCuentas = tienePermiso(permisosUsuario, 'accion.liquidar_cuentas')
+
+  const menuInicioVisible = useMemo(
+    () => homeMenuItems.filter((m) => puedeAccederModulo(permisosUsuario, m.key)),
+    [permisosUsuario],
+  )
+
   const { alertaPermiso: alertaPermisoApp, intentarEliminar: intentarEliminarApp } =
     usePermisoEliminar(puedeEliminar)
 
+  function puedeAccederPantalla(mod) {
+    if (mod === 'home') return true
+    if (mod === 'ventas') return puedeAccederModulo(permisosUsuario, 'clientes')
+    return puedeAccederModulo(permisosUsuario, mod)
+  }
+
   function navigateTo(nextKey) {
+    if (nextKey !== 'home' && permisosReady && !puedeAccederPantalla(nextKey)) {
+      setError('Su usuario no tiene permiso para acceder a ese módulo.')
+      setTimeout(() => setError(''), 5000)
+      return
+    }
     if (nextKey === 'home') {
       navStackRef.current = ['home']
       setRepSession(null)
@@ -362,7 +423,7 @@ function App() {
             ) : null}
           </header>
           <section className="grid home-menu-grid">
-          {homeMenuItems.map((m) => (
+          {menuInicioVisible.map((m) => (
             <button
               key={m.key}
               type="button"
@@ -387,12 +448,23 @@ function App() {
     )
   }
 
-  if (activeModule === 'home') return renderHome()
-
-  if (!rolesReady) {
+  if (!rolesReady || !permisosReady) {
     return (
       <main className="module">
         <p className="muted center">Verificando permisos…</p>
+      </main>
+    )
+  }
+
+  if (activeModule === 'home') return renderHome()
+
+  if (!puedeAccederPantalla(activeModule)) {
+    return (
+      <main className="module">
+        <p className="error">Su usuario no tiene permiso para acceder a este módulo.</p>
+        <button type="button" onClick={() => navigateTo('home')}>
+          Volver al inicio
+        </button>
       </main>
     )
   }
@@ -496,7 +568,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <CorteCajaModulo
           supabase={supabase}
-          esAdmin={esAdmin}
+          puedeElegirRangoFechas={puedeCorteFechas}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -519,7 +591,7 @@ function App() {
         {notice && <p className="ok">{notice}</p>}
         <ReportesModulo
           supabase={supabase}
-          esAdmin={esAdmin}
+          puedeElegirRangoFechas={puedeReportesFechas}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
@@ -542,6 +614,7 @@ function App() {
         <MonitorOrdenesModulo
           supabase={supabase}
           puedeEliminar={puedeEliminar}
+          puedeGestionarTecnicos={puedeGestionarTecnicos}
           retornoVentas={monitorRetornoVentas}
           onRetornoVentasConsumido={limpiarRetornoVentasMonitor}
           onHome={goBack}
@@ -574,8 +647,10 @@ function App() {
         <AdministracionModulo
           supabase={supabase}
           onHome={goBack}
-          isAdmin={esAdmin}
           miRol={rolUsuario}
+          puedeCambiarRoles={puedeCambiarRoles}
+          puedeConfigurarPermisos={puedeConfigurarPermisos}
+          onPermisosActualizados={() => void recargarPermisosRoles()}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)
@@ -660,6 +735,7 @@ function App() {
         <VentasCuentaScreen
           supabase={supabase}
           puedeEliminar={puedeEliminar}
+          puedeLiquidarCuentas={puedeLiquidarCuentas}
           context={ventasContext}
           onSalir={goBack}
           onError={(msg) => {

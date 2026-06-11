@@ -1,3 +1,4 @@
+import FechaInputPermiso from './FechaInputPermiso.jsx'
 import { crearSetEstatusTodos, ESTATUS_ORDEN_REPORTES } from './reportesFiltros.js'
 import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
 
@@ -99,37 +100,29 @@ export default function ReportesFiltrosCard({
           <span className="corte-caja-fecha-label">
             <span aria-hidden="true">🗓️</span> Desde
           </span>
-          <div className="corte-caja-fecha-input-wrap">
-            <input
-              type="date"
-              value={fechaInicio}
-              min={puedeCambiarFechas ? undefined : fechaInicio || undefined}
-              max={puedeCambiarFechas ? fechaFin || undefined : fechaInicio || undefined}
-              readOnly={!puedeCambiarFechas}
-              onClick={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
-              onFocus={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
-              onChange={cambiarFechaInicio}
-              aria-label="Fecha inicial"
-            />
-          </div>
+          <FechaInputPermiso
+            value={fechaInicio}
+            min={puedeCambiarFechas ? undefined : fechaInicio || undefined}
+            max={puedeCambiarFechas ? fechaFin || undefined : fechaInicio || undefined}
+            puedeEditar={puedeCambiarFechas}
+            onChange={cambiarFechaInicio}
+            onSinPermiso={avisarSinPermisoFecha}
+            ariaLabel="Fecha inicial"
+          />
         </label>
         <label className="corte-caja-fecha-campo">
           <span className="corte-caja-fecha-label">
             <span aria-hidden="true">📆</span> Hasta
           </span>
-          <div className="corte-caja-fecha-input-wrap">
-            <input
-              type="date"
-              value={fechaFin}
-              min={puedeCambiarFechas ? fechaInicio || undefined : fechaFin || undefined}
-              max={puedeCambiarFechas ? undefined : fechaFin || undefined}
-              readOnly={!puedeCambiarFechas}
-              onClick={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
-              onFocus={!puedeCambiarFechas ? avisarSinPermisoFecha : undefined}
-              onChange={cambiarFechaFin}
-              aria-label="Fecha final"
-            />
-          </div>
+          <FechaInputPermiso
+            value={fechaFin}
+            min={puedeCambiarFechas ? fechaInicio || undefined : fechaFin || undefined}
+            max={puedeCambiarFechas ? undefined : fechaFin || undefined}
+            puedeEditar={puedeCambiarFechas}
+            onChange={cambiarFechaFin}
+            onSinPermiso={avisarSinPermisoFecha}
+            ariaLabel="Fecha final"
+          />
         </label>
       </div>
       {rangoInvalido ? (

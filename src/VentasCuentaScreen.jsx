@@ -253,6 +253,7 @@ export default function VentasCuentaScreen({
   onError,
   onNotice,
   puedeEliminar = false,
+  puedeLiquidarCuentas = true,
 }) {
   const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const cliente = useMemo(() => normalizeClienteRow(context?.cliente ?? {}), [context?.cliente])
@@ -328,6 +329,7 @@ export default function VentasCuentaScreen({
   const esGarantiaSinCobro = esGarantiaSinCobroTipo(tipoReparacionOrden)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const puedeLiquidarCuenta =
+    puedeLiquidarCuentas &&
     esCuentaExistente &&
     cuentaEstatus.toUpperCase() !== 'LIQUIDADA' &&
     (esGarantiaSinCobro ||

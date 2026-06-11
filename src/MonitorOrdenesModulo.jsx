@@ -195,6 +195,7 @@ export default function MonitorOrdenesModulo({
   retornoVentas = null,
   onRetornoVentasConsumido,
   puedeEliminar = false,
+  puedeGestionarTecnicos = false,
 }) {
   void onNotice
   const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
@@ -622,6 +623,10 @@ export default function MonitorOrdenesModulo({
   }
 
   function handleAgregarTecnico() {
+    if (!puedeGestionarTecnicos) {
+      mostrarSinPermiso('Su usuario no tiene permiso para gestionar técnicos.')
+      return
+    }
     const n = nuevoTecnico.trim()
     if (!n) return
     const nueva = agregarTecnico(n)
@@ -835,17 +840,19 @@ export default function MonitorOrdenesModulo({
               <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
               <span className="monitor-ordenes-tile-label">
                 Técnico{' '}
-                <button
-                  type="button"
-                  className="monitor-ordenes-gestion-tecnicos-btn"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setGestionTecnicosAbierto(true)
-                  }}
-                  title="Agregar o eliminar técnicos del catálogo"
-                >
-                  ⚙️ Gestionar
-                </button>
+                {puedeGestionarTecnicos ? (
+                  <button
+                    type="button"
+                    className="monitor-ordenes-gestion-tecnicos-btn"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setGestionTecnicosAbierto(true)
+                    }}
+                    title="Agregar o eliminar técnicos del catálogo"
+                  >
+                    ⚙️ Gestionar
+                  </button>
+                ) : null}
               </span>
               <select
                 value={tecnicoFiltro}

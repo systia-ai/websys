@@ -150,6 +150,18 @@ body {
   border-color: #ffcc80;
 }
 
+.home-header-role--coordinador {
+  color: #1565c0;
+  background: #e3f2fd;
+  border-color: #90caf9;
+}
+
+.home-header-role--operador {
+  color: #6a1b9a;
+  background: #f3e5f5;
+  border-color: #ce93d8;
+}
+
 .header.home-header h1 {
   color: #0d47a1;
   font-size: clamp(1.35rem, 2.5vw, 2rem);
@@ -573,6 +585,8 @@ td {
 @media (prefers-reduced-motion: reduce) {
   .modal-alerta--error,
   .modal-alerta--warning,
+  .alerta-permiso-flotante,
+  .alerta-permiso-flotante-mover,
   .alerta-permiso-flotante-inner,
   .error,
   .warning,
@@ -1781,11 +1795,36 @@ td {
 }
 
 .corte-caja-fecha-input-wrap {
+  position: relative;
   background: #fff;
   border: 2px solid #90caf9;
   border-radius: 10px;
   padding: 4px 10px;
   box-shadow: 0 0 12px rgba(144, 202, 249, 0.35);
+}
+
+.corte-caja-fecha-input-wrap--bloqueada {
+  border-color: #ffb74d;
+  background: linear-gradient(135deg, #fff8e1 0%, #fff3e0 100%);
+  box-shadow: 0 0 10px rgba(239, 108, 0, 0.22);
+  cursor: not-allowed;
+}
+
+.corte-caja-fecha-input-wrap--bloqueada input {
+  color: #e65100;
+  cursor: not-allowed;
+}
+
+.corte-caja-fecha-bloqueo {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: not-allowed;
 }
 
 .corte-caja-fecha-input-wrap:focus-within {
@@ -8196,6 +8235,150 @@ input.full {
   white-space: nowrap;
 }
 
+.administracion-secciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.administracion-seccion-btn {
+  border: 1px solid #90caf9;
+  background: #fff;
+  color: #1565c0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.administracion-seccion-btn--active {
+  background: #1976d2;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.administracion-config-panel {
+  border: 1px solid #ce93d8;
+  background: linear-gradient(180deg, #faf5ff 0%, #fff 100%);
+}
+
+.administracion-config-solo-lectura {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  color: #5d4037;
+}
+
+.administracion-config-rol-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.administracion-config-rol-tab {
+  border: 1px solid #b39ddb;
+  background: #fff;
+  color: #6a1b9a;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.administracion-config-rol-tab--active {
+  background: #7b1fa2;
+  border-color: #6a1b9a;
+  color: #fff;
+}
+
+.administracion-config-rol-tab--coordinador.administracion-config-rol-tab--active {
+  background: #1976d2;
+  border-color: #1565c0;
+}
+
+.administracion-config-rol-tab--tecnico.administracion-config-rol-tab--active {
+  background: #ef6c00;
+  border-color: #e65100;
+}
+
+.administracion-config-rol-tab--operador.administracion-config-rol-tab--active {
+  background: #6a1b9a;
+  border-color: #4a148c;
+}
+
+.administracion-config-resumen {
+  margin: 0 0 12px;
+}
+
+.administracion-config-grupo {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #e1bee7;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.administracion-config-grupo-titulo {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #4a148c;
+}
+
+.administracion-config-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.administracion-config-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.administracion-config-label input {
+  margin-top: 3px;
+}
+
+.administracion-config-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.administracion-config-defecto {
+  margin-top: 14px;
+  font-size: 0.88rem;
+}
+
+.administracion-config-defecto-lista {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.administracion-rol-select--coordinador {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1565c0;
+}
+
+.administracion-rol-select--operador {
+  background: #f3e5f5;
+  border-color: #ce93d8;
+  color: #6a1b9a;
+}
+
 .admin-alerta-permiso {
   position: sticky;
   top: 12px;
@@ -8219,17 +8402,48 @@ input.full {
   z-index: 10050;
   width: min(520px, calc(100vw - 24px));
   pointer-events: none;
-  animation: alerta-permiso-entra 0.28s ease-out;
+}
+
+.alerta-permiso-flotante-mover {
+  animation: alerta-permiso-entra 0.28s ease-out, alerta-permiso-zumbido 0.85s ease-out;
 }
 
 @keyframes alerta-permiso-entra {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-12px);
+    transform: translateY(-12px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes alerta-permiso-zumbido {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  8% {
+    transform: translate(-6px, 1px) rotate(-1deg);
+  }
+  16% {
+    transform: translate(6px, -1px) rotate(1deg);
+  }
+  24% {
+    transform: translate(-5px, 0) rotate(-0.8deg);
+  }
+  32% {
+    transform: translate(5px, 0) rotate(0.8deg);
+  }
+  40% {
+    transform: translate(-3px, 0) rotate(-0.5deg);
+  }
+  48% {
+    transform: translate(3px, 0) rotate(0.5deg);
+  }
+  56% {
+    transform: translate(0, 0) rotate(0deg);
   }
 }
 
@@ -8243,7 +8457,21 @@ input.full {
   background: linear-gradient(135deg, #fff8e1 0%, #ffcc80 45%, #ffcdd2 100%);
   color: #bf360c;
   box-shadow: 0 10px 32px rgba(183, 28, 28, 0.42);
-  animation: modal-alerta-zumbido 1s ease-out forwards;
+  animation: alerta-permiso-respira 2.2s ease-in-out infinite;
+}
+
+@keyframes alerta-permiso-respira {
+  0%,
+  100% {
+    box-shadow: 0 10px 32px rgba(183, 28, 28, 0.38);
+    border-color: #e65100;
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 14px 44px rgba(183, 28, 28, 0.62);
+    border-color: #bf360c;
+    filter: brightness(1.06);
+  }
 }
 
 .alerta-permiso-flotante-ico {

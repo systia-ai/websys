@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { ETIQUETAS_ROL, ROLES_SISTEMA } from './permisosConfig.js'
+import AdministracionConfiguracionPanel from './AdministracionConfiguracionPanel.jsx'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -21,13 +23,16 @@ export default function AdministracionModulo({
   onHome,
   onError,
   onNotice,
-  isAdmin = false,
   miRol = 'ADMIN',
+  puedeCambiarRoles = false,
+  puedeConfigurarPermisos = false,
+  onPermisosActualizados,
 }) {
+  const [seccion, setSeccion] = useState('usuarios')
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
-  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(isAdmin)
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeCambiarRoles)
 
   const cargarUsuarios = useCallback(async () => {
     if (!supabase) {
@@ -44,7 +49,7 @@ export default function AdministracionModulo({
         email: u.email ?? '—',
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
-        rol: String(u.rol ?? 'ADMIN').toUpperCase(),
+        rol: String(u.rol ?? 'TECNICO').toUpperCase(),
       }))
       setUsuarios(lista)
     } catch (e) {
@@ -65,8 +70,8 @@ export default function AdministracionModulo({
   )
 
   async function guardarRolUsuario(userId, rol) {
-    if (!isAdmin) {
-      mostrarSinPermiso('Tu usuario no tiene permisos para cambiar roles.')
+    if (!puedeCambiarRoles) {
+      mostrarSinPermiso('Su usuario no tiene permisos para cambiar roles.')
       return
     }
     setGuardandoId(userId)
@@ -88,22 +93,24 @@ export default function AdministracionModulo({
   }
 
   async function quitarRolUsuario(userId) {
-    if (!isAdmin) {
+    if (!puedeCambiarRoles) {
       mostrarSinPermiso()
       return
     }
     const fila = usuarios.find((u) => String(u.user_id) === String(userId))
     if (!fila) return
     if (String(fila.rol).toUpperCase() === 'ADMIN' && totalAdmins <= 1) {
-      onError?.('No se puede borrar el último usuario ADMIN.')
+      onError?.('No se puede quitar el rol del último usuario ADMIN.')
       return
     }
     setGuardandoId(userId)
     try {
       const { error } = await supabase.from('user_roles').delete().eq('user_id', userId)
       if (error) throw error
-      setUsuarios((prev) => prev.map((u) => (String(u.user_id) === String(userId) ? { ...u, rol: 'ADMIN' } : u)))
-      onNotice?.('Rol personalizado eliminado. Usuario queda como ADMIN (modo temporal).')
+      setUsuarios((prev) =>
+        prev.map((u) => (String(u.user_id) === String(userId) ? { ...u, rol: 'TECNICO' } : u)),
+      )
+      onNotice?.('Rol personalizado eliminado. Usuario queda como TECNICO.')
     } catch (e) {
       onError?.(`No se pudo borrar rol: ${e.message}`)
     } finally {
@@ -135,75 +142,111 @@ export default function AdministracionModulo({
       <div className="servicios-body administracion-body">
         <AlertaPermiso mensaje={alertaPermiso} />
 
-        <section className="card-pad administracion-panel">
-          <header className="administracion-panel-head">
-            <h2>Control de roles</h2>
-            <p className="muted">
-              Tu rol actual: <strong>{miRol}</strong>
-            </p>
-          </header>
-          <p className="muted administracion-panel-help">
-            ADMIN puede cambiar roles y borrar asignaciones de rol. TECNICO solo consulta.
-          </p>
-        </section>
-
-        {loading ? (
-          <p className="muted center">Cargando usuarios…</p>
-        ) : usuarios.length === 0 ? (
-          <div className="empty-card">
-            <p>No se encontraron usuarios registrados.</p>
-          </div>
-        ) : (
-          <TablaScrollSuperior
-            ariaLabel="Usuarios y roles"
-            classNameWrap="cuentas-cliente-tabla-wrap administracion-tabla-wrap"
-            showHint={false}
-            syncDeps={[usuarios, loading, isAdmin]}
+        <nav className="administracion-secciones" aria-label="Secciones de administración">
+          <button
+            type="button"
+            className={`administracion-seccion-btn${seccion === 'usuarios' ? ' administracion-seccion-btn--active' : ''}`}
+            onClick={() => setSeccion('usuarios')}
           >
-            <table className="cuentas-cliente-tabla administracion-tabla">
-              <thead>
-                <tr>
-                  <th>Correo</th>
-                  <th>Rol</th>
-                  <th>Creado</th>
-                  <th>Último acceso</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuarios.map((u) => (
-                  <tr key={u.user_id}>
-                    <td>{u.email}</td>
-                    <td>
-                      <select
-                        value={u.rol}
-                        onChange={(e) => void guardarRolUsuario(u.user_id, e.target.value)}
-                        disabled={guardandoId === u.user_id}
-                        className={`administracion-rol-select administracion-rol-select--${String(u.rol).toLowerCase()}`}
-                      >
-                        <option value="ADMIN">ADMIN</option>
-                        <option value="TECNICO">TECNICO</option>
-                      </select>
-                    </td>
-                    <td>{formatearFecha(u.created_at)}</td>
-                    <td>{formatearFecha(u.last_sign_in_at)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn-icon danger administracion-btn-borrar-rol"
-                        onClick={() => intentarEliminar(() => void quitarRolUsuario(u.user_id))}
-                        disabled={guardandoId === u.user_id}
-                        title="Quitar rol personalizado (queda TECNICO)"
-                        aria-label={`Quitar rol de ${u.email}`}
-                      >
-                        🗑️ Quitar rol
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TablaScrollSuperior>
+            👥 Usuarios y roles
+          </button>
+          <button
+            type="button"
+            className={`administracion-seccion-btn${seccion === 'configuracion' ? ' administracion-seccion-btn--active' : ''}`}
+            onClick={() => setSeccion('configuracion')}
+          >
+            ⚙️ Configuración
+          </button>
+        </nav>
+
+        {seccion === 'usuarios' ? (
+          <>
+            <section className="card-pad administracion-panel">
+              <header className="administracion-panel-head">
+                <h2>Control de roles</h2>
+                <p className="muted">
+                  Tu rol: <strong>{ETIQUETAS_ROL[miRol] ?? miRol}</strong>
+                </p>
+              </header>
+              <p className="muted administracion-panel-help">
+                Roles: <strong>ADMIN</strong> (acceso total), <strong>COORDINADOR</strong> (todos los módulos,
+                permisos limitados), <strong>TECNICO</strong> y <strong>OPERADOR</strong> (acceso reducido). Los
+                permisos detallados se configuran en la pestaña Configuración.
+              </p>
+            </section>
+
+            {loading ? (
+              <p className="muted center">Cargando usuarios…</p>
+            ) : usuarios.length === 0 ? (
+              <div className="empty-card">
+                <p>No se encontraron usuarios registrados.</p>
+              </div>
+            ) : (
+              <TablaScrollSuperior
+                ariaLabel="Usuarios y roles"
+                classNameWrap="cuentas-cliente-tabla-wrap administracion-tabla-wrap"
+                showHint={false}
+                syncDeps={[usuarios, loading, puedeCambiarRoles]}
+              >
+                <table className="cuentas-cliente-tabla administracion-tabla">
+                  <thead>
+                    <tr>
+                      <th>Correo</th>
+                      <th>Rol</th>
+                      <th>Creado</th>
+                      <th>Último acceso</th>
+                      {puedeCambiarRoles ? <th>Acciones</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usuarios.map((u) => (
+                      <tr key={u.user_id}>
+                        <td>{u.email}</td>
+                        <td>
+                          <select
+                            value={u.rol}
+                            onChange={(e) => void guardarRolUsuario(u.user_id, e.target.value)}
+                            disabled={guardandoId === u.user_id || !puedeCambiarRoles}
+                            className={`administracion-rol-select administracion-rol-select--${String(u.rol).toLowerCase()}`}
+                          >
+                            {ROLES_SISTEMA.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>{formatearFecha(u.created_at)}</td>
+                        <td>{formatearFecha(u.last_sign_in_at)}</td>
+                        {puedeCambiarRoles ? (
+                          <td>
+                            <button
+                              type="button"
+                              className="btn-icon danger administracion-btn-borrar-rol"
+                              onClick={() => intentarEliminar(() => void quitarRolUsuario(u.user_id))}
+                              disabled={guardandoId === u.user_id}
+                              title="Quitar rol personalizado (queda TECNICO)"
+                              aria-label={`Quitar rol de ${u.email}`}
+                            >
+                              🗑️ Quitar rol
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TablaScrollSuperior>
+            )}
+          </>
+        ) : (
+          <AdministracionConfiguracionPanel
+            supabase={supabase}
+            puedeConfigurar={puedeConfigurarPermisos}
+            onError={onError}
+            onNotice={onNotice}
+            onPermisosActualizados={onPermisosActualizados}
+          />
         )}
       </div>
     </div>

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { rangoFechasPermitidoUsuario } from './permisosUtils.js'
+import { MENSAJE_SIN_PERMISO_FECHAS, rangoFechasPermitidoUsuario } from './permisosUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
@@ -111,11 +111,12 @@ function esEntregada(rep) {
 /**
  * Reportes de reparaciones por periodo (fecha inicio / fin), resumen y lista, al estilo Android.
  */
-export default function ReportesModulo({ supabase, onHome, onError, onNotice, esAdmin = false }) {
-  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(esAdmin)
+export default function ReportesModulo({ supabase, onHome, onError, onNotice, puedeElegirRangoFechas = false }) {
+  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeElegirRangoFechas)
+  const avisarSinPermisoFecha = () => mostrarSinPermiso(MENSAJE_SIN_PERMISO_FECHAS)
 
   const [pantalla, setPantalla] = useState('fechas')
-  const [fechaInicio, setFechaInicio] = useState(() => (esAdmin ? ymdInicioMes() : ymdHoy()))
+  const [fechaInicio, setFechaInicio] = useState(() => (puedeElegirRangoFechas ? ymdInicioMes() : ymdHoy()))
   const [fechaFin, setFechaFin] = useState(ymdHoy)
   const [estatusSeleccionados, setEstatusSeleccionados] = useState(() => crearSetEstatusTodos())
   const [estadisticasDesdeReporte, setEstadisticasDesdeReporte] = useState(false)
@@ -166,11 +167,11 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, es
   }, [cargarClientes])
 
   useEffect(() => {
-    if (esAdmin) return
+    if (puedeElegirRangoFechas) return
     const hoy = ymdHoy()
     setFechaInicio(hoy)
     setFechaFin(hoy)
-  }, [esAdmin])
+  }, [puedeElegirRangoFechas])
 
   const cargarEquipos = useCallback(async () => {
     try {
@@ -319,7 +320,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, es
 
   function validarFiltros() {
     const hoy = ymdHoy()
-    const { ini, fin } = rangoFechasPermitidoUsuario(esAdmin, fechaInicio.trim(), fechaFin.trim(), hoy)
+    const { ini, fin } = rangoFechasPermitidoUsuario(puedeElegirRangoFechas, fechaInicio.trim(), fechaFin.trim(), hoy)
     if (!ini || !fin) {
       onError?.('Indique fecha inicio y fecha fin')
       return null
@@ -434,7 +435,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, es
     setBusqueda('')
     setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_CANONICOS))
     clearModoFecha()
-    if (!esAdmin) {
+    if (!puedeElegirRangoFechas) {
       const hoy = ymdHoy()
       setFechaInicio(hoy)
       setFechaFin(hoy)
@@ -460,8 +461,8 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, es
     busqueda,
     onBusqueda: setBusqueda,
     rangoInvalido,
-    puedeCambiarFechas: esAdmin,
-    onIntentoSinPermisoFecha: mostrarSinPermiso,
+    puedeCambiarFechas: puedeElegirRangoFechas,
+    onIntentoSinPermisoFecha: avisarSinPermisoFecha,
   }
 
   if (pantalla === 'estadisticas') {

@@ -18,8 +18,11 @@ export function usePermisoEliminar(puedeEliminar = true) {
 
   const mostrarSinPermiso = useCallback((mensaje = MENSAJE_SIN_PERMISO_ELIMINAR) => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    setAlertaPermiso(mensaje)
-    timerRef.current = setTimeout(() => setAlertaPermiso(''), 4500)
+    setAlertaPermiso('')
+    timerRef.current = setTimeout(() => {
+      setAlertaPermiso(mensaje)
+      timerRef.current = setTimeout(() => setAlertaPermiso(''), 5000)
+    }, 20)
   }, [])
 
   /** Ejecuta `accion` solo si el usuario puede eliminar; si no, muestra alerta. */

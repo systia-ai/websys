@@ -1,8 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
+import FechaInputPermiso from './FechaInputPermiso.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { rangoFechasPermitidoUsuario } from './permisosUtils.js'
+import { MENSAJE_SIN_PERMISO_FECHAS, rangoFechasPermitidoUsuario } from './permisosUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   aplicarFiltroPagosPorFechas,
@@ -74,8 +75,15 @@ function emojiFormaPago(forma) {
  * Corte de caja: primero fechas inicio/fin (como Android), luego resumen y movimientos de pagos
  * (`pagosclientes` o, si existe, `pagocliente`).
  */
-export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, esAdmin = false }) {
-  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(esAdmin)
+export default function CorteCajaModulo({
+  supabase,
+  onHome,
+  onError,
+  onNotice,
+  puedeElegirRangoFechas = false,
+}) {
+  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeElegirRangoFechas)
+  const avisarSinPermisoFecha = () => mostrarSinPermiso(MENSAJE_SIN_PERMISO_FECHAS)
   const cuentasPorIdRef = useRef(new Map())
 
   const [pantalla, setPantalla] = useState('fechas')
@@ -114,11 +122,11 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, e
   }, [cargarClientes])
 
   useEffect(() => {
-    if (esAdmin) return
+    if (puedeElegirRangoFechas) return
     const hoy = ymdHoy()
     setFechaInicio(hoy)
     setFechaFin(hoy)
-  }, [esAdmin])
+  }, [puedeElegirRangoFechas])
 
   const ejecutarConsulta = useCallback(
     async (ini, fin) => {
@@ -172,16 +180,16 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, e
   )
 
   function cambiarFechaInicio(valor) {
-    if (!esAdmin) {
-      mostrarSinPermiso()
+    if (!puedeElegirRangoFechas) {
+      avisarSinPermisoFecha()
       return
     }
     setFechaInicio(valor)
   }
 
   function cambiarFechaFin(valor) {
-    if (!esAdmin) {
-      mostrarSinPermiso()
+    if (!puedeElegirRangoFechas) {
+      avisarSinPermisoFecha()
       return
     }
     setFechaFin(valor)
@@ -189,7 +197,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, e
 
   async function onConsultarCorte() {
     const hoy = ymdHoy()
-    const { ini, fin } = rangoFechasPermitidoUsuario(esAdmin, fechaInicio.trim(), fechaFin.trim(), hoy)
+    const { ini, fin } = rangoFechasPermitidoUsuario(puedeElegirRangoFechas, fechaInicio.trim(), fechaFin.trim(), hoy)
     if (!ini || !fin) {
       onError?.('Indique fecha inicio y fecha fin')
       return
@@ -251,7 +259,7 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, e
     setAvisoPagosSinFecha(0)
     setBusqueda('')
     setDesglosePorCuenta(new Map())
-    if (!esAdmin) {
+    if (!puedeElegirRangoFechas) {
       const hoy = ymdHoy()
       setFechaInicio(hoy)
       setFechaFin(hoy)
@@ -373,35 +381,29 @@ export default function CorteCajaModulo({ supabase, onHome, onError, onNotice, e
                 <span className="corte-caja-fecha-label">
                   <span aria-hidden="true">🗓️</span> Fecha inicio
                 </span>
-                <div className="corte-caja-fecha-input-wrap">
-                  <input
-                    type="date"
-                    value={fechaInicio}
-                    min={esAdmin ? undefined : fechaInicio || undefined}
-                    max={esAdmin ? fechaFin || undefined : fechaInicio || undefined}
-                    readOnly={!esAdmin}
-                    onClick={!esAdmin ? mostrarSinPermiso : undefined}
-                    onFocus={!esAdmin ? mostrarSinPermiso : undefined}
-                    onChange={(e) => cambiarFechaInicio(e.target.value)}
-                  />
-                </div>
+                <FechaInputPermiso
+                  value={fechaInicio}
+                  min={puedeElegirRangoFechas ? undefined : fechaInicio || undefined}
+                  max={puedeElegirRangoFechas ? fechaFin || undefined : fechaInicio || undefined}
+                  puedeEditar={puedeElegirRangoFechas}
+                  onChange={(e) => cambiarFechaInicio(e.target.value)}
+                  onSinPermiso={avisarSinPermisoFecha}
+                  ariaLabel="Fecha inicio"
+                />
               </label>
               <label className="corte-caja-fecha-campo">
                 <span className="corte-caja-fecha-label">
                   <span aria-hidden="true">📆</span> Fecha fin
                 </span>
-                <div className="corte-caja-fecha-input-wrap">
-                  <input
-                    type="date"
-                    value={fechaFin}
-                    min={esAdmin ? fechaInicio || undefined : fechaFin || undefined}
-                    max={esAdmin ? undefined : fechaFin || undefined}
-                    readOnly={!esAdmin}
-                    onClick={!esAdmin ? mostrarSinPermiso : undefined}
-                    onFocus={!esAdmin ? mostrarSinPermiso : undefined}
-                    onChange={(e) => cambiarFechaFin(e.target.value)}
-                  />
-                </div>
+                <FechaInputPermiso
+                  value={fechaFin}
+                  min={puedeElegirRangoFechas ? fechaInicio || undefined : fechaFin || undefined}
+                  max={puedeElegirRangoFechas ? undefined : fechaFin || undefined}
+                  puedeEditar={puedeElegirRangoFechas}
+                  onChange={(e) => cambiarFechaFin(e.target.value)}
+                  onSinPermiso={avisarSinPermisoFecha}
+                  ariaLabel="Fecha fin"
+                />
               </label>
             </div>
             <button
