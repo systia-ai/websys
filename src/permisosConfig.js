@@ -39,7 +39,7 @@ export const GRUPOS_PERMISOS = [
     id: 'acciones',
     titulo: 'Permisos de acción',
     permisos: [
-      { clave: 'accion.eliminar', etiqueta: 'Eliminar registros' },
+      { clave: 'accion.eliminar', etiqueta: 'Eliminar (órdenes, cuentas, líneas, productos, etc.)' },
       { clave: 'accion.cambiar_roles', etiqueta: 'Asignar roles a usuarios' },
       { clave: 'accion.configurar_permisos', etiqueta: 'Configurar permisos por rol' },
       { clave: 'accion.reportes_fechas', etiqueta: 'Reportes: elegir rango de fechas' },
@@ -79,6 +79,7 @@ export function mapaDesdeListaParcial(parcial = {}) {
 /** Permisos por defecto al crear / restablecer un rol (ADMIN siempre todo en runtime). */
 export const PERMISOS_DEFECTO_POR_ROL = {
   ADMIN: mapaPermisosTodosActivos(),
+  /** Mismos módulos que ADMIN; puede operar el sistema pero no eliminar ni gestionar roles/permisos. */
   COORDINADOR: mapaDesdeListaParcial({
     'modulo.clientes': true,
     'modulo.servicios': true,
@@ -93,21 +94,38 @@ export const PERMISOS_DEFECTO_POR_ROL = {
     'accion.corte_fechas': true,
     'accion.liquidar_cuentas': true,
     'accion.gestion_tecnicos': true,
+    'accion.eliminar': false,
+    'accion.cambiar_roles': false,
+    'accion.configurar_permisos': false,
   }),
   TECNICO: mapaDesdeListaParcial({
     'modulo.clientes': true,
     'modulo.servicios': true,
     'modulo.reparaciones': true,
     'modulo.monitor_ordenes': true,
+    'accion.eliminar': false,
+    'accion.cambiar_roles': false,
+    'accion.configurar_permisos': false,
+    'accion.reportes_fechas': false,
+    'accion.corte_fechas': false,
+    'accion.liquidar_cuentas': false,
     'accion.gestion_tecnicos': false,
   }),
+  /** Corte del día (sin elegir otras fechas), ventas y monitor. */
   OPERADOR: mapaDesdeListaParcial({
     'modulo.clientes': true,
     'modulo.servicios': true,
     'modulo.reparaciones': true,
     'modulo.catalogo_pagos': true,
+    'modulo.corte_caja': true,
     'modulo.monitor_ordenes': true,
     'accion.liquidar_cuentas': true,
+    'accion.eliminar': false,
+    'accion.cambiar_roles': false,
+    'accion.configurar_permisos': false,
+    'accion.reportes_fechas': false,
+    'accion.corte_fechas': false,
+    'accion.gestion_tecnicos': false,
   }),
 }
 

@@ -169,9 +169,10 @@ export default function AdministracionModulo({
                 </p>
               </header>
               <p className="muted administracion-panel-help">
-                Roles: <strong>ADMIN</strong> (acceso total), <strong>COORDINADOR</strong> (todos los módulos,
-                permisos limitados), <strong>TECNICO</strong> y <strong>OPERADOR</strong> (acceso reducido). Los
-                permisos detallados se configuran en la pestaña Configuración.
+                Roles: <strong>ADMIN</strong> (acceso total, incluye eliminar),{' '}
+                <strong>COORDINADOR</strong> (todos los módulos como admin, sin eliminar registros ni cambiar
+                roles/permisos), <strong>TECNICO</strong> y <strong>OPERADOR</strong> (acceso reducido). Los permisos
+                detallados se configuran en la pestaña Configuración.
               </p>
             </section>
 
