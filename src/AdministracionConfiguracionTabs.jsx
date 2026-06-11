@@ -4,7 +4,8 @@ import AdministracionAppConfigPanel from './AdministracionAppConfigPanel.jsx'
 
 export default function AdministracionConfiguracionTabs({
   supabase,
-  puedeConfigurar = false,
+  puedeConfigurarPermisos = false,
+  puedeConfigurarSistema = false,
   onError,
   onNotice,
   onPermisosActualizados,
@@ -21,29 +22,31 @@ export default function AdministracionConfiguracionTabs({
         >
           🔐 Permisos por rol
         </button>
-        <button
-          type="button"
-          className={`administracion-config-subtab${subTab === 'sistema' ? ' administracion-config-subtab--active' : ''}`}
-          onClick={() => setSubTab('sistema')}
-        >
-          🎨 Configuración del sistema
-        </button>
+        {puedeConfigurarSistema ? (
+          <button
+            type="button"
+            className={`administracion-config-subtab${subTab === 'sistema' ? ' administracion-config-subtab--active' : ''}`}
+            onClick={() => setSubTab('sistema')}
+          >
+            🎨 Configuración del sistema
+          </button>
+        ) : null}
       </nav>
 
-      {subTab === 'permisos' ? (
+      {subTab === 'sistema' && puedeConfigurarSistema ? (
+        <AdministracionAppConfigPanel
+          supabase={supabase}
+          puedeConfigurar={puedeConfigurarSistema}
+          onError={onError}
+          onNotice={onNotice}
+        />
+      ) : (
         <AdministracionConfiguracionPanel
           supabase={supabase}
-          puedeConfigurar={puedeConfigurar}
+          puedeConfigurar={puedeConfigurarPermisos}
           onError={onError}
           onNotice={onNotice}
           onPermisosActualizados={onPermisosActualizados}
-        />
-      ) : (
-        <AdministracionAppConfigPanel
-          supabase={supabase}
-          puedeConfigurar={puedeConfigurar}
-          onError={onError}
-          onNotice={onNotice}
         />
       )}
     </div>

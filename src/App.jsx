@@ -16,6 +16,7 @@ import HomeModuleIcon from './HomeModuleIcon.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import {
+  esRolAdmin,
   puedeAccederModulo,
   permisosEfectivosRol,
   rolDesdeFilaUserRoles,
@@ -166,6 +167,7 @@ function App() {
   const puedeEliminar = tienePermiso(permisosUsuario, 'accion.eliminar')
   const puedeCambiarRoles = tienePermiso(permisosUsuario, 'accion.cambiar_roles')
   const puedeConfigurarPermisos = tienePermiso(permisosUsuario, 'accion.configurar_permisos')
+  const puedeConfigurarSistema = esRolAdmin(rolUsuario)
   const puedeReportesFechas = tienePermiso(permisosUsuario, 'accion.reportes_fechas')
   const puedeCorteFechas = tienePermiso(permisosUsuario, 'accion.corte_fechas')
   const puedeGestionarTecnicos = tienePermiso(permisosUsuario, 'accion.gestion_tecnicos')
@@ -657,6 +659,7 @@ function App() {
           miRol={rolUsuario}
           puedeCambiarRoles={puedeCambiarRoles}
           puedeConfigurarPermisos={puedeConfigurarPermisos}
+          puedeConfigurarSistema={puedeConfigurarSistema}
           onPermisosActualizados={() => void recargarPermisosRoles()}
           onError={(msg) => {
             setError(msg)

@@ -26,6 +26,7 @@ export default function AdministracionModulo({
   miRol = 'ADMIN',
   puedeCambiarRoles = false,
   puedeConfigurarPermisos = false,
+  puedeConfigurarSistema = false,
   onPermisosActualizados,
 }) {
   const [seccion, setSeccion] = useState('usuarios')
@@ -243,7 +244,8 @@ export default function AdministracionModulo({
         ) : (
           <AdministracionConfiguracionTabs
             supabase={supabase}
-            puedeConfigurar={puedeConfigurarPermisos}
+            puedeConfigurarPermisos={puedeConfigurarPermisos}
+            puedeConfigurarSistema={puedeConfigurarSistema}
             onError={onError}
             onNotice={onNotice}
             onPermisosActualizados={onPermisosActualizados}

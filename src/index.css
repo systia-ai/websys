@@ -8711,8 +8711,57 @@ input.full {
   border: 1px solid #e3f2fd;
   min-height: 80px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+
+.admin-app-config-imagen-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.admin-app-config-imagen-badge--defecto {
+  background: #f5f5f5;
+  color: #757575;
+}
+
+.admin-app-config-imagen-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-app-config-quitar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 2px solid #ef5350;
+  background: #fff;
+  color: #c62828;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.admin-app-config-quitar-btn:hover:not(:disabled) {
+  background: #ffebee;
+}
+
+.admin-app-config-quitar-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .admin-app-config-imagen-preview img {

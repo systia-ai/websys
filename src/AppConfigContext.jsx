@@ -10,6 +10,7 @@ import {
 } from './appConfig.js'
 import {
   cargarAppConfigServidor,
+  eliminarImagenBranding,
   guardarAppConfigServidor,
   restablecerAppConfigServidor,
   subirImagenBranding,
@@ -76,7 +77,17 @@ export function AppConfigProvider({ children }) {
         tipo === 'logo' ? 'logoUrl' : tipo === 'banner' ? 'bannerUrl' : 'loginLogoUrl'
       return guardar({ [campo]: url })
     },
-    [guardar],
+    [guardar, supabase],
+  )
+
+  const eliminarImagen = useCallback(
+    async (tipo) => {
+      await eliminarImagenBranding(supabase, tipo)
+      const campo =
+        tipo === 'logo' ? 'logoUrl' : tipo === 'banner' ? 'bannerUrl' : 'loginLogoUrl'
+      return guardar({ [campo]: null })
+    },
+    [guardar, supabase],
   )
 
   const restablecer = useCallback(async () => {
@@ -99,12 +110,13 @@ export function AppConfigProvider({ children }) {
       recargar,
       guardar,
       subirImagen,
+      eliminarImagen,
       restablecer,
       logoUrl: urlLogoEfectiva(config),
       bannerUrl: urlBannerEfectiva(config),
       loginLogoUrl: urlLoginLogoEfectiva(config),
     }),
-    [config, ready, guardando, recargar, guardar, subirImagen, restablecer],
+    [config, ready, guardando, recargar, guardar, subirImagen, eliminarImagen, restablecer],
   )
 
   return <AppConfigContext.Provider value={value}>{children}</AppConfigContext.Provider>

@@ -79,6 +79,18 @@ export async function subirImagenBranding(supabase, file, tipo) {
   return `${data.publicUrl}?v=${Date.now()}`
 }
 
+/**
+ * Quita una imagen personalizada del storage (si aplica) y devuelve null para la URL.
+ * @param {'logo'|'banner'|'login_logo'} tipo
+ */
+export async function eliminarImagenBranding(supabase, tipo) {
+  if (supabase) {
+    const posibles = [`${tipo}.jpg`, `${tipo}.jpeg`, `${tipo}.png`]
+    await supabase.storage.from('branding').remove(posibles)
+  }
+  return null
+}
+
 export async function restablecerAppConfigServidor(supabase) {
   return guardarAppConfigServidor(supabase, { ...APP_CONFIG_DEFECTO })
 }

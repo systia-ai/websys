@@ -12,24 +12,17 @@ export function useAuth() {
   return ctx
 }
 
-function LoginAvatar({ letra, logoUrl }) {
-  if (logoUrl) {
-    return (
-      <div className="auth-login-logo-wrap">
-        <img src={logoUrl} alt="" className="auth-login-logo-img" />
-      </div>
-    )
-  }
+function LoginAvatar() {
   return (
     <div className="auth-login-avatar" aria-hidden>
       <span className="auth-login-avatar-orbit" />
-      <span className="auth-login-avatar-s">{letra}</span>
+      <span className="auth-login-avatar-s">S</span>
     </div>
   )
 }
 
 function LoginScreen({ supabase, onSignedIn }) {
-  const { config, loginLogoUrl } = useAppConfig()
+  const { config } = useAppConfig()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -70,7 +63,7 @@ function LoginScreen({ supabase, onSignedIn }) {
       <div className="home-page-bg" aria-hidden />
       <div className="auth-login-inner home-page-inner">
       <div className="auth-login-card">
-        <LoginAvatar letra={config.loginAvatarLetra} logoUrl={loginLogoUrl} />
+        <LoginAvatar />
         <h1 className="auth-login-title">{config.loginTitulo}</h1>
         <p className="auth-login-sub">{config.loginSubtitulo}</p>
         <form className="auth-login-form" onSubmit={handleSubmit}>

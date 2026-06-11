@@ -46,7 +46,18 @@ function CampoColor({ label, value, onChange, disabled }) {
   )
 }
 
-function BloqueImagen({ titulo, descripcion, previewUrl, onFile, disabled, subiendo }) {
+function BloqueImagen({
+  titulo,
+  descripcion,
+  previewUrl,
+  imagenPersonalizada = false,
+  onFile,
+  onQuitar,
+  disabled,
+  subiendo,
+  quitando,
+}) {
+  const ocupado = subiendo || quitando
   return (
     <div className="admin-app-config-imagen">
       <div className="admin-app-config-imagen-head">
@@ -56,21 +67,40 @@ function BloqueImagen({ titulo, descripcion, previewUrl, onFile, disabled, subie
       {previewUrl ? (
         <div className="admin-app-config-imagen-preview">
           <img src={previewUrl} alt="" />
+          {imagenPersonalizada ? (
+            <span className="admin-app-config-imagen-badge">Personalizada</span>
+          ) : (
+            <span className="admin-app-config-imagen-badge admin-app-config-imagen-badge--defecto">
+              Predeterminada
+            </span>
+          )}
         </div>
       ) : null}
-      <label className="admin-app-config-upload-btn">
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/jpg"
-          disabled={disabled || subiendo}
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            e.target.value = ''
-            if (f) onFile(f)
-          }}
-        />
-        {subiendo ? '⏳ Subiendo…' : '📁 Cargar JPG o PNG (máx. 2 MB)'}
-      </label>
+      <div className="admin-app-config-imagen-acciones">
+        <label className="admin-app-config-upload-btn">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/jpg"
+            disabled={disabled || ocupado}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) onFile(f)
+            }}
+          />
+          {subiendo ? '⏳ Subiendo…' : '📁 Cargar JPG o PNG (máx. 2 MB)'}
+        </label>
+        {imagenPersonalizada ? (
+          <button
+            type="button"
+            className="admin-app-config-quitar-btn"
+            disabled={disabled || ocupado}
+            onClick={() => onQuitar?.()}
+          >
+            {quitando ? '⏳ Quitando…' : '🗑 Quitar imagen cargada'}
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -81,10 +111,11 @@ export default function AdministracionAppConfigPanel({
   onError,
   onNotice,
 }) {
-  const { config, logoUrl, bannerUrl, loginLogoUrl, guardar, subirImagen, restablecer, guardando } =
+  const { config, logoUrl, bannerUrl, loginLogoUrl, guardar, subirImagen, eliminarImagen, restablecer, guardando } =
     useAppConfig()
   const [borrador, setBorrador] = useState({ ...config })
   const [subiendo, setSubiendo] = useState(null)
+  const [quitando, setQuitando] = useState(null)
 
   useEffect(() => {
     setBorrador({ ...config })
@@ -132,6 +163,20 @@ export default function AdministracionAppConfigPanel({
     }
   }
 
+  async function manejarQuitarImagen(tipo, etiqueta) {
+    if (!puedeConfigurar) return
+    if (!confirm(`¿Quitar la imagen personalizada de «${etiqueta}» y volver al predeterminado?`)) return
+    setQuitando(tipo)
+    try {
+      await eliminarImagen(tipo)
+      onNotice?.('Imagen eliminada.')
+    } catch (e) {
+      onError?.(`Error al quitar imagen: ${e.message}`)
+    } finally {
+      setQuitando(null)
+    }
+  }
+
   async function restablecerTodo() {
     if (!puedeConfigurar) return
     if (!confirm('¿Restablecer logo, colores, textos y banner a los valores Sistefix por defecto?')) return
@@ -157,7 +202,7 @@ export default function AdministracionAppConfigPanel({
 
       {!puedeConfigurar ? (
         <p className="administracion-config-solo-lectura" role="status">
-          Solo lectura: su rol no puede modificar la configuración del sistema.
+          Solo el rol <strong>ADMIN</strong> puede modificar colores, textos, logo y banner del sistema.
         </p>
       ) : null}
 
@@ -319,25 +364,34 @@ export default function AdministracionAppConfigPanel({
             titulo="Logo de inicio"
             descripcion="Aparece en la cabecera del menú principal (como el logo Sistebit)."
             previewUrl={logoUrl}
+            imagenPersonalizada={Boolean(config.logoUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'logo'}
+            quitando={quitando === 'logo'}
             onFile={(f) => void manejarImagen(f, 'logo')}
+            onQuitar={() => void manejarQuitarImagen('logo', 'Logo de inicio')}
           />
           <BloqueImagen
             titulo="Banner de fondo"
             descripcion="Imagen de fondo del inicio y del login (taller, marca, etc.)."
             previewUrl={bannerUrl}
+            imagenPersonalizada={Boolean(config.bannerUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'banner'}
+            quitando={quitando === 'banner'}
             onFile={(f) => void manejarImagen(f, 'banner')}
+            onQuitar={() => void manejarQuitarImagen('banner', 'Banner de fondo')}
           />
           <BloqueImagen
             titulo="Logo en login (opcional)"
             descripcion="Si no sube uno, se usa el logo de inicio o la letra del avatar."
             previewUrl={loginLogoUrl}
+            imagenPersonalizada={Boolean(config.loginLogoUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'login_logo'}
+            quitando={quitando === 'login_logo'}
             onFile={(f) => void manejarImagen(f, 'login_logo')}
+            onQuitar={() => void manejarQuitarImagen('login_logo', 'Logo en login')}
           />
         </div>
       </div>
