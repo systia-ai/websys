@@ -300,6 +300,7 @@ export default function VentasCuentaScreen({
     context?.reparacionOrdenId != null ? String(context.reparacionOrdenId) : '',
   )
   const [vinculandoOrden, setVinculandoOrden] = useState(false)
+  const [imprimiendoRecibo, setImprimiendoRecibo] = useState(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
 
@@ -1251,24 +1252,46 @@ export default function VentasCuentaScreen({
   }
 
   async function enviarComprobante() {
-    if (!cliente.telefono?.trim()) {
-      onError?.('El teléfono del cliente es requerido para el comprobante')
+    if (!esCuentaExistente) {
+      onError?.('Cree o abra una cuenta antes de imprimir el recibo.')
       return
     }
+    if (loading) {
+      onNotice?.('Espere a que termine de cargar la cuenta.')
+      return
+    }
+    if (imprimiendoRecibo) return
+
+    setImprimiendoRecibo(true)
     try {
       const { printReciboCuentaPdf, RECIBO_PRINT_HINT } = await import('./reciboCuentaPdf.js')
+      const totalPdf = Number.isFinite(visiblesCuenta.totalDisplay)
+        ? visiblesCuenta.totalDisplay
+        : totalCargos
+      const saldoPdf = Number.isFinite(visiblesCuenta.saldoDisplay)
+        ? visiblesCuenta.saldoDisplay
+        : balanceNeto
       await printReciboCuentaPdf({
-        cliente: { nombre: cliente.nombre, telefono: cliente.telefono },
-        orden: reciboOrdenEquipo?.orden ?? reparaIdCuenta ?? null,
+        cliente: { nombre: cliente.nombre || 'Cliente', telefono: cliente.telefono || '' },
+        orden: reciboOrdenEquipo?.orden ?? reparaIdCuenta ?? ordenVinculadaId ?? null,
         descripcionEquipo: reciboOrdenEquipo?.descripcionEquipo ?? '',
-        total: totalCargos.toFixed(2),
-        saldo: balanceNeto.toFixed(2),
+        total: totalPdf,
+        saldo: saldoPdf,
         estatus: cuentaEstatus || '—',
         lineas,
       })
       onNotice?.(RECIBO_PRINT_HINT)
     } catch (e) {
-      onError?.(`No se pudo imprimir el recibo: ${e?.message ?? e}`)
+      const msg = String(e?.message ?? e)
+      if (/popup|bloque/i.test(msg)) {
+        onError?.('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes e intente de nuevo.')
+      } else if (/tiempo de espera/i.test(msg)) {
+        onError?.('El recibo tardó en cargar. Intente de nuevo o use otro navegador (Chrome o Edge).')
+      } else {
+        onError?.(`No se pudo imprimir el recibo: ${msg}`)
+      }
+    } finally {
+      setImprimiendoRecibo(false)
     }
   }
 
@@ -1493,8 +1516,20 @@ export default function VentasCuentaScreen({
               📱 NOTIFICAR AL CLIENTE
             </button>
           ) : null}
-          <button type="button" className="btn-comprobante-ventas" onClick={enviarComprobante}>
-            📧 IMPRIMIR RECIBO
+          <button
+            type="button"
+            className="btn-comprobante-ventas"
+            disabled={!esCuentaExistente || loading || imprimiendoRecibo}
+            onClick={() => void enviarComprobante()}
+            title={
+              !esCuentaExistente
+                ? 'Cree la cuenta antes de imprimir el recibo'
+                : loading
+                  ? 'Cargando movimientos de la cuenta…'
+                  : 'Abrir el comprobante en el diálogo de impresión'
+            }
+          >
+            {imprimiendoRecibo ? 'Preparando recibo…' : '📧 IMPRIMIR RECIBO'}
           </button>
           <button type="button" className="btn-salir-ventas" onClick={onSalir}>
             ❌ SALIR

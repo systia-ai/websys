@@ -217,6 +217,7 @@ export function drawSistebitWordArtLogo(pdf, centerX, yTop, scale = 1) {
  * @returns {number} altura del recuadro en mm
  */
 export function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
+  const ancho = Math.max(8, Number(w) || 8)
   const val = dashIfEmpty(value)
   const padX = opts.padX ?? (opts.compact ? 2.5 : 3)
   const labelBand = opts.compact ? 4.6 : 5.2
@@ -225,17 +226,17 @@ export function drawCampo(pdf, label, value, x, y, w, minH, theme, opts = {}) {
 
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(valueFontSize)
-  const valLines = pdf.splitTextToSize(val, w - padX * 2)
+  const valLines = pdf.splitTextToSize(val, ancho - padX * 2)
   const lineH = opts.compact ? 3.9 : 4.4
   const h = Math.max(minH, labelBand + 3.5 + valLines.length * lineH)
 
   pdf.setFillColor(210, 218, 226)
-  pdf.roundedRect(x + 0.45, y + 0.45, w, h, 2.8, 2.8, 'F')
+  pdf.roundedRect(x + 0.45, y + 0.45, ancho, h, 2.8, 2.8, 'F')
 
   pdf.setFillColor(...theme.fill)
   pdf.setDrawColor(...theme.border)
   pdf.setLineWidth(0.65)
-  pdf.roundedRect(x, y, w, h, 2.8, 2.8, 'FD')
+  pdf.roundedRect(x, y, ancho, h, 2.8, 2.8, 'FD')
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(labelFontSize)
@@ -430,6 +431,7 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = f
  */
 export function printSistebitPdfDocument(pdf, opts = {}) {
   const timeoutMsg = opts.timeoutMsg ?? 'Tiempo de espera al cargar el documento para imprimir.'
+  const timeoutMs = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 15000
   const iframeTitle = opts.iframeTitle ?? 'Imprimir documento'
   const url = pdf.output('bloburl')
 
@@ -452,7 +454,7 @@ export function printSistebitPdfDocument(pdf, opts = {}) {
 
     const timer = window.setTimeout(() => {
       terminar(false, new Error(timeoutMsg))
-    }, 15000)
+    }, timeoutMs)
 
     const printWin = window.open(url, '_blank', 'noopener,noreferrer')
     if (printWin) {

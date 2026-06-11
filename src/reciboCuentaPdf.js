@@ -41,16 +41,29 @@ const COLS = {
 
 const CAMPO_RECIBO = { compact: true, valueFontSize: 8 }
 
+function montoLineaRecibo(raw) {
+  const v = Number(raw)
+  return Number.isFinite(v) ? v : 0
+}
+
 function mapLineaRecibo(L) {
   const esPago = L.tipo === 'pago'
+  const precio = montoLineaRecibo(L.precioUnitario)
+  const subtotal = montoLineaRecibo(L.subtotal)
+  const cantRaw = montoLineaRecibo(L.cantidad)
   return {
-    cant: esPago ? -Math.abs(Number(L.cantidad)) : Number(L.cantidad),
-    descripcion: String(L.descripcion ?? ''),
-    fecha: esPago ? (L.fechaPago ?? '—') : '—',
-    precio: `$${Number(L.precioUnitario).toFixed(2)}`,
-    subtotal: `$${Number(L.subtotal).toFixed(2)}`,
+    cant: esPago ? -Math.abs(cantRaw || 1) : cantRaw,
+    descripcion: String(L.descripcion ?? L.concepto ?? 'Sin descripción'),
+    fecha: esPago ? String(L.fechaPago ?? '—') : '—',
+    precio: formatMontoRecibo(precio),
+    subtotal: formatMontoRecibo(subtotal),
     esPago,
   }
+}
+
+/** Normaliza líneas de la cuenta antes de generar el PDF. */
+export function prepararLineasReciboPdf(lineas) {
+  return (lineas ?? []).map(mapLineaRecibo)
 }
 
 function measureLeyendaReciboHeight(pdf, contentW) {
@@ -113,7 +126,7 @@ function drawFilaClienteOrdenEquipo(pdf, p, x, y, totalW) {
     const sum2 = widths.reduce((s, w) => s + w, 0)
     if (sum2 > totalW - gapsTotal) {
       const extra = (sum2 - (totalW - gapsTotal)) / blocks.length
-      widths = widths.map((w) => w - extra)
+      widths = widths.map((w, i) => Math.max(blocks[i].min ?? 8, w - extra))
     }
   }
 
@@ -195,7 +208,7 @@ function drawPieRecibo(pdf, y, contentW, centerX) {
 }
 
 function anchosTabla(contentW) {
-  const wDesc = contentW - COLS.cant - COLS.fecha - COLS.precio - COLS.subtotal
+  const wDesc = Math.max(24, contentW - COLS.cant - COLS.fecha - COLS.precio - COLS.subtotal)
   return { wDesc, ...COLS }
 }
 
@@ -365,6 +378,7 @@ export function createReciboCuentaPdf(p) {
 export async function printReciboCuentaPdf(p) {
   const pdf = createReciboCuentaPdf(p)
   return printSistebitPdfDocument(pdf, {
+    timeoutMs: 25000,
     timeoutMsg: 'Tiempo de espera al cargar el recibo para imprimir.',
     iframeTitle: 'Imprimir comprobante — Carta vertical, media hoja arriba',
   })
