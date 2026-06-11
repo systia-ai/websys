@@ -13,10 +13,14 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --app-color-bg: #0f172a;
-  --app-color-text: #e2e8f0;
+  --app-color-text: #ffffff;
   --app-color-surface: #1e293b;
-  --app-color-muted: #94a3b8;
+  --app-color-surface-2: #334155;
+  --app-color-muted: #e2e8f0;
+  --app-color-border: #475569;
+  --app-color-input-bg: #0f172a;
 }
 
 body {
@@ -196,28 +200,48 @@ body {
 }
 
 :root[data-theme='dark'] .header.home-header h1 {
-  color: #93c5fd;
+  color: #ffffff;
 }
 
 :root[data-theme='dark'] .header.home-header p {
-  color: var(--app-color-muted);
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .home-header-user {
+  color: #ffffff;
+  background: #334155;
+  border-color: #64748b;
 }
 
 :root[data-theme='dark'] .home-header-signout {
   background: #334155;
-  border-color: #475569;
-  color: #e2e8f0;
+  border-color: #64748b;
+  color: #ffffff;
 }
 
-:root[data-theme='dark'] .module,
-:root[data-theme='dark'] .card,
-:root[data-theme='dark'] .card-pad {
-  background: var(--app-color-surface);
-  color: var(--app-color-text);
+:root[data-theme='dark'] .home-menu-card {
+  background: #1e293b;
+  border-color: #334155;
 }
 
-:root[data-theme='dark'] .servicios-appbar {
-  background: linear-gradient(180deg, #1e3a5f 0%, #0f172a 100%);
+:root[data-theme='dark'] .home-menu-card-title {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .home-menu-card-icon {
+  background-color: #334155;
+  color: #ffffff;
+}
+
+@media (hover: hover) {
+  :root[data-theme='dark'] .home-menu-card:hover {
+    background-color: #334155;
+    border-color: #64748b;
+  }
+
+  :root[data-theme='dark'] .home-menu-card:hover .home-menu-card-icon {
+    background-color: #475569;
+  }
 }
 
 .home-header-brand {
@@ -8773,4 +8797,586 @@ input.full {
   max-height: 100%;
   object-fit: contain;
   border-radius: 12px;
+}
+
+/* —— Modo oscuro: texto blanco legible en toda la app —— */
+:root[data-theme='dark'] .module,
+:root[data-theme='dark'] .card,
+:root[data-theme='dark'] .card-pad,
+:root[data-theme='dark'] .empty-card {
+  background: var(--app-color-surface);
+  color: #ffffff;
+  border-color: var(--app-color-border);
+}
+
+:root[data-theme='dark'] .servicios-root {
+  background: var(--app-color-bg);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .servicios-body {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .servicios-appbar {
+  background: linear-gradient(180deg, #1e3a5f 0%, #0f172a 100%);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .servicios-appbar-title,
+:root[data-theme='dark'] .servicios-appbar h1 {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .muted,
+:root[data-theme='dark'] .muted.small,
+:root[data-theme='dark'] .muted.tiny {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] :is(
+    .module,
+    .servicios-body,
+    .card-pad,
+    .administracion-body,
+    .corte-caja-body,
+    .reportes-body
+  )
+  :is(h1, h2, h3, h4, h5, h6, p, label, legend, dt, dd, li, td, th, strong, em) {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] :is(
+    .corte-caja-hero-titulo,
+    .corte-caja-fecha-label,
+    .corte-caja-resumen-titulo,
+    .administracion-panel-head h2,
+    .administracion-config-grupo-titulo,
+    .admin-app-config-seccion-titulo,
+    .admin-app-config-label,
+    .monitor-ordenes-legend,
+    .monitor-ordenes-tile-label,
+    .monitor-ordenes-filtros-grupo-titulo,
+    .reportes-filtros-card .corte-caja-hero-titulo
+  ) {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] input:not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']),
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea {
+  background: var(--app-color-input-bg);
+  color: #ffffff;
+  border-color: var(--app-color-border);
+}
+
+:root[data-theme='dark'] input::placeholder,
+:root[data-theme='dark'] textarea::placeholder {
+  color: #94a3b8;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla,
+:root[data-theme='dark'] .administracion-tabla {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla th {
+  background: var(--app-color-surface-2) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla td {
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+  background: transparent;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla tbody tr {
+  background: var(--app-color-surface) !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla tbody tr:nth-child(even) {
+  background: #243044 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla tbody tr:hover,
+:root[data-theme='dark'] .cuentas-cliente-tabla-fila--clic:hover {
+  background: var(--app-color-surface-2) !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla-orden {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla-fecha--entrega {
+  color: #a5d6a7 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-estatus-pill {
+  background: var(--app-color-surface-2);
+  border-color: var(--app-color-border);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .corte-caja-hero-card,
+:root[data-theme='dark'] .corte-caja-fecha-input-wrap,
+:root[data-theme='dark'] .admin-app-config-imagen,
+:root[data-theme='dark'] .admin-app-config-vista-previa {
+  background: #1e293b;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .corte-caja-fecha-input-wrap input {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .administracion-config-label,
+:root[data-theme='dark'] .administracion-config-item span {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .administracion-config-subtab {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+:root[data-theme='dark'] .administracion-config-subtab--active {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .admin-app-config-campo input,
+:root[data-theme='dark'] .admin-app-config-campo textarea {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+:root[data-theme='dark'] a:not(.home-photo-credit a) {
+  color: #93c5fd;
+}
+
+:root[data-theme='dark'] .error {
+  color: #ffcdd2;
+}
+
+:root[data-theme='dark'] .ok {
+  color: #a5d6a7;
+}
+
+:root[data-theme='dark'] .warning,
+:root[data-theme='dark'] .warn-inline {
+  color: #ffe082;
+}
+
+/* Superficies claras → oscuras (tarjetas, listas, paneles) */
+:root[data-theme='dark'] :is(
+    .equipo-card,
+    .inventario-card,
+    .servicios-search,
+    .cuenta-tarjeta-android,
+    .cliente-card-row,
+    .clientes-lista-item,
+    .orden-resultado-card,
+    .orden-busqueda-card,
+    .corte-caja-hero-card,
+    .corte-caja-resumen,
+    .corte-caja-periodo-banner,
+    .corte-caja-stat,
+    .reportes-resumen,
+    .reportes-filtros-card,
+    .monitor-ordenes-tile,
+    .monitor-ordenes-fieldset,
+    .catalogo-pagos-card,
+    .ventas-cuenta-panel,
+    .ventas-linea-card,
+    .rep-orden-card,
+    .rep-orden-fechas-hitos-banner,
+    .rep-orden-fechas-entrega-banner,
+    .inventario-emoji-field,
+    .inventarios-stock-bajo-aviso,
+    .modal,
+    .modal-alerta,
+    .empty-card,
+    .toolbar,
+    .search
+  ) {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='dark'] .equipo-card-main,
+:root[data-theme='dark'] .inventario-card-main {
+  background: transparent;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .equipo-card-main strong,
+:root[data-theme='dark'] .inventario-card-main strong,
+:root[data-theme='dark'] .inventario-card-texto strong {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .servicios-search {
+  background: var(--app-color-surface) !important;
+}
+
+:root[data-theme='dark'] .servicios-search input {
+  background: transparent;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .search-ico {
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-vista-btn {
+  background: var(--app-color-surface-2) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-vista-btn--active {
+  background: #475569 !important;
+  color: #ffffff !important;
+  border-color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-vista-btn:hover {
+  background: #475569 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .monitor-ordenes-tile--active {
+  background: #475569 !important;
+  border-color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .monitor-ordenes-tile-label,
+:root[data-theme='dark'] .monitor-ordenes-tile .monitor-ordenes-filtros-grupo-titulo,
+:root[data-theme='dark'] .monitor-ordenes-check-text {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .inventarios-lista-tabla th {
+  background: var(--app-color-surface-2);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .inventarios-lista-tabla td {
+  color: #ffffff;
+  border-color: var(--app-color-border);
+}
+
+:root[data-theme='dark'] .inventarios-lista-tabla-fila--clic:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='dark'] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+:root[data-theme='dark'] .modal-header,
+:root[data-theme='dark'] .modal-body,
+:root[data-theme='dark'] .modal-footer {
+  background: var(--app-color-surface);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .modal-header h3 {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .form-stack label {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .inventarios-stock-bajo-minimo {
+  color: #1f2937;
+}
+
+:root[data-theme='dark'] .btn-icon.edit {
+  background: #334155;
+  color: #90caf9;
+}
+
+:root[data-theme='dark'] .btn-icon.edit:hover {
+  background: #475569;
+}
+
+:root[data-theme='dark'] .btn-icon.danger,
+:root[data-theme='dark'] .administracion-btn-borrar-rol {
+  background: #7f1d1d !important;
+  color: #fecaca !important;
+}
+
+:root[data-theme='dark'] .btn-icon.danger:hover {
+  background: #991b1b !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .icon-back,
+:root[data-theme='dark'] .appbar-text-btn {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .corte-caja-stat .label,
+:root[data-theme='dark'] .corte-caja-stat strong {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] li.equipo-card:has(button.equipo-card-main:hover),
+:root[data-theme='dark'] li.equipo-card:has(button.equipo-card-main:focus-visible) {
+  background: var(--app-color-surface-2) !important;
+}
+
+:root[data-theme='dark'] button.equipo-card-main:hover strong,
+:root[data-theme='dark'] button.equipo-card-main:focus-visible strong {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] button.equipo-card-main:hover .muted,
+:root[data-theme='dark'] button.equipo-card-main:focus-visible .muted {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] :is(
+    .ventas-cliente-card,
+    .ventas-cuenta-recuadro,
+    .ventas-seccion,
+    .ventas-cuenta-resumen,
+    .ventas-tabla-wrap,
+    .ventas-tabla-head,
+    .ventas-tabla-lista li,
+    .orden-busqueda-input-wrap,
+    .inventario-vista-bar,
+    .inventario-vista-btn,
+    .cliente-card-row button
+  ) {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .inventario-vista-btn.activo {
+  background: #475569 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .ventas-seccion-titulo,
+:root[data-theme='dark'] .ventas-cliente-nombre,
+:root[data-theme='dark'] .orden-busqueda-titulo,
+:root[data-theme='dark'] .orden-busqueda-campo-label {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .orden-busqueda-input-wrap input {
+  background: transparent;
+  color: #ffffff;
+}
+
+/* —— Modo oscuro: administración, tabs y paneles globales —— */
+:root[data-theme='dark'] :is(
+    .administracion-panel,
+    .administracion-config-panel,
+    .administracion-config-grupo,
+    .administracion-config-defecto,
+    .administracion-tabla-wrap,
+    .tabla-scroll-wrap,
+    .inventario-vista-bar,
+    .cliente-pick-list li,
+    .rep-orden-panel,
+    .rep-bitacora-panel,
+    .wa-menu-body,
+    .ventas-producto-panel
+  ) {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .administracion-seccion-btn {
+  background: var(--app-color-surface-2) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .administracion-seccion-btn--active {
+  background: var(--app-color-primary) !important;
+  border-color: var(--app-color-primary-dark) !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .administracion-config-rol-tab {
+  background: var(--app-color-surface-2) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .administracion-config-rol-tab--active,
+:root[data-theme='dark'] .administracion-config-rol-tab--coordinador.administracion-config-rol-tab--active,
+:root[data-theme='dark'] .administracion-config-rol-tab--tecnico.administracion-config-rol-tab--active,
+:root[data-theme='dark'] .administracion-config-rol-tab--operador.administracion-config-rol-tab--active {
+  background: var(--app-color-primary) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-primary-dark) !important;
+}
+
+:root[data-theme='dark'] .administracion-rol-select {
+  background: var(--app-color-input-bg) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .administracion-rol-select--admin {
+  background: #1b3d24 !important;
+  color: #a5d6a7 !important;
+  border-color: #4caf50 !important;
+}
+
+:root[data-theme='dark'] .administracion-rol-select--coordinador {
+  background: #1e3a5f !important;
+  color: #90caf9 !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .administracion-rol-select--tecnico {
+  background: #4a3520 !important;
+  color: #ffcc80 !important;
+  border-color: #ffb74d !important;
+}
+
+:root[data-theme='dark'] .administracion-rol-select--operador {
+  background: #3d2a4a !important;
+  color: #e1bee7 !important;
+  border-color: #ba68c8 !important;
+}
+
+:root[data-theme='dark'] .administracion-config-solo-lectura {
+  background: #4a3f1f !important;
+  border-color: #ffb74d !important;
+  color: #ffe082 !important;
+}
+
+:root[data-theme='dark'] .administracion-panel-head h2,
+:root[data-theme='dark'] .administracion-panel-help,
+:root[data-theme='dark'] .administracion-panel-help strong {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .servicios-root .card-pad:not(.servicios-search) {
+  background: var(--app-color-surface);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] select option {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .btn-secondary {
+  background: var(--app-color-surface-2);
+  color: #ffffff;
+  border: 1px solid var(--app-color-border);
+}
+
+:root[data-theme='dark'] .btn-secondary:hover:not(:disabled) {
+  background: #475569;
+}
+
+:root[data-theme='dark'] .btn-primary {
+  background: var(--app-color-primary);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .modal-footer button.danger {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .home-header-role {
+  font-weight: 800;
+}
+
+:root[data-theme='dark'] .home-header-role--admin {
+  background: #1b3d24 !important;
+  color: #a5d6a7 !important;
+  border-color: #4caf50 !important;
+}
+
+:root[data-theme='dark'] .home-header-role--coordinador {
+  background: #1e3a5f !important;
+  color: #90caf9 !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .home-header-role--tecnico {
+  background: #4a3520 !important;
+  color: #ffcc80 !important;
+  border-color: #ffb74d !important;
+}
+
+:root[data-theme='dark'] .home-header-role--operador {
+  background: #3d2a4a !important;
+  color: #e1bee7 !important;
+  border-color: #ba68c8 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla-wrap {
+  background: var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+}
+
+/* Tablas en general (clientes, admin, monitor, etc.) */
+:root[data-theme='dark'] table {
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] table th {
+  background: var(--app-color-surface-2) !important;
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] table td {
+  color: #ffffff !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] table tbody tr {
+  background: var(--app-color-surface) !important;
+}
+
+:root[data-theme='dark'] table tbody tr:nth-child(even) {
+  background: #243044 !important;
+}
+
+:root[data-theme='dark'] table tbody tr:hover {
+  background: var(--app-color-surface-2) !important;
+}
+
+/* Paneles y tarjetas restantes con fondo claro */
+:root[data-theme='dark'] .servicios-body > :is(.card-pad, .empty-card, section, fieldset) {
+  background: var(--app-color-surface);
+  color: #ffffff;
+  border-color: var(--app-color-border);
+}
+
+:root[data-theme='dark'] details.administracion-config-defecto {
+  background: var(--app-color-surface);
+  color: #ffffff;
+  border: 1px solid var(--app-color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+:root[data-theme='dark'] details.administracion-config-defecto summary {
+  color: #ffffff;
+  cursor: pointer;
 }
