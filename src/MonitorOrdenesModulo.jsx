@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial reparaciones / catálogos */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
@@ -30,9 +30,7 @@ import {
   marcarVolverMonitorDesdeOrden,
 } from './monitorOrdenesFiltrosSesion.js'
 import {
-  AVISO_IDS,
   calcularAvisosMonitor,
-  MONITOR_AVISOS_DESDE_YMD,
   repCoincideAvisoMonitor,
 } from './monitorOrdenesAvisos.js'
 import MonitorOrdenesAvisosPanel from './MonitorOrdenesAvisosPanel.jsx'
@@ -248,6 +246,7 @@ export default function MonitorOrdenesModulo({
   const [nuevoTecnico, setNuevoTecnico] = useState('')
   const [avisosExpandido, setAvisosExpandido] = useState(false)
   const [filtroAvisoActivo, setFiltroAvisoActivo] = useState(null)
+  const filtrosAntesAvisoRef = useRef(null)
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -370,21 +369,64 @@ export default function MonitorOrdenesModulo({
 
   const avisosMonitor = useMemo(() => calcularAvisosMonitor(reparaciones), [reparaciones])
 
-  function aplicarFiltroAviso(avisoId) {
-    setFiltroAvisoActivo(avisoId)
-    setFechaDesde(MONITOR_AVISOS_DESDE_YMD)
-    setFechaHasta(ymdHoyLocal() ?? '')
-    setBusqueda('')
-    desactivarModosFechaEspeciales()
-    if (avisoId === AVISO_IDS.REPARADAS_SIN_VERIFICAR) {
-      setEstatusSeleccionados(new Set(['REPARADO', 'SIN REPARACION']))
-    } else {
-      setEstatusSeleccionados(new Set(ESTATUS_ORDEN_MONITOR))
+  function snapshotFiltrosActuales() {
+    return {
+      estatusSeleccionados: new Set(estatusSeleccionados),
+      tiposServicioSeleccionados: new Set(tiposServicioSeleccionados),
+      ordenFecha,
+      tecnicoFiltro,
+      fechaDesde,
+      fechaHasta,
+      filtroModoFechaIngreso,
+      filtroModoFechaEntrega,
+      filtroModoFechaReparado,
+      filtroModoVerificadas,
+      busqueda,
     }
   }
 
+  function restaurarFiltrosDesdeSnapshot(snap) {
+    if (!snap) return
+    setEstatusSeleccionados(new Set(snap.estatusSeleccionados))
+    setTiposServicioSeleccionados(new Set(snap.tiposServicioSeleccionados))
+    setOrdenFecha(snap.ordenFecha)
+    setTecnicoFiltro(snap.tecnicoFiltro)
+    setFechaDesde(snap.fechaDesde)
+    setFechaHasta(snap.fechaHasta)
+    setFiltroModoFechaIngreso(snap.filtroModoFechaIngreso)
+    setFiltroModoFechaEntrega(snap.filtroModoFechaEntrega)
+    setFiltroModoFechaReparado(snap.filtroModoFechaReparado)
+    setFiltroModoVerificadas(snap.filtroModoVerificadas)
+    setBusqueda(snap.busqueda)
+  }
+
+  function limpiarFiltrosExtrasParaAviso() {
+    setBusqueda('')
+    setTecnicoFiltro(TECNICO_TODAS)
+    setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_FILTRO))
+    setFechaDesde('')
+    setFechaHasta('')
+    desactivarModosFechaEspeciales()
+    setEstatusSeleccionados(new Set(ESTATUS_ORDEN_MONITOR))
+  }
+
+  function aplicarFiltroAviso(avisoId) {
+    if (filtroAvisoActivo === avisoId) {
+      quitarFiltroAviso()
+      return
+    }
+    if (!filtroAvisoActivo) {
+      filtrosAntesAvisoRef.current = snapshotFiltrosActuales()
+      limpiarFiltrosExtrasParaAviso()
+    }
+    setFiltroAvisoActivo(avisoId)
+  }
+
   function quitarFiltroAviso() {
+    const snap = filtrosAntesAvisoRef.current
+    filtrosAntesAvisoRef.current = null
     setFiltroAvisoActivo(null)
+    if (snap) restaurarFiltrosDesdeSnapshot(snap)
   }
 
   function rangoFechasInvalidoPar(desde, hasta) {
@@ -411,52 +453,55 @@ export default function MonitorOrdenesModulo({
   )
 
   const filasOrdenadas = useMemo(() => {
-    if (hayRangoFechaInvalido || modoFechaSinRango) return []
     const reparacionesMonitor = reparaciones.filter(ordenUsaSistemaWeb)
-    const diasExactos = parsearFiltroDiasExactos(busqueda)
-    const qTexto = String(busqueda ?? '').trim()
-    const busquedaLibreActiva = Boolean(qTexto) && diasExactos == null
 
     let filtradas
-    if (busquedaLibreActiva) {
-      filtradas = reparacionesMonitor.filter((r) =>
-        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
-      )
+    if (filtroAvisoActivo) {
+      filtradas = reparacionesMonitor.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
+    } else if (hayRangoFechaInvalido || modoFechaSinRango) {
+      return []
     } else {
-      const sel = estatusSeleccionados
-      const desde = String(fechaDesde ?? '').trim()
-      const hasta = String(fechaHasta ?? '').trim()
-      filtradas = reparacionesMonitor.filter((r) => {
-        const rid = String(r.id)
-        return repCoincideFiltroMonitor(r, {
-          estatusSeleccionados: sel,
-          desde,
-          hasta,
-          modoFecha: modoFechaActivo,
-          cuentaVinculada: cuentaPorReparaId.get(rid),
-          ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
-          estatusParaFiltroFn: estatusParaFiltro,
+      const diasExactos = parsearFiltroDiasExactos(busqueda)
+      const qTexto = String(busqueda ?? '').trim()
+      const busquedaLibreActiva = Boolean(qTexto) && diasExactos == null
+
+      if (busquedaLibreActiva) {
+        filtradas = reparacionesMonitor.filter((r) =>
+          repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
+        )
+      } else {
+        const sel = estatusSeleccionados
+        const desde = String(fechaDesde ?? '').trim()
+        const hasta = String(fechaHasta ?? '').trim()
+        filtradas = reparacionesMonitor.filter((r) => {
+          const rid = String(r.id)
+          return repCoincideFiltroMonitor(r, {
+            estatusSeleccionados: sel,
+            desde,
+            hasta,
+            modoFecha: modoFechaActivo,
+            cuentaVinculada: cuentaPorReparaId.get(rid),
+            ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
+            estatusParaFiltroFn: estatusParaFiltro,
+          })
         })
-      })
-      const tiposSel = tiposServicioSeleccionados
-      if (tiposSel.size === 0) {
-        filtradas = []
-      } else if (!todosTiposServicioSeleccionados(tiposSel)) {
-        filtradas = filtradas.filter((r) => {
-          const t = tipoServicioDeRep(r, equipoPorId)
-          return t != null && tiposSel.has(t)
-        })
-      }
-      if (tecnicoFiltro === TECNICO_SIN) {
-        filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
-      } else if (tecnicoFiltro !== TECNICO_TODAS) {
-        filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
-      }
-      if (diasExactos != null) {
-        filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
-      }
-      if (filtroAvisoActivo) {
-        filtradas = filtradas.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
+        const tiposSel = tiposServicioSeleccionados
+        if (tiposSel.size === 0) {
+          filtradas = []
+        } else if (!todosTiposServicioSeleccionados(tiposSel)) {
+          filtradas = filtradas.filter((r) => {
+            const t = tipoServicioDeRep(r, equipoPorId)
+            return t != null && tiposSel.has(t)
+          })
+        }
+        if (tecnicoFiltro === TECNICO_SIN) {
+          filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
+        } else if (tecnicoFiltro !== TECNICO_TODAS) {
+          filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
+        }
+        if (diasExactos != null) {
+          filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
+        }
       }
     }
     const conTiempo = filtradas.map((r) => {
@@ -646,18 +691,21 @@ export default function MonitorOrdenesModulo({
   }
 
   function persistirFiltrosParaVolver() {
+    const base = filtroAvisoActivo && filtrosAntesAvisoRef.current
+      ? filtrosAntesAvisoRef.current
+      : snapshotFiltrosActuales()
     guardarFiltrosMonitorSesion({
-      estatusSeleccionados: [...estatusSeleccionados],
-      tiposServicioSeleccionados: [...tiposServicioSeleccionados],
-      ordenFecha,
-      tecnicoFiltro,
-      fechaDesde,
-      fechaHasta,
-      filtroModoFechaIngreso,
-      filtroModoFechaEntrega,
-      filtroModoFechaReparado,
-      filtroModoVerificadas,
-      busqueda,
+      estatusSeleccionados: [...base.estatusSeleccionados],
+      tiposServicioSeleccionados: [...base.tiposServicioSeleccionados],
+      ordenFecha: base.ordenFecha,
+      tecnicoFiltro: base.tecnicoFiltro,
+      fechaDesde: base.fechaDesde,
+      fechaHasta: base.fechaHasta,
+      filtroModoFechaIngreso: base.filtroModoFechaIngreso,
+      filtroModoFechaEntrega: base.filtroModoFechaEntrega,
+      filtroModoFechaReparado: base.filtroModoFechaReparado,
+      filtroModoVerificadas: base.filtroModoVerificadas,
+      busqueda: base.busqueda,
     })
     marcarVolverMonitorDesdeOrden()
   }
@@ -814,7 +862,6 @@ export default function MonitorOrdenesModulo({
           onToggle={() => setAvisosExpandido((v) => !v)}
           filtroAvisoActivo={filtroAvisoActivo}
           onAvisoClick={aplicarFiltroAviso}
-          onQuitarFiltroAviso={quitarFiltroAviso}
           loading={loading}
         />
         <section className="monitor-ordenes-filtros card-pad">
@@ -876,9 +923,6 @@ export default function MonitorOrdenesModulo({
             >
               <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
               <span className="monitor-ordenes-filtros-grupo-titulo">Rango de fechas</span>
-              <p className="monitor-ordenes-rango-nota muted small">
-                Solo órdenes desde el 1° de mayo de 2026; fechas anteriores no se incluyen en los filtros.
-              </p>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha monitor-ordenes-tile-inner">
                   <span>Desde</span>

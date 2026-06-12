@@ -193,10 +193,6 @@ export default function AdministracionAppConfigPanel({
       <header className="administracion-panel-head">
         <div>
           <h2>Configuración del sistema</h2>
-          <p className="muted administracion-panel-help">
-            Personalice la apariencia para otra empresa: nombre, login, colores, logo y banner de inicio.
-            Los cambios se aplican a todos los usuarios.
-          </p>
         </div>
       </header>
 

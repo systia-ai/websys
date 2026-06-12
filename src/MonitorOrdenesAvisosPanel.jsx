@@ -1,14 +1,4 @@
-import { MONITOR_AVISOS_DESDE_YMD, totalAvisosMonitor } from './monitorOrdenesAvisos.js'
-
-function formatearDesdeLegible(ymd) {
-  const [y, m, d] = ymd.split('-').map(Number)
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymd
-  return new Date(y, m - 1, d).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
+import { totalAvisosMonitor } from './monitorOrdenesAvisos.js'
 
 /**
  * Panel desplegable de avisos al entrar al monitor de órdenes.
@@ -19,14 +9,15 @@ export default function MonitorOrdenesAvisosPanel({
   onToggle,
   filtroAvisoActivo = null,
   onAvisoClick,
-  onQuitarFiltroAviso,
   loading = false,
 }) {
   const total = totalAvisosMonitor(avisos)
-  const desdeLegible = formatearDesdeLegible(MONITOR_AVISOS_DESDE_YMD)
 
   return (
-    <section className="monitor-ordenes-avisos card-pad" aria-label="Avisos del taller">
+    <section
+      className={`monitor-ordenes-avisos card-pad${filtroAvisoActivo ? ' monitor-ordenes-avisos--filtrando' : ''}`}
+      aria-label="Avisos del taller"
+    >
       <button
         type="button"
         className="monitor-ordenes-avisos-toggle"
@@ -43,6 +34,8 @@ export default function MonitorOrdenesAvisosPanel({
         <span className="monitor-ordenes-avisos-resumen">
           {loading ? (
             'Calculando…'
+          ) : filtroAvisoActivo ? (
+            'Filtrando aviso'
           ) : total > 0 ? (
             <>
               <span className="monitor-ordenes-avisos-badge">{total}</span>
@@ -59,9 +52,6 @@ export default function MonitorOrdenesAvisosPanel({
 
       {expandido ? (
         <div id="monitor-ordenes-avisos-panel" className="monitor-ordenes-avisos-body">
-          <p className="monitor-ordenes-avisos-nota muted small">
-            Solo órdenes desde el {desdeLegible} (antes no había sistema).
-          </p>
           {loading ? (
             <p className="monitor-ordenes-avisos-vacio muted">Cargando avisos…</p>
           ) : avisos.length === 0 ? (
@@ -70,34 +60,33 @@ export default function MonitorOrdenesAvisosPanel({
             </p>
           ) : (
             <ul className="monitor-ordenes-avisos-lista">
-              {avisos.map((aviso) => (
-                <li key={aviso.id}>
-                  <button
-                    type="button"
-                    className={`monitor-ordenes-aviso-item monitor-ordenes-aviso-item--${aviso.variante}${
-                      filtroAvisoActivo === aviso.id ? ' monitor-ordenes-aviso-item--activo' : ''
-                    }`}
-                    onClick={() => onAvisoClick?.(aviso.id)}
-                    title="Ver estas órdenes en la tabla"
-                  >
-                    <span className="monitor-ordenes-aviso-texto">{aviso.mensaje}</span>
-                    <span className="monitor-ordenes-aviso-accion" aria-hidden="true">
-                      Ver →
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {avisos.map((aviso) => {
+                const activo = filtroAvisoActivo === aviso.id
+                return (
+                  <li key={aviso.id}>
+                    <button
+                      type="button"
+                      className={`monitor-ordenes-aviso-item monitor-ordenes-aviso-item--${aviso.variante}${
+                        activo ? ' monitor-ordenes-aviso-item--activo' : ''
+                      }`}
+                      onClick={() => onAvisoClick?.(aviso.id)}
+                      title={
+                        activo
+                          ? 'Quitar filtro y volver a los filtros normales'
+                          : 'Ver solo estas órdenes (se desactivan los demás filtros)'
+                      }
+                      aria-pressed={activo}
+                    >
+                      <span className="monitor-ordenes-aviso-texto">{aviso.mensaje}</span>
+                      <span className="monitor-ordenes-aviso-accion" aria-hidden="true">
+                        {activo ? '✕ Quitar' : 'Ver →'}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
-          {filtroAvisoActivo ? (
-            <button
-              type="button"
-              className="monitor-ordenes-avisos-quitar-filtro secondary"
-              onClick={onQuitarFiltroAviso}
-            >
-              Quitar filtro de aviso
-            </button>
-          ) : null}
         </div>
       ) : null}
     </section>

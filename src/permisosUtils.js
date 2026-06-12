@@ -6,6 +6,10 @@ export const MENSAJE_SIN_PERMISO_ELIMINAR =
 export const MENSAJE_SIN_PERMISO_FECHAS =
   'Su usuario no tiene permisos para cambiar el rango de fechas. Consulte con el administrador.'
 
+/** Mensaje al intentar crear usuarios sin ser administrador. */
+export const MENSAJE_SIN_PERMISO_CREAR_USUARIO =
+  'Su usuario no tiene permisos para crear usuarios. Consulte con el administrador.'
+
 export {
   esRolAdmin,
   normalizarRolSistema,

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { MENSAJE_SIN_PERMISO_CREAR_USUARIO } from './permisosUtils.js'
 import { ETIQUETAS_ROL, ROLES_SISTEMA } from './permisosConfig.js'
 import AdministracionConfiguracionTabs from './AdministracionConfiguracionTabs.jsx'
+import { crearUsuarioAdmin } from './adminUsuariosApi.js'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -33,6 +35,12 @@ export default function AdministracionModulo({
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [guardandoId, setGuardandoId] = useState(null)
+  const [creandoUsuario, setCreandoUsuario] = useState(false)
+  const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevoPassword, setNuevoPassword] = useState('')
+  const [nuevoPassword2, setNuevoPassword2] = useState('')
+  const [nuevoRol, setNuevoRol] = useState('TECNICO')
+  const [crearUsuarioExpandido, setCrearUsuarioExpandido] = useState(false)
   const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeCambiarRoles)
 
   const cargarUsuarios = useCallback(async () => {
@@ -91,6 +99,56 @@ export default function AdministracionModulo({
     } finally {
       setGuardandoId(null)
     }
+  }
+
+  async function crearNuevoUsuario(e) {
+    e.preventDefault()
+    if (!puedeCambiarRoles) {
+      mostrarSinPermiso(MENSAJE_SIN_PERMISO_CREAR_USUARIO)
+      return
+    }
+    const email = nuevoEmail.trim()
+    if (!email) {
+      onError?.('Ingrese el correo del nuevo usuario.')
+      return
+    }
+    if (nuevoPassword.length < 6) {
+      onError?.('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+    if (nuevoPassword !== nuevoPassword2) {
+      onError?.('Las contraseñas no coinciden.')
+      return
+    }
+    setCreandoUsuario(true)
+    try {
+      const result = await crearUsuarioAdmin(supabase, {
+        email,
+        password: nuevoPassword,
+        rol: nuevoRol,
+      })
+      if (!result.ok) {
+        onError?.(result.errorMsg)
+        return
+      }
+      setNuevoEmail('')
+      setNuevoPassword('')
+      setNuevoPassword2('')
+      setNuevoRol('TECNICO')
+      setCrearUsuarioExpandido(false)
+      onNotice?.(`Usuario ${email} creado con rol ${nuevoRol}.`)
+      await cargarUsuarios()
+    } finally {
+      setCreandoUsuario(false)
+    }
+  }
+
+  function toggleCrearUsuario() {
+    if (!puedeCambiarRoles) {
+      mostrarSinPermiso(MENSAJE_SIN_PERMISO_CREAR_USUARIO)
+      return
+    }
+    setCrearUsuarioExpandido((v) => !v)
   }
 
   async function quitarRolUsuario(userId) {
@@ -175,6 +233,96 @@ export default function AdministracionModulo({
                 roles/permisos), <strong>TECNICO</strong> y <strong>OPERADOR</strong> (acceso reducido). Los permisos
                 detallados se configuran en la pestaña Configuración.
               </p>
+            </section>
+
+            <section className="card-pad administracion-crear-usuario" aria-label="Crear nuevo usuario">
+              <button
+                type="button"
+                className="administracion-crear-usuario-toggle"
+                onClick={toggleCrearUsuario}
+                aria-expanded={crearUsuarioExpandido && puedeCambiarRoles}
+                aria-controls="administracion-crear-usuario-panel"
+              >
+                <span className="administracion-crear-usuario-toggle-titulo">
+                  <span className="administracion-crear-usuario-icon" aria-hidden="true">
+                    ➕
+                  </span>
+                  Crear nuevo usuario
+                </span>
+                <span className="administracion-crear-usuario-resumen muted">
+                  {puedeCambiarRoles ? 'Solo administrador' : 'Restringido'}
+                </span>
+                <span className="administracion-crear-usuario-chevron" aria-hidden="true">
+                  {crearUsuarioExpandido && puedeCambiarRoles ? '▲' : '▼'}
+                </span>
+              </button>
+
+              {crearUsuarioExpandido && puedeCambiarRoles ? (
+                <div id="administracion-crear-usuario-panel" className="administracion-crear-usuario-body">
+                  {!supabase ? (
+                    <p className="warn-inline">Sin Supabase no se pueden crear usuarios desde aquí.</p>
+                  ) : (
+                    <form className="administracion-crear-usuario-form" onSubmit={(e) => void crearNuevoUsuario(e)}>
+                      <label className="administracion-crear-usuario-campo">
+                        <span>Correo</span>
+                        <input
+                          type="email"
+                          value={nuevoEmail}
+                          onChange={(e) => setNuevoEmail(e.target.value)}
+                          placeholder="usuario@ejemplo.com"
+                          autoComplete="off"
+                          disabled={creandoUsuario}
+                          required
+                        />
+                      </label>
+                      <label className="administracion-crear-usuario-campo">
+                        <span>Contraseña</span>
+                        <input
+                          type="password"
+                          value={nuevoPassword}
+                          onChange={(e) => setNuevoPassword(e.target.value)}
+                          placeholder="Mínimo 6 caracteres"
+                          autoComplete="new-password"
+                          disabled={creandoUsuario}
+                          required
+                          minLength={6}
+                        />
+                      </label>
+                      <label className="administracion-crear-usuario-campo">
+                        <span>Confirmar contraseña</span>
+                        <input
+                          type="password"
+                          value={nuevoPassword2}
+                          onChange={(e) => setNuevoPassword2(e.target.value)}
+                          placeholder="Repita la contraseña"
+                          autoComplete="new-password"
+                          disabled={creandoUsuario}
+                          required
+                          minLength={6}
+                        />
+                      </label>
+                      <label className="administracion-crear-usuario-campo">
+                        <span>Rol inicial</span>
+                        <select
+                          value={nuevoRol}
+                          onChange={(e) => setNuevoRol(e.target.value)}
+                          disabled={creandoUsuario}
+                          className={`administracion-rol-select administracion-rol-select--${String(nuevoRol).toLowerCase()}`}
+                        >
+                          {ROLES_SISTEMA.map((r) => (
+                            <option key={r} value={r}>
+                              {ETIQUETAS_ROL[r] ?? r}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="submit" className="btn-primary" disabled={creandoUsuario}>
+                        {creandoUsuario ? 'Creando…' : '➕ Crear usuario'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : null}
             </section>
 
             {loading ? (

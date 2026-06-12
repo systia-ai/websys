@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.send-whatsapp-liquidacion]
 verify_jwt = false
+
+[functions.crear-usuario]
+verify_jwt = true
