@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect -- carga inicial de clientes */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { MENSAJE_SIN_PERMISO_FECHAS, rangoFechasPermitidoUsuario } from './permisosUtils.js'
@@ -104,6 +104,27 @@ function formatearFechaCorta(ymdStr) {
   return formatFechaLegibleEsMx(ymdStr, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function serializarEstadoReporte(estado) {
+  return {
+    pantalla: estado.pantalla,
+    fechaInicio: estado.fechaInicio,
+    fechaFin: estado.fechaFin,
+    estatusSeleccionados: [...(estado.estatusSeleccionados ?? [])],
+    estadisticasDesdeReporte: estado.estadisticasDesdeReporte,
+    periodoAplicado: estado.periodoAplicado,
+    estatusAplicado: estado.estatusAplicado,
+    sinColumnaFecha: estado.sinColumnaFecha,
+    duplicadasExcluidas: estado.duplicadasExcluidas,
+    reparaciones: estado.reparaciones ?? [],
+    pagosPeriodo: estado.pagosPeriodo ?? [],
+    busqueda: estado.busqueda ?? '',
+    tiposServicioSeleccionados: [...(estado.tiposServicioSeleccionados ?? TIPOS_SERVICIO_CANONICOS)],
+    filtroModoFechaIngreso: Boolean(estado.filtroModoFechaIngreso),
+    filtroModoFechaEntrega: Boolean(estado.filtroModoFechaEntrega),
+    vista: estado.vista === 'tabla' ? 'tabla' : 'lista',
+  }
+}
+
 function esEntregada(rep) {
   return /ENTREGAD/i.test(String(rep?.estatus ?? ''))
 }
@@ -111,7 +132,16 @@ function esEntregada(rep) {
 /**
  * Reportes de reparaciones por periodo (fecha inicio / fin), resumen y lista, al estilo Android.
  */
-export default function ReportesModulo({ supabase, onHome, onError, onNotice, puedeElegirRangoFechas = false }) {
+export default function ReportesModulo({
+  supabase,
+  onHome,
+  onError,
+  onNotice,
+  onAbrirOrden,
+  puedeElegirRangoFechas = false,
+  estadoRestaurar = null,
+  onEstadoRestaurado,
+}) {
   const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeElegirRangoFechas)
   const avisarSinPermisoFecha = () => mostrarSinPermiso(MENSAJE_SIN_PERMISO_FECHAS)
 
@@ -137,6 +167,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
   const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
   const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
   const [vista, setVista] = useState(leerVistaReportes)
+  const omitirResetFechasRef = useRef(false)
 
   function cambiarVista(modo) {
     setVista(modo)
@@ -144,6 +175,50 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
       localStorage.setItem(LS_VISTA_REPORTES, modo)
     } catch {
       /* ignore */
+    }
+  }
+
+  function abrirOrden(rep) {
+    if (!onAbrirOrden || rep?.id == null) return
+    const c = clientes.find((x) => sameId(x.id, rep.cliente_id)) ?? {}
+    const eq = equipos.find((x) => sameId(x.id, rep.equipo_id)) ?? {}
+    onAbrirOrden({
+      clienteId: rep.cliente_id ?? c.id ?? null,
+      clienteNombre: c.nombre ?? '',
+      clienteTelefono: c.telefono ?? '',
+      clienteDomicilio: c.domicilio ?? '',
+      clienteCorreo: c.correo ?? '',
+      equipoId: rep.equipo_id ?? eq.id ?? null,
+      equipoSerie: eq.serie ?? '',
+      equipoTipo: eq.tipo_equipo ?? '',
+      equipoDescripcion: rep.descripcion_equipo ?? eq.descripcion ?? '',
+      equipoTipoReparacion: rep.tipo_reparacion ?? eq.tipo_reparacion ?? '',
+      reparacionId: rep.id != null ? String(rep.id) : '',
+      returnToReportes: serializarEstadoReporte({
+        pantalla,
+        fechaInicio,
+        fechaFin,
+        estatusSeleccionados,
+        estadisticasDesdeReporte,
+        periodoAplicado,
+        estatusAplicado,
+        sinColumnaFecha,
+        duplicadasExcluidas,
+        reparaciones,
+        pagosPeriodo,
+        busqueda,
+        tiposServicioSeleccionados,
+        filtroModoFechaIngreso,
+        filtroModoFechaEntrega,
+        vista,
+      }),
+    })
+  }
+
+  function onOrdenKeyDown(e, rep) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      abrirOrden(rep)
     }
   }
 
@@ -167,7 +242,36 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
   }, [cargarClientes])
 
   useEffect(() => {
-    if (puedeElegirRangoFechas) return
+    if (!estadoRestaurar) return
+    setPantalla(estadoRestaurar.pantalla === 'estadisticas' ? 'estadisticas' : estadoRestaurar.pantalla === 'resultados' ? 'resultados' : 'fechas')
+    if (estadoRestaurar.fechaInicio) setFechaInicio(estadoRestaurar.fechaInicio)
+    if (estadoRestaurar.fechaFin) setFechaFin(estadoRestaurar.fechaFin)
+    if (Array.isArray(estadoRestaurar.estatusSeleccionados)) {
+      setEstatusSeleccionados(new Set(estadoRestaurar.estatusSeleccionados))
+    }
+    setEstadisticasDesdeReporte(Boolean(estadoRestaurar.estadisticasDesdeReporte))
+    setPeriodoAplicado(estadoRestaurar.periodoAplicado ?? null)
+    setEstatusAplicado(estadoRestaurar.estatusAplicado ?? '')
+    setSinColumnaFecha(Boolean(estadoRestaurar.sinColumnaFecha))
+    setDuplicadasExcluidas(Number(estadoRestaurar.duplicadasExcluidas ?? 0))
+    setReparaciones(Array.isArray(estadoRestaurar.reparaciones) ? estadoRestaurar.reparaciones : [])
+    setPagosPeriodo(Array.isArray(estadoRestaurar.pagosPeriodo) ? estadoRestaurar.pagosPeriodo : [])
+    setBusqueda(String(estadoRestaurar.busqueda ?? ''))
+    if (Array.isArray(estadoRestaurar.tiposServicioSeleccionados)) {
+      setTiposServicioSeleccionados(new Set(estadoRestaurar.tiposServicioSeleccionados))
+    }
+    setFiltroModoFechaIngreso(Boolean(estadoRestaurar.filtroModoFechaIngreso))
+    setFiltroModoFechaEntrega(Boolean(estadoRestaurar.filtroModoFechaEntrega))
+    if (estadoRestaurar.vista === 'tabla' || estadoRestaurar.vista === 'lista') {
+      setVista(estadoRestaurar.vista)
+    }
+    omitirResetFechasRef.current = true
+    onEstadoRestaurado?.()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- restauración única al volver desde orden
+  }, [estadoRestaurar])
+
+  useEffect(() => {
+    if (puedeElegirRangoFechas || omitirResetFechasRef.current) return
     const hoy = ymdHoy()
     setFechaInicio(hoy)
     setFechaFin(hoy)
@@ -762,8 +866,17 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
                 </div>
                 {filtrados.map((r) => {
                   const ymd = extractDateYmd(r)
+                  const puedeAbrir = Boolean(onAbrirOrden && r.id != null)
                   return (
-                    <div key={r.id} className="inventario-tabla-fila-grupo" role="row">
+                    <div
+                      key={r.id}
+                      className={`inventario-tabla-fila-grupo${puedeAbrir ? ' inventario-tabla-fila-grupo--clic reportes-tabla-fila--clic' : ''}`}
+                      role={puedeAbrir ? 'button' : 'row'}
+                      tabIndex={puedeAbrir ? 0 : undefined}
+                      title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
+                      onClick={puedeAbrir ? () => abrirOrden(r) : undefined}
+                      onKeyDown={puedeAbrir ? (e) => onOrdenKeyDown(e, r) : undefined}
+                    >
                       <div className="inventario-tabla-grupo-celdas">
                         <span className="inventario-celda inventario-celda--orden-rep">#{r.id}</span>
                         <span className="inventario-celda inventario-celda--cliente-corte">
@@ -794,9 +907,16 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
           <ul className="equipo-list inventario-list reportes-lista">
             {filtrados.map((r) => {
               const ymd = extractDateYmd(r)
+              const puedeAbrir = Boolean(onAbrirOrden && r.id != null)
               return (
-                <li key={r.id} className="equipo-card inventario-card reportes-card corte-caja-card--solo-lectura">
-                  <div className="equipo-card-main inventario-card-main reportes-fila">
+                <li key={r.id} className={`equipo-card inventario-card reportes-card${puedeAbrir ? ' reportes-card--clic' : ' corte-caja-card--solo-lectura'}`}>
+                  <button
+                    type="button"
+                    className={`equipo-card-main inventario-card-main reportes-fila${puedeAbrir ? ' reportes-fila--clic' : ''}`}
+                    disabled={!puedeAbrir}
+                    title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
+                    onClick={() => abrirOrden(r)}
+                  >
                     <strong>
                       <span aria-hidden="true">📋</span> Orden #{r.id}
                     </strong>
@@ -817,7 +937,7 @@ export default function ReportesModulo({ supabase, onHome, onError, onNotice, pu
                         </>
                       ) : null}
                     </span>
-                  </div>
+                  </button>
                 </li>
               )
             })}

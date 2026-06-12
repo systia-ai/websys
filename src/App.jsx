@@ -31,7 +31,7 @@ import HomeUserMenu from './HomeUserMenu.jsx'
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
   { key: 'servicios', title: 'Servicios (Equipos)', table: 'equipos', fields: ['serie', 'tipo_equipo', 'descripcion', 'tipo_reparacion', 'cliente_id'] },
-  { key: 'reparaciones', title: 'Orden de servicio', table: 'reparaciones', fields: ['equipo_id', 'cliente_id', 'tecnico', 'estatus', 'descripcion_equipo', 'problemas_reportados', 'niveles_tinta', 'descripcion_solucion', 'bitacora', 'verificado_entrega', 'fecha_verificacion_entrega', 'pago', 'costo_reparacion', 'tipo_reparacion'] },
+  { key: 'reparaciones', title: 'Orden de servicio', table: 'reparaciones', fields: ['equipo_id', 'cliente_id', 'tecnico', 'estatus', 'descripcion_equipo', 'problemas_reportados', 'niveles_tinta', 'descripcion_solucion', 'bitacora', 'verificado_entrega', 'fecha_verificacion_entrega', 'pago', 'costo_reparacion', 'tipo_reparacion', 'folio_epson'] },
 ]
 
 /** Tarjetas del inicio: módulos CRUD + pantallas dedicadas. */
@@ -70,6 +70,8 @@ function App() {
   const [serviciosRetornoReparaciones, setServiciosRetornoReparaciones] = useState(null)
   /** Al volver de Ventas → Monitor, reabrir modal Orden / Cuenta de la misma orden. */
   const [monitorRetornoVentas, setMonitorRetornoVentas] = useState(null)
+  /** Al volver de Orden de servicio → Reportes, restaurar el reporte generado. */
+  const [reportesRetornoEstado, setReportesRetornoEstado] = useState(null)
   const [rolUsuario, setRolUsuario] = useState('ADMIN')
   const [rolesReady, setRolesReady] = useState(false)
   const [permisosPorRol, setPermisosPorRol] = useState(null)
@@ -89,6 +91,10 @@ function App() {
 
   const limpiarRetornoVentasMonitor = useCallback(() => {
     setMonitorRetornoVentas(null)
+  }, [])
+
+  const limpiarRetornoReportes = useCallback(() => {
+    setReportesRetornoEstado(null)
   }, [])
   const activeModuleRef = useRef(activeModule)
   /** Historial de pantallas para «atrás» / salir (no siempre inicio). */
@@ -205,6 +211,7 @@ function App() {
       setClientesRetornoOrdenes(null)
       setServiciosRetornoReparaciones(null)
       setMonitorRetornoVentas(null)
+      setReportesRetornoEstado(null)
       limpiarFiltrosMonitorSesion()
       setActiveModule('home')
       setNotice('')
@@ -243,6 +250,7 @@ function App() {
     const target = nextStack[nextStack.length - 1] ?? 'home'
     if (leaving === 'reparaciones') setRepSession(null)
     if (leaving === 'monitor_ordenes') limpiarFiltrosMonitorSesion()
+    if (leaving === 'reportes') limpiarRetornoReportes()
     if (leaving === 'ventas') {
       const vctx = ventasContext
       setVentasContext(null)
@@ -285,6 +293,11 @@ function App() {
         openModalReparaciones: true,
         equipo: returnToServiciosEquipo,
       })
+      session = rest
+    }
+    if (raw && typeof raw === 'object' && raw.returnToReportes != null) {
+      const { returnToReportes, ...rest } = session
+      setReportesRetornoEstado(returnToReportes)
       session = rest
     }
     setRepSession({ ...session, _fromSearch: false })
@@ -609,6 +622,9 @@ function App() {
           supabase={supabase}
           puedeElegirRangoFechas={puedeReportesFechas}
           onHome={goBack}
+          estadoRestaurar={reportesRetornoEstado}
+          onEstadoRestaurado={limpiarRetornoReportes}
+          onAbrirOrden={(payload) => openReparacionesFromServicios(payload)}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)

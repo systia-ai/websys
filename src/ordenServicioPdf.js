@@ -252,6 +252,12 @@ function drawCamposOrden(pdf, p, x, y, width, maxY) {
   const tipoServ = servicio.tipoReparacion ?? servicio.tipo ?? p.tipoReparacion
   cy += drawFilaClienteOrdenFecha(pdf, cliente.nombre, orden, fecha, tipoServ, x, cy, width) + gap
 
+  const folioEpson = String(servicio.folioEpson ?? p.folioEpson ?? '').trim()
+  if (folioEpson) {
+    ensureSpace(11 + gap)
+    cy += drawCampo(pdf, 'Folio', folioEpson, x, cy, width, 9, TEMA.serie, COMPACT_CAMPO) + gap
+  }
+
   ensureSpace(11 + gap)
   cy += drawFilaSerieTipoDescripcion(pdf, equipo, x, cy, width) + gap
 

@@ -54,6 +54,7 @@ import {
   registrarOrdenCreadaEnSesion,
   claveCanonicaTipoServicio,
   esGarantiaSinCobroTipo,
+  esGarantiaEpsonTipo,
   etiquetaGarantiaSinCobro,
   TIPO_GARANTIA_EPSON,
   TIPO_GARANTIA_SISTEBIT,
@@ -221,6 +222,7 @@ export default function ReparacionesOrden({
   const [serieEquipo, setSerieEquipo] = useState(() => s.equipoSerie ?? '')
   const [tipoEquipo, setTipoEquipo] = useState(() => s.equipoTipo ?? '')
   const [tipoReparacion, setTipoReparacion] = useState(() => s.equipoTipoReparacion ?? '')
+  const [folioEpson, setFolioEpson] = useState('')
   const [estatus, setEstatus] = useState('INGRESADO')
   const [descripcionEquipo, setDescripcionEquipo] = useState(() => s.equipoDescripcion ?? '')
   const [problemasReportados, setProblemasReportados] = useState('')
@@ -331,11 +333,24 @@ export default function ReparacionesOrden({
     [tipoReparacion],
   )
 
+  const esGarantiaEpsonActiva = useMemo(
+    () => esGarantiaEpsonTipo(tipoReparacion),
+    [tipoReparacion],
+  )
+
+  function valorFolioEpsonGuardar() {
+    if (!esGarantiaEpsonActiva) return null
+    const t = String(folioEpson ?? '').trim()
+    return t ? t.toUpperCase() : null
+  }
+
   function marcarGarantiaSinCobro(tipoGarantia) {
     if (claveCanonicaTipoServicio(tipoReparacion) === tipoGarantia) {
       setTipoReparacion('')
+      if (tipoGarantia === TIPO_GARANTIA_EPSON) setFolioEpson('')
     } else {
       setTipoReparacion(tipoGarantia)
+      if (tipoGarantia !== TIPO_GARANTIA_EPSON) setFolioEpson('')
     }
   }
 
@@ -569,6 +584,7 @@ export default function ReparacionesOrden({
         data = await persistirFechasHitosFaltantesSupabase(supabase, data)
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
+        setFolioEpson(data.folio_epson ?? '')
         if (!estatusDirtyRef.current) {
           setEstatus(data.estatus ?? 'INGRESADO')
           estatusPersistidoRef.current = data.estatus ?? 'INGRESADO'
@@ -616,6 +632,7 @@ export default function ReparacionesOrden({
         }
         setNumeroOrden(String(data.id))
         setTipoReparacion(data.tipo_reparacion ?? '')
+        setFolioEpson(data.folio_epson ?? '')
         if (!estatusDirtyRef.current) {
           setEstatus(data.estatus ?? 'INGRESADO')
           estatusPersistidoRef.current = data.estatus ?? 'INGRESADO'
@@ -1007,6 +1024,7 @@ export default function ReparacionesOrden({
         updated_at: now,
         fecha_ingreso: ymdFechaEntregaParaGuardar(null),
         tipo_reparacion: tipoReparacion || null,
+        folio_epson: valorFolioEpsonGuardar(),
         ...patchFechasHitosEstatus(estatus, {
           fecha_ingreso: ymdFechaEntregaParaGuardar(null),
           fecha_creacion: now,
@@ -1414,6 +1432,7 @@ export default function ReparacionesOrden({
       descripcion_solucion: descripcionSolucion ? descripcionSolucion.toUpperCase() : null,
       bitacora: bitacoraGuardar,
       tipo_reparacion: tipoReparacion || null,
+      folio_epson: valorFolioEpsonGuardar(),
       niveles_tinta: niveles,
     }
     if (patch.fecha_entrega) {
@@ -1571,6 +1590,11 @@ export default function ReparacionesOrden({
           <p>
             <strong>Tipo de reparación:</strong> {tipoReparacion || '—'}
           </p>
+          {esGarantiaEpsonActiva ? (
+            <p>
+              <strong>Folio:</strong> {folioEpson.trim() || '— (vacío)'}
+            </p>
+          ) : null}
         </div>
         <div className="resumen-orden-grupo">
           <h4>{incluirNumeroOrden ? `📋 Orden #${idReparacion ?? numeroOrden ?? '—'}` : '📋 Orden'}</h4>
@@ -1795,6 +1819,7 @@ export default function ReparacionesOrden({
         },
         servicio: {
           tipoReparacion,
+          folioEpson: valorFolioEpsonGuardar(),
           estatus,
           tecnico: combinarTecnicos(tecnico1, tecnico2),
           problemas: problemasReportados,
@@ -2238,7 +2263,11 @@ export default function ReparacionesOrden({
             </button>
             <select
               value={tipoReparacion}
-              onChange={(e) => setTipoReparacion(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                setTipoReparacion(v)
+                if (!esGarantiaEpsonTipo(v)) setFolioEpson('')
+              }}
               aria-label="Tipo de reparación"
             >
               <option value="">Seleccionar tipo</option>
@@ -2257,6 +2286,20 @@ export default function ReparacionesOrden({
             </p>
           ) : null}
         </div>
+
+        {esGarantiaEpsonActiva ? (
+          <div className="rep-block rep-folio-epson-block highlight">
+            <label htmlFor="rep-folio-epson">Folio</label>
+            <input
+              id="rep-folio-epson"
+              type="text"
+              value={folioEpson}
+              onChange={(e) => setFolioEpson(e.target.value.toUpperCase())}
+              placeholder="Folio de garantía Epson"
+              autoComplete="off"
+            />
+          </div>
+        ) : null}
 
         <div className="rep-block highlight">
           <label>Problemas reportados</label>
@@ -2564,6 +2607,9 @@ export default function ReparacionesOrden({
           <span>Tel: {telClienteUi || '—'}</span>
           {domClienteUi ? <span>Dir: {domClienteUi}</span> : null}
           {correoClienteUi ? <span>Email: {correoClienteUi}</span> : null}
+          {esGarantiaEpsonActiva ? (
+            <span>Folio Epson: {folioEpson.trim() || '—'}</span>
+          ) : null}
         </div>
 
         {!cuentaOrden?.id && cuentasHuerfanasDetectadas.length > 0 && (esOrdenExistente || idReparacion != null) ? (
