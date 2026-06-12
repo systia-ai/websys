@@ -25,6 +25,8 @@ import {
 import { cargarPermisosRolesServidor } from './permisosRolesApi.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { limpiarFiltrosMonitorSesion } from './monitorOrdenesFiltrosSesion.js'
+import MiAparenciaModal from './MiAparenciaModal.jsx'
+import HomeUserMenu from './HomeUserMenu.jsx'
 
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
@@ -57,6 +59,7 @@ function App() {
   const [formData, setFormData] = useState({})
   const [editingId, setEditingId] = useState(null)
   const [notice, setNotice] = useState('')
+  const [miAparenciaAbierta, setMiAparenciaAbierta] = useState(false)
   /** Desde ClientesModulo → pantalla Cuentas (VentasScreen.kt). */
   const [ventasContext, setVentasContext] = useState(null)
   /** Al volver de Ventas → Clientes, reabrir el modal Servicio / Cuentas del mismo cliente. */
@@ -410,20 +413,12 @@ function App() {
               </div>
             </div>
             {requiresAuth && user ? (
-              <div className="home-header-session">
-                <span className="home-header-user" title={user.email}>
-                  <span className="home-header-user-emoji" aria-hidden="true">
-                    👤
-                  </span>
-                  <span className="home-header-user-email">{user.email}</span>
-                </span>
-                <span className={`home-header-role home-header-role--${String(rolUsuario).toLowerCase()}`}>
-                  Rol: {rolUsuario}
-                </span>
-                <button type="button" className="home-header-signout" onClick={() => signOut()}>
-                  Cerrar sesión
-                </button>
-              </div>
+              <HomeUserMenu
+                email={user.email}
+                rolUsuario={rolUsuario}
+                onMiAparencia={() => setMiAparenciaAbierta(true)}
+                onSignOut={() => signOut()}
+              />
             ) : null}
           </header>
           <section className="grid home-menu-grid">
@@ -453,6 +448,18 @@ function App() {
             )}
           </p>
         </div>
+        <MiAparenciaModal
+          open={miAparenciaAbierta}
+          onClose={() => setMiAparenciaAbierta(false)}
+          onNotice={(msg) => {
+            setNotice(msg)
+            setTimeout(() => setNotice(''), 4000)
+          }}
+          onError={(msg) => {
+            setError(msg)
+            setTimeout(() => setError(''), 6000)
+          }}
+        />
       </div>
     )
   }

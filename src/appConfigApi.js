@@ -2,7 +2,8 @@ import {
   APP_CONFIG_DEFECTO,
   guardarAppConfigLocal,
   leerAppConfigLocal,
-  normalizarAppConfig,
+  normalizarConfigBranding,
+  payloadBrandingParaGuardar,
 } from './appConfig.js'
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -27,30 +28,30 @@ function validarImagen(file) {
   }
 }
 
-/** Carga configuración de marca (Supabase o localStorage). */
+/** Carga configuración de marca global (Supabase o localStorage). */
 export async function cargarAppConfigServidor(supabase) {
   if (!supabase) {
-    return leerAppConfigLocal() ?? { ...APP_CONFIG_DEFECTO }
+    return leerAppConfigLocal() ?? normalizarConfigBranding(APP_CONFIG_DEFECTO)
   }
   try {
     const { data, error } = await supabase.rpc('obtener_app_config')
     if (error) throw error
-    return normalizarAppConfig(data ?? {})
+    return normalizarConfigBranding(data ?? {})
   } catch {
     const local = leerAppConfigLocal()
-    return local ?? { ...APP_CONFIG_DEFECTO }
+    return local ?? normalizarConfigBranding(APP_CONFIG_DEFECTO)
   }
 }
 
-export async function guardarAppConfigServidor(supabase, config) {
-  const payload = normalizarAppConfig(config)
+export async function guardarAppConfigServidor(supabase, branding) {
+  const payload = payloadBrandingParaGuardar(branding)
   if (!supabase) {
     guardarAppConfigLocal(payload)
     return payload
   }
   const { data, error } = await supabase.rpc('guardar_app_config', { p_config: payload })
   if (error) throw error
-  const guardado = normalizarAppConfig(data ?? payload)
+  const guardado = normalizarConfigBranding(data ?? payload)
   guardarAppConfigLocal(guardado)
   return guardado
 }
@@ -92,5 +93,5 @@ export async function eliminarImagenBranding(supabase, tipo) {
 }
 
 export async function restablecerAppConfigServidor(supabase) {
-  return guardarAppConfigServidor(supabase, { ...APP_CONFIG_DEFECTO })
+  return guardarAppConfigServidor(supabase, normalizarConfigBranding(APP_CONFIG_DEFECTO))
 }

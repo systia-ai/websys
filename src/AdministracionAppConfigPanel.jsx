@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { APP_CONFIG_DEFECTO, aplicarAppConfigEnDom } from './appConfig.js'
+import { aplicarAppConfigEnDom, brandingTieneCambios, fusionarConfigConPreferencias } from './appConfig.js'
 import { useAppConfig } from './AppConfigContext.jsx'
 
 function CampoTexto({ label, value, onChange, disabled, multiline = false, hint }) {
@@ -17,31 +17,6 @@ function CampoTexto({ label, value, onChange, disabled, multiline = false, hint 
         <input type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
       )}
       {hint ? <span className="admin-app-config-hint muted small">{hint}</span> : null}
-    </label>
-  )
-}
-
-function CampoColor({ label, value, onChange, disabled }) {
-  return (
-    <label className="admin-app-config-campo admin-app-config-campo--color">
-      <span className="admin-app-config-label">{label}</span>
-      <div className="admin-app-config-color-row">
-        <input
-          type="color"
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`${label} selector`}
-        />
-        <input
-          type="text"
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          pattern="#[0-9a-fA-F]{6}"
-          spellCheck={false}
-        />
-      </div>
     </label>
   )
 }
@@ -111,39 +86,34 @@ export default function AdministracionAppConfigPanel({
   onError,
   onNotice,
 }) {
-  const { config, logoUrl, bannerUrl, loginLogoUrl, guardar, subirImagen, eliminarImagen, restablecer, guardando } =
+  const { configBranding, preferenciasUsuario, logoUrl, bannerUrl, loginLogoUrl, guardarBranding, subirImagen, eliminarImagen, restablecerBranding, guardando } =
     useAppConfig()
-  const [borrador, setBorrador] = useState({ ...config })
+  const [borrador, setBorrador] = useState({ ...configBranding })
   const [subiendo, setSubiendo] = useState(null)
   const [quitando, setQuitando] = useState(null)
 
   useEffect(() => {
-    setBorrador({ ...config })
-  }, [config])
+    setBorrador({ ...configBranding })
+  }, [configBranding])
 
   useEffect(() => {
-    aplicarAppConfigEnDom(borrador)
-  }, [borrador])
+    aplicarAppConfigEnDom(fusionarConfigConPreferencias(borrador, preferenciasUsuario))
+  }, [borrador, preferenciasUsuario])
 
   useEffect(() => {
-    return () => aplicarAppConfigEnDom(config)
-  }, [config])
+    return () => aplicarAppConfigEnDom(fusionarConfigConPreferencias(configBranding, preferenciasUsuario))
+  }, [configBranding, preferenciasUsuario])
 
-  const hayCambios = useMemo(() => {
-    return Object.keys(APP_CONFIG_DEFECTO).some((k) => {
-      if (k.endsWith('Url')) return false
-      return borrador[k] !== config[k]
-    })
-  }, [borrador, config])
+  const hayCambios = useMemo(() => brandingTieneCambios(borrador, configBranding), [borrador, configBranding])
 
   function patch(cambios) {
     setBorrador((prev) => ({ ...prev, ...cambios }))
   }
 
-  async function guardarTextosYColores() {
+  async function guardarTextosEImagenes() {
     if (!puedeConfigurar) return
     try {
-      await guardar(borrador)
+      await guardarBranding(borrador)
       onNotice?.('Configuración del sistema guardada.')
     } catch (e) {
       onError?.(`No se pudo guardar: ${e.message}`)
@@ -179,9 +149,9 @@ export default function AdministracionAppConfigPanel({
 
   async function restablecerTodo() {
     if (!puedeConfigurar) return
-    if (!confirm('¿Restablecer logo, colores, textos y banner a los valores Sistefix por defecto?')) return
+    if (!confirm('¿Restablecer textos, logo y banner a los valores Sistefix por defecto?')) return
     try {
-      await restablecer()
+      await restablecerBranding()
       onNotice?.('Configuración restablecida.')
     } catch (e) {
       onError?.(`No se pudo restablecer: ${e.message}`)
@@ -198,7 +168,8 @@ export default function AdministracionAppConfigPanel({
 
       {!puedeConfigurar ? (
         <p className="administracion-config-solo-lectura" role="status">
-          Solo el rol <strong>ADMIN</strong> puede modificar colores, textos, logo y banner del sistema.
+          Solo el rol <strong>ADMIN</strong> puede modificar textos, logo y banner del sistema. Cada usuario
+          configura modo oscuro y colores en <strong>Mi apariencia</strong> desde el inicio.
         </p>
       ) : null}
 
@@ -312,45 +283,6 @@ export default function AdministracionAppConfigPanel({
       </div>
 
       <div className="admin-app-config-seccion">
-        <h3 className="admin-app-config-seccion-titulo">Colores y tema</h3>
-        <label className="admin-app-config-toggle">
-          <input
-            type="checkbox"
-            checked={Boolean(borrador.modoOscuro)}
-            disabled={!puedeConfigurar || guardando}
-            onChange={(e) => patch({ modoOscuro: e.target.checked })}
-          />
-          <span>Modo oscuro en toda la aplicación</span>
-        </label>
-        <div className="admin-app-config-grid admin-app-config-grid--colores">
-          <CampoColor
-            label="Color primario"
-            value={borrador.colorPrimario}
-            disabled={!puedeConfigurar || guardando}
-            onChange={(v) => patch({ colorPrimario: v })}
-          />
-          <CampoColor
-            label="Color primario oscuro"
-            value={borrador.colorPrimarioOscuro}
-            disabled={!puedeConfigurar || guardando}
-            onChange={(v) => patch({ colorPrimarioOscuro: v })}
-          />
-          <CampoColor
-            label="Color acento"
-            value={borrador.colorAcento}
-            disabled={!puedeConfigurar || guardando}
-            onChange={(v) => patch({ colorAcento: v })}
-          />
-          <CampoColor
-            label="Fondo general de la app"
-            value={borrador.colorFondoApp}
-            disabled={!puedeConfigurar || guardando}
-            onChange={(v) => patch({ colorFondoApp: v })}
-          />
-        </div>
-      </div>
-
-      <div className="admin-app-config-seccion">
         <h3 className="admin-app-config-seccion-titulo">Imágenes (JPG o PNG)</h3>
         {!supabase ? (
           <p className="warn-inline">Sin Supabase: las imágenes se guardan en este navegador (modo local).</p>
@@ -360,7 +292,7 @@ export default function AdministracionAppConfigPanel({
             titulo="Logo de inicio"
             descripcion="Aparece en la cabecera del menú principal (como el logo Sistebit)."
             previewUrl={logoUrl}
-            imagenPersonalizada={Boolean(config.logoUrl)}
+            imagenPersonalizada={Boolean(configBranding.logoUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'logo'}
             quitando={quitando === 'logo'}
@@ -371,7 +303,7 @@ export default function AdministracionAppConfigPanel({
             titulo="Banner de fondo"
             descripcion="Imagen de fondo del inicio y del login (taller, marca, etc.)."
             previewUrl={bannerUrl}
-            imagenPersonalizada={Boolean(config.bannerUrl)}
+            imagenPersonalizada={Boolean(configBranding.bannerUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'banner'}
             quitando={quitando === 'banner'}
@@ -382,7 +314,7 @@ export default function AdministracionAppConfigPanel({
             titulo="Logo en login (opcional)"
             descripcion="Si no sube uno, se usa el logo de inicio o la letra del avatar."
             previewUrl={loginLogoUrl}
-            imagenPersonalizada={Boolean(config.loginLogoUrl)}
+            imagenPersonalizada={Boolean(configBranding.loginLogoUrl)}
             disabled={!puedeConfigurar}
             subiendo={subiendo === 'login_logo'}
             quitando={quitando === 'login_logo'}
@@ -397,9 +329,9 @@ export default function AdministracionAppConfigPanel({
           type="button"
           className="btn-primary"
           disabled={!puedeConfigurar || guardando || !hayCambios}
-          onClick={() => void guardarTextosYColores()}
+          onClick={() => void guardarTextosEImagenes()}
         >
-          {guardando ? 'Guardando…' : '💾 Guardar textos y colores'}
+          {guardando ? 'Guardando…' : '💾 Guardar textos e imágenes'}
         </button>
         <button
           type="button"
