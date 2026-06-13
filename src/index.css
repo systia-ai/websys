@@ -1489,7 +1489,8 @@ td {
 .tabla-scroll-wrap.orden-resultados-tabla-wrap,
 .tabla-scroll-wrap.table-wrap,
 .tabla-scroll-wrap.monitor-ordenes-tabla-wrap,
-.tabla-scroll-wrap.corte-caja-tabla-wrap {
+.tabla-scroll-wrap.corte-caja-tabla-wrap,
+.tabla-scroll-wrap.catalogo-pagos-tabla-wrap {
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -1502,7 +1503,8 @@ td {
 .tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.table-wrap > .inventario-tabla-scroll,
 .tabla-scroll-wrap.monitor-ordenes-tabla-wrap > .inventario-tabla-scroll,
-.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll {
+.tabla-scroll-wrap.corte-caja-tabla-wrap > .inventario-tabla-scroll,
+.tabla-scroll-wrap.catalogo-pagos-tabla-wrap > .inventario-tabla-scroll {
   overflow-x: auto;
   overflow-y: auto;
   flex: 1;
@@ -10236,6 +10238,56 @@ input.full {
 
 :root[data-theme='dark'] .inventarios-lista-tabla-fila--clic:hover td {
   background: rgba(255, 255, 255, 0.06);
+}
+
+/* Catálogo de pagos — tabla y lista en modo oscuro */
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-scroll,
+:root[data-theme='dark'] .catalogo-pagos-tabla-wrap .inventario-tabla-scroll {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-scroll-top,
+:root[data-theme='dark'] .catalogo-pagos-tabla-wrap .inventario-tabla-scroll-top {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-scroll-hint {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-th,
+:root[data-theme='dark'] .catalogo-pagos-tabla-grid .inventario-tabla-th {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-celda,
+:root[data-theme='dark'] .catalogo-pagos-tabla-grid .inventario-celda {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-fila-grupo:hover .inventario-celda,
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-tabla-fila-grupo--clic:focus-visible .inventario-celda {
+  background: #475569 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root li.equipo-card,
+:root[data-theme='dark'] .catalogo-pagos-root li.inventario-card {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .catalogo-pagos-root .equipo-card-main .muted,
+:root[data-theme='dark'] .catalogo-pagos-root .inventario-card-main .muted {
+  color: #cbd5e1 !important;
 }
 
 :root[data-theme='dark'] .modal-backdrop {
