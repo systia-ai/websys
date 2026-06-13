@@ -162,6 +162,17 @@ const ESTATUS_ORDEN_MONITOR = [
   'EN REVISION',
 ]
 
+/** Fila superior del grid; debajo van Fecha registrado / Fecha entrega alineados con Ingresado / Entregado. */
+const ESTATUS_MONITOR_FILA_SUPERIOR = [
+  'INGRESADO',
+  'ENTREGADO',
+  'EN ESPERA POR REFACCION',
+  'REPARADO',
+  'SIN REPARACION',
+]
+
+const ESTATUS_MONITOR_TRAS_FECHAS = ['EN REVISION']
+
 const TIPOS_SERVICIO_FILTRO = TIPOS_SERVICIO_CANONICOS
 
 function todosTiposServicioSeleccionados(sel) {
@@ -827,6 +838,37 @@ export default function MonitorOrdenesModulo({
     onHome?.()
   }
 
+  function chipFiltroEstatus(est) {
+    const st = String(est).trim().toUpperCase()
+    const checked = estatusSeleccionados.has(st)
+    return (
+      <label
+        key={est}
+        className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
+      >
+        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+        <input
+          type="checkbox"
+          className="monitor-ordenes-check-input"
+          checked={checked}
+          onChange={() => toggleEstatus(est)}
+        />
+        <span className="monitor-ordenes-check-text">{etiquetaEstatusMonitor(est)}</span>
+        <button
+          type="button"
+          className="monitor-ordenes-solo"
+          onClick={(e) => {
+            e.preventDefault()
+            seleccionarSolo(est)
+          }}
+          title="Solo este"
+        >
+          Solo
+        </button>
+      </label>
+    )
+  }
+
   function handleAtras() {
     if (gestionTecnicosAbierto) {
       setGestionTecnicosAbierto(false)
@@ -997,37 +1039,9 @@ export default function MonitorOrdenesModulo({
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
             <div className="monitor-ordenes-estatus-grid">
-              {ESTATUS_ORDEN_MONITOR.map((est) => {
-                const st = String(est).trim().toUpperCase()
-                const checked = estatusSeleccionados.has(st)
-                return (
-                  <label
-                    key={est}
-                    className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
-                  >
-                    <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-                    <input
-                      type="checkbox"
-                      className="monitor-ordenes-check-input"
-                      checked={checked}
-                      onChange={() => toggleEstatus(est)}
-                    />
-                    <span className="monitor-ordenes-check-text">{etiquetaEstatusMonitor(est)}</span>
-                    <button
-                      type="button"
-                      className="monitor-ordenes-solo"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        seleccionarSolo(est)
-                      }}
-                      title="Solo este"
-                    >
-                      Solo
-                    </button>
-                  </label>
-                )
-              })}
+              {ESTATUS_MONITOR_FILA_SUPERIOR.map((est) => chipFiltroEstatus(est))}
               <label
+                key="fecha-registrado"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroIngresoActivo)}`}
               >
                 <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
@@ -1051,6 +1065,7 @@ export default function MonitorOrdenesModulo({
                 </button>
               </label>
               <label
+                key="fecha-entrega"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroEntregaActivo)}`}
               >
                 <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
@@ -1073,7 +1088,9 @@ export default function MonitorOrdenesModulo({
                   Solo
                 </button>
               </label>
+              {ESTATUS_MONITOR_TRAS_FECHAS.map((est) => chipFiltroEstatus(est))}
               <label
+                key="fecha-reparado"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroReparadoActivo)}`}
               >
                 <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
@@ -1097,6 +1114,7 @@ export default function MonitorOrdenesModulo({
                 </button>
               </label>
               <label
+                key="verificadas"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip monitor-ordenes-tile--verificadas${tileActive(filtroVerificadasActivo)}`}
               >
                 <span className="monitor-ordenes-tile-badge" aria-hidden="true" />

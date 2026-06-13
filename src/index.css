@@ -389,6 +389,7 @@ body {
   width: auto;
   max-width: min(100%, 620px);
   object-fit: contain;
+  border-radius: 12px;
   filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.08));
 }
 
@@ -9173,6 +9174,7 @@ input.full {
   max-height: 56px;
   max-width: 90%;
   object-fit: contain;
+  border-radius: 12px;
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
 }
 
