@@ -8453,6 +8453,49 @@ input.full {
   vertical-align: middle;
 }
 
+.administracion-tabla-acciones {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.administracion-btn-borrar-rol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #ef9a9a;
+  border-radius: 8px;
+  background: #ffebee;
+  color: #c62828;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.administracion-btn-borrar-rol-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.administracion-btn-borrar-rol:hover:not(:disabled) {
+  background: #ffcdd2;
+  border-color: #e57373;
+  color: #b71c1c;
+}
+
+.administracion-btn-borrar-rol:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .administracion-rol-select {
   min-width: 120px;
   padding: 6px 8px;
@@ -8471,10 +8514,6 @@ input.full {
   background: #fff8e1;
   border-color: #ffcc80;
   color: #ef6c00;
-}
-
-.administracion-btn-borrar-rol {
-  white-space: nowrap;
 }
 
 .administracion-secciones {
@@ -10233,11 +10272,18 @@ input.full {
 :root[data-theme='dark'] .administracion-btn-borrar-rol {
   background: #7f1d1d !important;
   color: #fecaca !important;
+  border-color: #991b1b !important;
 }
 
 :root[data-theme='dark'] .btn-icon.danger:hover {
   background: #991b1b !important;
   color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .administracion-btn-borrar-rol:hover:not(:disabled) {
+  background: #991b1b !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
 }
 
 :root[data-theme='dark'] .icon-back,

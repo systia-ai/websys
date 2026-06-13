@@ -369,16 +369,19 @@ export default function AdministracionModulo({
                         <td>{formatearFecha(u.created_at)}</td>
                         <td>{formatearFecha(u.last_sign_in_at)}</td>
                         {puedeCambiarRoles ? (
-                          <td>
+                          <td className="administracion-tabla-acciones">
                             <button
                               type="button"
-                              className="btn-icon danger administracion-btn-borrar-rol"
+                              className="administracion-btn-borrar-rol"
                               onClick={() => intentarEliminar(() => void quitarRolUsuario(u.user_id))}
                               disabled={guardandoId === u.user_id}
                               title="Quitar rol personalizado (queda TECNICO)"
                               aria-label={`Quitar rol de ${u.email}`}
                             >
-                              🗑️ Quitar rol
+                              <span className="administracion-btn-borrar-rol-icon" aria-hidden="true">
+                                🗑️
+                              </span>
+                              <span>Quitar rol</span>
                             </button>
                           </td>
                         ) : null}
