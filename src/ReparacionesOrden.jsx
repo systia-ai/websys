@@ -52,12 +52,9 @@ import {
   persistirCambioEstatusOrdenSupabase,
   persistirFechasHitosFaltantesSupabase,
   registrarOrdenCreadaEnSesion,
-  claveCanonicaTipoServicio,
   esGarantiaSinCobroTipo,
   esGarantiaEpsonTipo,
   etiquetaGarantiaSinCobro,
-  TIPO_GARANTIA_EPSON,
-  TIPO_GARANTIA_SISTEBIT,
   validarTransicionEstatus,
   validarTransicionEstatusAlGuardar,
   vincularCuentaAOrdenSupabase,
@@ -342,16 +339,6 @@ export default function ReparacionesOrden({
     if (!esGarantiaEpsonActiva) return null
     const t = String(folioEpson ?? '').trim()
     return t ? t.toUpperCase() : null
-  }
-
-  function marcarGarantiaSinCobro(tipoGarantia) {
-    if (claveCanonicaTipoServicio(tipoReparacion) === tipoGarantia) {
-      setTipoReparacion('')
-      if (tipoGarantia === TIPO_GARANTIA_EPSON) setFolioEpson('')
-    } else {
-      setTipoReparacion(tipoGarantia)
-      if (tipoGarantia !== TIPO_GARANTIA_EPSON) setFolioEpson('')
-    }
   }
 
   const aplicarVerificacionDesdeReparacion = useCallback((data) => {
@@ -2239,45 +2226,25 @@ export default function ReparacionesOrden({
         <div
           className={`rep-block rep-garantia-sin-cobro-block${esGarantiaSinCobroActiva ? ' rep-garantia-sin-cobro-block--activa' : ''}`}
         >
-          <label>Tipo Reparacion</label>
-          <div className="rep-tipo-servicio-fila">
-            <button
-              type="button"
-              className={`btn-garantia-marca${claveCanonicaTipoServicio(tipoReparacion) === TIPO_GARANTIA_EPSON ? ' btn-garantia-marca--activa' : ''}`}
-              onClick={() => marcarGarantiaSinCobro(TIPO_GARANTIA_EPSON)}
-              title="Garantía Epson: sin cobro; cuenta en $0 y flujo normal de orden"
-            >
-              {claveCanonicaTipoServicio(tipoReparacion) === TIPO_GARANTIA_EPSON
-                ? '✓ Garantía Epson'
-                : 'Garantía Epson'}
-            </button>
-            <button
-              type="button"
-              className={`btn-garantia-marca btn-garantia-marca--sistebit${claveCanonicaTipoServicio(tipoReparacion) === TIPO_GARANTIA_SISTEBIT ? ' btn-garantia-marca--activa' : ''}`}
-              onClick={() => marcarGarantiaSinCobro(TIPO_GARANTIA_SISTEBIT)}
-              title="Garantía Sistebit: sin cobro; cuenta en $0 y flujo normal de orden"
-            >
-              {claveCanonicaTipoServicio(tipoReparacion) === TIPO_GARANTIA_SISTEBIT
-                ? '✓ Garantía Sistebit'
-                : 'Garantía Sistebit'}
-            </button>
-            <select
-              value={tipoReparacion}
-              onChange={(e) => {
-                const v = e.target.value
-                setTipoReparacion(v)
-                if (!esGarantiaEpsonTipo(v)) setFolioEpson('')
-              }}
-              aria-label="Tipo de reparación"
-            >
-              <option value="">Seleccionar tipo</option>
-              {TIPOS_REPARACION.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
+          <label htmlFor="rep-tipo-servicio">Tipo de servicio</label>
+          <select
+            id="rep-tipo-servicio"
+            className="rep-tipo-servicio-select"
+            value={tipoReparacion}
+            onChange={(e) => {
+              const v = e.target.value
+              setTipoReparacion(v)
+              if (!esGarantiaEpsonTipo(v)) setFolioEpson('')
+            }}
+            aria-label="Tipo de servicio"
+          >
+            <option value="">Seleccionar tipo de servicio</option>
+            {TIPOS_REPARACION.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
           {esGarantiaSinCobroActiva ? (
             <p className="rep-garantia-sin-cobro-aviso muted small" role="status">
               <strong>{etiquetaGarantiaSinCobro(tipoReparacion)}</strong> — sin cobro al cliente. Al registrar la
