@@ -10071,6 +10071,81 @@ input.full {
   color: #e2e8f0 !important;
 }
 
+/* Confirmar datos / actualizar orden — modo oscuro */
+:root[data-theme='dark'] .modal-alerta--info .modal-header.confirmar-datos-header {
+  background: linear-gradient(180deg, #1b3d24 0%, #0f172a 100%) !important;
+  border-bottom-color: #2e7d32 !important;
+}
+
+:root[data-theme='dark'] .modal-alerta--info .modal-header.confirmar-datos-header h3 {
+  color: #a5d6a7 !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-lead {
+  color: #c8e6c9 !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-lead strong {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-header-ico {
+  background: #2e7d32 !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-recuadro {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  border-left-color: #42a5f5 !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .confirmar-datos-recuadro-titulo {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-fila dt {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-fila dd {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-pregunta {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .confirmar-datos-pregunta--destacada {
+  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
+  border-color: #42a5f5 !important;
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .modal-alerta--info .resumen-orden--confirmar .resumen-orden-grupo,
+:root[data-theme='dark'] .resumen-orden-grupo {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  border-left-color: #42a5f5 !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .modal-alerta--info .resumen-orden--confirmar .resumen-orden-grupo h4,
+:root[data-theme='dark'] .resumen-orden-grupo h4 {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .modal-alerta--info .resumen-orden--confirmar .resumen-orden-grupo p,
+:root[data-theme='dark'] .resumen-orden-grupo p {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .modal-alerta--info .resumen-orden--confirmar .resumen-orden-grupo strong,
+:root[data-theme='dark'] .resumen-orden-grupo strong {
+  color: #94a3b8 !important;
+}
+
 :root[data-theme='dark'] .modal-alerta--warning .modal-header {
   background: linear-gradient(180deg, #4a3f1f 0%, #3d2f10 100%) !important;
   border-bottom-color: #ffb74d !important;
@@ -10147,6 +10222,7 @@ input.full {
     .corte-caja-hero-card,
     .corte-caja-resumen,
     .corte-caja-periodo-banner,
+    .corte-caja-card,
     .corte-caja-stat,
     .reportes-resumen,
     .reportes-filtros-card,
@@ -10290,6 +10366,104 @@ input.full {
   color: #cbd5e1 !important;
 }
 
+/* Corte de caja — lista, tabla y resumen en modo oscuro */
+:root[data-theme='dark'] .corte-caja-root li.equipo-card.corte-caja-card,
+:root[data-theme='dark'] .corte-caja-root .corte-caja-card.corte-caja-card--solo-lectura {
+  background: var(--app-color-surface) !important;
+  border: 1px solid var(--app-color-border) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-fila-lectura {
+  background: transparent !important;
+  color: inherit;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-meta-lista,
+:root[data-theme='dark'] .corte-caja-root .corte-caja-meta-lista.muted {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-concepto-titulo,
+:root[data-theme='dark'] .corte-caja-tabla-grid .corte-caja-concepto-titulo {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-desglose-lista,
+:root[data-theme='dark'] .corte-caja-root .corte-caja-desglose-lista li,
+:root[data-theme='dark'] .corte-caja-tabla-grid .corte-caja-desglose-lista,
+:root[data-theme='dark'] .corte-caja-tabla-grid .corte-caja-desglose-lista li {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-tabla-wrap {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='dark'] .corte-caja-root .inventario-tabla-scroll,
+:root[data-theme='dark'] .corte-caja-tabla-wrap > .inventario-tabla-scroll {
+  background: transparent !important;
+  border: none !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .inventario-tabla-th,
+:root[data-theme='dark'] .corte-caja-tabla-grid .inventario-tabla-th {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .inventario-celda,
+:root[data-theme='dark'] .corte-caja-tabla-grid .inventario-celda {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .corte-caja-root .inventario-tabla-fila-grupo:hover .inventario-celda {
+  background: #475569 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-monto-celda,
+:root[data-theme='dark'] .corte-caja-tabla-grid .corte-caja-monto-celda {
+  color: #86efac !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .inventario-celda--cliente-corte,
+:root[data-theme='dark'] .corte-caja-root .inventario-celda--fecha-corte,
+:root[data-theme='dark'] .corte-caja-root .inventario-celda--cuenta-corte,
+:root[data-theme='dark'] .corte-caja-tabla-grid .inventario-celda--cliente-corte,
+:root[data-theme='dark'] .corte-caja-tabla-grid .inventario-celda--fecha-corte,
+:root[data-theme='dark'] .corte-caja-tabla-grid .inventario-celda--cuenta-corte {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-resumen {
+  background: var(--app-color-surface) !important;
+  border-color: #ffb74d !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-periodo-banner {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-hero-titulo {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .corte-caja-root .corte-caja-fecha-label {
+  color: #e2e8f0 !important;
+}
+
 :root[data-theme='dark'] .modal-backdrop {
   background: rgba(0, 0, 0, 0.72);
 }
@@ -10416,6 +10590,67 @@ input.full {
 
 :root[data-theme='dark'] .orden-busqueda-ayuda strong {
   color: #ffffff !important;
+}
+
+/* Búsqueda de orden — resultados en modal (modo oscuro) */
+:root[data-theme='dark'] .orden-resultados-tabla-wrap,
+:root[data-theme='dark'] .tabla-scroll-wrap.orden-resultados-tabla-wrap {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla-wrap .inventario-tabla-scroll,
+:root[data-theme='dark'] .tabla-scroll-wrap.orden-resultados-tabla-wrap > .inventario-tabla-scroll {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla-wrap .inventario-tabla-scroll-top,
+:root[data-theme='dark'] .tabla-scroll-wrap.orden-resultados-tabla-wrap .inventario-tabla-scroll-top {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla-wrap .inventario-tabla-scroll-hint {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-sub,
+:root[data-theme='dark'] .orden-resultados-hint {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-num,
+:root[data-theme='dark'] .orden-resultados-tabla .cuentas-cliente-tabla-orden {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-cliente {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-serie,
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-tecnico,
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-modelo {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-fila--clic:hover,
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-fila--clic:focus-visible {
+  background: #475569 !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-fila--clic:hover td {
+  background: transparent !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .orden-resultados-list .orden-resultado-card {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  color: #e2e8f0 !important;
 }
 
 /* Órdenes de servicio y cuentas del cliente (modales / tarjetas) */
@@ -10695,6 +10930,137 @@ input.full {
   background: var(--app-color-surface-2);
   color: #e2e8f0;
   border-color: var(--app-color-border);
+}
+
+/* Cuentas (ventas) — avisos, tabla y recuadros en modo oscuro */
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-garantia-sin-cobro-aviso,
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-garantia-epson-aviso {
+  background: #0f3d38 !important;
+  border-color: #00897b !important;
+  color: #80cbc4 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-liquidar-aviso {
+  background: #1b3d24 !important;
+  border-color: #4caf50 !important;
+  color: #a5d6a7 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-sin-adeudo-aviso {
+  background: var(--app-color-surface-2) !important;
+  border: 1px solid var(--app-color-border) !important;
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-servicio-aviso {
+  background: #4a3520 !important;
+  border-color: #ffb74d !important;
+  color: #ffe082 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .tabla-scroll-wrap.ventas-tabla-scroll-outer > .inventario-tabla-scroll {
+  background: transparent !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .tabla-scroll-wrap.ventas-tabla-scroll-outer .inventario-tabla-scroll-top {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .tabla-scroll-wrap.ventas-tabla-scroll-outer .inventario-tabla-scroll-hint {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fila {
+  border-top-color: var(--app-color-border) !important;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fila.stripe {
+  background: var(--app-color-surface-2) !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fila.es-pago {
+  background: #1b3d24 !important;
+  color: #c8e6c9;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-vacia {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-head {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fecha {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fecha--pago {
+  color: #81c784 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .btn-elim-linea {
+  background: #5c2a2a !important;
+  color: #fca5a5 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--total {
+  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo {
+  background: linear-gradient(180deg, #1b3d24 0%, #142d1c 100%) !important;
+  border-color: #4caf50 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo-pend {
+  background: linear-gradient(180deg, #3d2020 0%, #2d1818 100%) !important;
+  border-color: #ef5350 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo-favor {
+  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
+  border-color: #64b5f6 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cliente-card .muted {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .cuenta-notificacion-mensaje {
+  background: var(--app-color-input-bg) !important;
+  border-color: var(--app-color-border) !important;
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-producto-recuadro {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-producto-recuadro-titulo {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-producto-campo-etiqueta {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-producto-campo input {
+  background: var(--app-color-input-bg) !important;
+  border-color: var(--app-color-border) !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-producto-input--solo-lectura {
+  background: var(--app-color-surface) !important;
+  color: #cbd5e1 !important;
 }
 
 /* Ventas: modal Agregar pago */
