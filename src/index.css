@@ -8078,6 +8078,117 @@ input.full {
   background: #1565c0;
 }
 
+.ventas-recibo-modal {
+  max-width: 480px;
+}
+
+.ventas-recibo-modal-lead {
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+
+.ventas-recibo-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ventas-recibo-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #b3e5fc;
+  border-radius: 10px;
+  background: #f5fbff;
+  cursor: pointer;
+}
+
+.ventas-recibo-opcion:has(input:checked) {
+  border-color: #1976d2;
+  background: #e3f2fd;
+  box-shadow: inset 0 0 0 1px rgba(25, 118, 210, 0.15);
+}
+
+.ventas-recibo-opcion input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.ventas-recibo-opcion--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ventas-recibo-opcion--disabled input {
+  cursor: not-allowed;
+}
+
+.ventas-recibo-opcion-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.35;
+}
+
+.ventas-recibo-fecha-block {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #cfd8dc;
+  background: #fafafa;
+}
+
+.ventas-recibo-fecha-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.ventas-recibo-fecha-input {
+  width: 100%;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.ventas-recibo-fecha-select {
+  max-width: 100%;
+}
+
+.ventas-recibo-fecha-resumen {
+  margin: 8px 0 0;
+}
+
+:root[data-theme='dark'] .ventas-recibo-opcion {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .ventas-recibo-opcion:has(input:checked) {
+  background: #1e3a5f !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .ventas-recibo-fecha-block {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .ventas-recibo-fecha-input {
+  background: var(--app-color-input-bg);
+  color: #ffffff;
+  border-color: var(--app-color-border);
+}
+
+:root[data-theme='dark'] .ventas-recibo-fecha-label {
+  color: #e2e8f0;
+}
+
 .btn-salir-ventas {
   border: 0;
   padding: 14px;

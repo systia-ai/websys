@@ -34,9 +34,11 @@ import {
   registrarNotificacionClienteEnBitacora,
   cuentaSinOrdenVinculada,
   vincularCuentaAOrdenSupabase,
+  ymdHoyLocal,
 } from './reparacionUtils.js'
 import { buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
 import { buildWhatsAppUrl } from './whatsappUtils.js'
+import { printReciboCuentaPdf, RECIBO_PRINT_HINT } from './reciboCuentaPdf.js'
 import ModalAlerta from './ModalAlerta.jsx'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -196,7 +198,44 @@ function crearLineaPago(p) {
     precioUnitario: monto,
     subtotal: -monto,
     fechaPago: etiquetaFechaPago(p),
+    fechaPagoYmd: aYmdLocalDesdeRaw(rawFechaPago(p)),
   }
+}
+
+function sumImportePagosLineas(lineasPagos) {
+  return (lineasPagos ?? [])
+    .filter((l) => l.tipo === 'pago')
+    .reduce((s, l) => s + Math.abs(Number(l.precioUnitario ?? l.subtotal ?? 0)), 0)
+}
+
+function lineasReciboPorModo(lineas, modo, fechaYmd) {
+  if (modo === 'pagos_fecha') {
+    return (lineas ?? []).filter((l) => l.tipo === 'pago' && l.fechaPagoYmd === fechaYmd)
+  }
+  return lineas ?? []
+}
+
+function fechasPagosDesdeLineas(lineas) {
+  const map = new Map()
+  for (const l of lineas ?? []) {
+    if (l.tipo !== 'pago') continue
+    const ymd = l.fechaPagoYmd
+    if (!ymd) continue
+    const prev = map.get(ymd) ?? { ymd, count: 0, importe: 0 }
+    prev.count += 1
+    prev.importe += Math.abs(Number(l.precioUnitario ?? l.subtotal ?? 0))
+    map.set(ymd, prev)
+  }
+  return [...map.values()]
+    .sort((a, b) => b.ymd.localeCompare(a.ymd))
+    .map((item) => ({
+      ...item,
+      label: formatFechaLegibleEsMx(item.ymd, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+    }))
 }
 
 function buildLineasDesdeServidor({ movs, reps, pagos, productosPorId = new Map() }) {
@@ -302,6 +341,9 @@ export default function VentasCuentaScreen({
   )
   const [vinculandoOrden, setVinculandoOrden] = useState(false)
   const [imprimiendoRecibo, setImprimiendoRecibo] = useState(false)
+  const [modalImprimirRecibo, setModalImprimirRecibo] = useState(false)
+  const [modoRecibo, setModoRecibo] = useState('cuenta')
+  const [fechaReciboPagos, setFechaReciboPagos] = useState(() => ymdHoyLocal())
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
 
@@ -326,6 +368,21 @@ export default function VentasCuentaScreen({
   const saldoAFavor = visiblesCuenta.saldoAFavor
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
+  const fechasPagosCuenta = useMemo(() => fechasPagosDesdeLineas(lineas), [lineas])
+  const pagosEnFechaRecibo = useMemo(() => {
+    const filtradas = lineasReciboPorModo(lineas, 'pagos_fecha', fechaReciboPagos)
+    return {
+      count: filtradas.length,
+      importe: sumImportePagosLineas(filtradas),
+    }
+  }, [lineas, fechaReciboPagos])
+
+  useEffect(() => {
+    if (fechasPagosCuenta.length === 0) return
+    if (!fechaReciboPagos || !fechasPagosCuenta.some((f) => f.ymd === fechaReciboPagos)) {
+      setFechaReciboPagos(fechasPagosCuenta[0].ymd)
+    }
+  }, [fechasPagosCuenta, fechaReciboPagos])
   const esGarantiaSinCobro = esGarantiaSinCobroTipo(tipoReparacionOrden)
   const puedePagarAdeudoTotal = esCuentaExistente && saldoPendiente > 0.0001
   const puedeLiquidarCuenta =
@@ -1253,7 +1310,7 @@ export default function VentasCuentaScreen({
     }
   }
 
-  async function enviarComprobante() {
+  async function enviarComprobante({ modo = 'cuenta', fechaYmd = ymdHoyLocal() } = {}) {
     if (!esCuentaExistente) {
       onError?.('Cree o abra una cuenta antes de imprimir el recibo.')
       return
@@ -1264,15 +1321,39 @@ export default function VentasCuentaScreen({
     }
     if (imprimiendoRecibo) return
 
+    const lineasPdf = lineasReciboPorModo(lineas, modo, fechaYmd)
+    if (modo === 'pagos_fecha') {
+      if (lineasPdf.length === 0) {
+        const fechaTxt = formatFechaLegibleEsMx(fechaYmd, {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        })
+        onError?.(`No hay pagos registrados el ${fechaTxt} en esta cuenta.`)
+        return
+      }
+    }
+
     setImprimiendoRecibo(true)
     try {
-      const { printReciboCuentaPdf, RECIBO_PRINT_HINT } = await import('./reciboCuentaPdf.js')
-      const totalPdf = Number.isFinite(visiblesCuenta.totalDisplay)
-        ? visiblesCuenta.totalDisplay
-        : totalCargos
-      const saldoPdf = Number.isFinite(visiblesCuenta.saldoDisplay)
-        ? visiblesCuenta.saldoDisplay
-        : balanceNeto
+      const esPagosFecha = modo === 'pagos_fecha'
+      const importePagosDia = sumImportePagosLineas(lineasPdf)
+      const totalPdf = esPagosFecha
+        ? importePagosDia
+        : Number.isFinite(visiblesCuenta.totalDisplay)
+          ? visiblesCuenta.totalDisplay
+          : totalCargos
+      const saldoPdf = esPagosFecha
+        ? Math.max(0, calcularSaldoPendiente(lineas, totalCargos))
+        : Number.isFinite(visiblesCuenta.saldoDisplay)
+          ? visiblesCuenta.saldoDisplay
+          : balanceNeto
+      const fechaTxt = formatFechaLegibleEsMx(fechaYmd, {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+
       await printReciboCuentaPdf({
         cliente: { nombre: cliente.nombre || 'Cliente', telefono: cliente.telefono || '' },
         orden: reciboOrdenEquipo?.orden ?? reparaIdCuenta ?? ordenVinculadaId ?? null,
@@ -1280,15 +1361,25 @@ export default function VentasCuentaScreen({
         total: totalPdf,
         saldo: saldoPdf,
         estatus: cuentaEstatus || '—',
-        lineas,
+        lineas: lineasPdf,
+        tituloDocumento: esPagosFecha ? 'COMPROBANTE DE PAGO' : 'COMPROBANTE',
+        subtitulo: esPagosFecha ? `Pagos del ${fechaTxt}` : null,
+        labelTotal: esPagosFecha ? 'Importe pagado' : 'Total',
+        labelSaldo: esPagosFecha ? 'Saldo pendiente' : 'Saldo',
+        ocultarSaldo: esPagosFecha && saldoPdf <= 0.0001,
       })
+      setModalImprimirRecibo(false)
       onNotice?.(RECIBO_PRINT_HINT)
     } catch (e) {
       const msg = String(e?.message ?? e)
       if (/popup|bloque/i.test(msg)) {
         onError?.('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes e intente de nuevo.')
-      } else if (/tiempo de espera/i.test(msg)) {
+      } else       if (/tiempo de espera/i.test(msg)) {
         onError?.('El recibo tardó en cargar. Intente de nuevo o use otro navegador (Chrome o Edge).')
+      } else if (/fetch|import|module|dynamically/i.test(msg)) {
+        onError?.(
+          'No se pudo cargar el módulo del recibo. Recargue la página (Ctrl+F5) e intente de nuevo.',
+        )
       } else {
         onError?.(`No se pudo imprimir el recibo: ${msg}`)
       }
@@ -1522,13 +1613,17 @@ export default function VentasCuentaScreen({
             type="button"
             className="btn-comprobante-ventas"
             disabled={!esCuentaExistente || loading || imprimiendoRecibo}
-            onClick={() => void enviarComprobante()}
+            onClick={() => {
+              setModoRecibo('cuenta')
+              setFechaReciboPagos(fechasPagosCuenta[0]?.ymd ?? '')
+              setModalImprimirRecibo(true)
+            }}
             title={
               !esCuentaExistente
                 ? 'Cree la cuenta antes de imprimir el recibo'
                 : loading
                   ? 'Cargando movimientos de la cuenta…'
-                  : 'Abrir el comprobante en el diálogo de impresión'
+                  : 'Elegir recibo de cuenta completa o solo pagos de una fecha'
             }
           >
             {imprimiendoRecibo ? 'Preparando recibo…' : '📧 IMPRIMIR RECIBO'}
@@ -1538,6 +1633,118 @@ export default function VentasCuentaScreen({
           </button>
         </div>
       </div>
+
+      {modalImprimirRecibo && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !imprimiendoRecibo && setModalImprimirRecibo(false)}
+        >
+          <div
+            className="modal modal-confirmar-datos ventas-recibo-modal"
+            role="dialog"
+            aria-labelledby="ventas-recibo-modal-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="ventas-recibo-modal-titulo">Imprimir recibo</h3>
+            </div>
+            <div className="modal-body">
+              <p className="ventas-recibo-modal-lead muted">
+                Elija si el comprobante incluye toda la cuenta o solo los pagos de una fecha.
+              </p>
+              <div className="ventas-recibo-opciones" role="radiogroup" aria-label="Tipo de recibo">
+                <label className="ventas-recibo-opcion">
+                  <input
+                    type="radio"
+                    name="modo-recibo"
+                    value="cuenta"
+                    checked={modoRecibo === 'cuenta'}
+                    onChange={() => setModoRecibo('cuenta')}
+                  />
+                  <span className="ventas-recibo-opcion-texto">
+                    <strong>Cuenta completa</strong>
+                    <span className="muted small">
+                      Todos los cargos y pagos · Total {totalStr} · Saldo {saldoStr}
+                    </span>
+                  </span>
+                </label>
+                <label
+                  className={`ventas-recibo-opcion${fechasPagosCuenta.length === 0 ? ' ventas-recibo-opcion--disabled' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="modo-recibo"
+                    value="pagos_fecha"
+                    checked={modoRecibo === 'pagos_fecha'}
+                    disabled={fechasPagosCuenta.length === 0}
+                    onChange={() => {
+                      setModoRecibo('pagos_fecha')
+                      if (fechasPagosCuenta[0]) setFechaReciboPagos(fechasPagosCuenta[0].ymd)
+                    }}
+                  />
+                  <span className="ventas-recibo-opcion-texto">
+                    <strong>Solo pagos de una fecha</strong>
+                    <span className="muted small">
+                      {fechasPagosCuenta.length === 0
+                        ? 'Esta cuenta aún no tiene pagos registrados.'
+                        : 'Elija un día con pagos registrados en esta cuenta.'}
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {modoRecibo === 'pagos_fecha' && fechasPagosCuenta.length > 0 ? (
+                <div className="ventas-recibo-fecha-block">
+                  <label className="ventas-recibo-fecha-label" htmlFor="ventas-recibo-fecha-pagos">
+                    Fecha con pagos
+                  </label>
+                  <select
+                    id="ventas-recibo-fecha-pagos"
+                    className="ventas-recibo-fecha-input ventas-recibo-fecha-select"
+                    value={fechaReciboPagos}
+                    onChange={(e) => setFechaReciboPagos(e.target.value)}
+                  >
+                    {fechasPagosCuenta.map((f) => (
+                      <option key={f.ymd} value={f.ymd}>
+                        {f.label} — {f.count} pago(s) · {formatMontoCuenta(f.importe)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="ventas-recibo-fecha-resumen muted small" role="status">
+                    {`${pagosEnFechaRecibo.count} pago(s) · Importe ${formatMontoCuenta(pagosEnFechaRecibo.importe)}`}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                disabled={imprimiendoRecibo}
+                onClick={() => setModalImprimirRecibo(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-comprobante-ventas"
+                disabled={
+                  imprimiendoRecibo ||
+                  (modoRecibo === 'pagos_fecha' && pagosEnFechaRecibo.count === 0)
+                }
+                onClick={() =>
+                  void enviarComprobante({
+                    modo: modoRecibo,
+                    fechaYmd: modoRecibo === 'pagos_fecha' ? fechaReciboPagos : undefined,
+                  })
+                }
+              >
+                {imprimiendoRecibo ? 'Preparando…' : '🖨 Imprimir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalPago && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalPago(false)}>

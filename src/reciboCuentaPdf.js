@@ -1,4 +1,3 @@
-import { LEGAL_ORDEN_SERVICIO } from './ordenServicioPdf.js'
 import {
   TEMA,
   addMediaCartaPage,
@@ -12,6 +11,7 @@ import {
   printSistebitPdfDocument,
   finalizarPaginasMediaCarta,
   mediaCartaZonaMaxY,
+  LEGAL_ORDEN_SERVICIO,
 } from './sistebitPdfCommon.js'
 
 /** Márgenes compactos para media carta (8.5″ × 5.5″). */
@@ -170,24 +170,31 @@ function formatMontoRecibo(value) {
 }
 
 /** Total y saldo debajo de la tabla (alineados a la derecha). @returns {number} altura en mm */
-function drawTotalesRecibo(pdf, total, saldo, x, y, width) {
+function drawTotalesRecibo(pdf, total, saldo, x, y, width, opts = {}) {
+  const labelTotal = opts.labelTotal ?? 'Total'
+  const labelSaldo = opts.labelSaldo ?? 'Saldo'
+  const ocultarSaldo = opts.ocultarSaldo === true
   const totalVal = formatMontoRecibo(total)
   const saldoNum = parseMontoRecibo(saldo)
   const saldoVal = formatMontoRecibo(saldoNum)
   const wTotal = Math.min(
     width * 0.5,
-    anchoRecuadroCompacto(pdf, 'Total', totalVal, { min: 26, max: 46, pad: 8 }),
+    anchoRecuadroCompacto(pdf, labelTotal, totalVal, { min: 26, max: 52, pad: 8 }),
   )
   const wSaldo = Math.min(
     width * 0.5,
-    anchoRecuadroCompacto(pdf, 'Saldo', saldoVal, { min: 26, max: 50, pad: 8 }),
+    anchoRecuadroCompacto(pdf, labelSaldo, saldoVal, { min: 26, max: 52, pad: 8 }),
   )
+  if (ocultarSaldo) {
+    const xTotal = x + width - wTotal
+    return drawCampo(pdf, labelTotal, totalVal, xTotal, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+  }
   const rowW = wSaldo + GAP_TOTAL_SALDO + wTotal
   let xCur = x + width - rowW
   const temaSaldo = saldoNum < -0.0001 ? TEMA.pago : TEMA.orden
-  const hSaldo = drawCampo(pdf, 'Saldo', saldoVal, xCur, y, wSaldo, TOTAL_BOX_H, temaSaldo, CAMPO_RECIBO)
+  const hSaldo = drawCampo(pdf, labelSaldo, saldoVal, xCur, y, wSaldo, TOTAL_BOX_H, temaSaldo, CAMPO_RECIBO)
   xCur += wSaldo + GAP_TOTAL_SALDO
-  const hTotal = drawCampo(pdf, 'Total', totalVal, xCur, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+  const hTotal = drawCampo(pdf, labelTotal, totalVal, xCur, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
   return Math.max(hTotal, hSaldo)
 }
 
@@ -331,17 +338,26 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
 
 /**
  * Genera el comprobante: hoja Carta vertical, contenido en la mitad superior (8.5″ × 5.5″).
- * @param {{ cliente: { nombre?: string, telefono?: string }, orden?: string|number, descripcionEquipo?: string, total: string, saldo: string|number, estatus: string, lineas: object[] }} p
+ * @param {{ cliente: { nombre?: string, telefono?: string }, orden?: string|number, descripcionEquipo?: string, total: string|number, saldo: string|number, estatus: string, lineas: object[], tituloDocumento?: string, subtitulo?: string|null, labelTotal?: string, labelSaldo?: string, ocultarSaldo?: boolean }} p
  */
 export function createReciboCuentaPdf(p) {
   const pdf = createMediaCartaPdf()
+  const tituloDoc = String(p.tituloDocumento ?? 'COMPROBANTE').trim() || 'COMPROBANTE'
+  const subtitulo = p.subtitulo != null ? String(p.subtitulo).trim() : ''
 
   const W = pdf.internal.pageSize.getWidth()
   const contentW = W - 2 * MARGIN
   const centerX = W / 2
   const zonaBottom = mediaCartaZonaMaxY(MARGIN)
 
-  let y = drawEncabezadoSistebit(pdf, 'COMPROBANTE', centerX, 3, ENCABEZADO_MEDIA)
+  let y = drawEncabezadoSistebit(pdf, tituloDoc, centerX, 3, ENCABEZADO_MEDIA)
+  if (subtitulo) {
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(7.4)
+    pdf.setTextColor(21, 101, 192)
+    pdf.text(subtitulo, centerX, y + 1.2, { align: 'center' })
+    y += 4.2
+  }
   y += drawFilaClienteOrdenEquipo(pdf, p, MARGIN, y, contentW) + GAP_DESPUES_CLIENTE
 
   pdf.setFont('helvetica', 'bold')
@@ -365,7 +381,11 @@ export function createReciboCuentaPdf(p) {
   if (cargosLineas > 0.0001 && Math.abs(totalRecibo) < 0.0001) {
     totalRecibo = cargosLineas
   }
-  const totalesH = drawTotalesRecibo(pdf, totalRecibo, saldoRecibo, MARGIN, y, contentW)
+  const totalesH = drawTotalesRecibo(pdf, totalRecibo, saldoRecibo, MARGIN, y, contentW, {
+    labelTotal: p.labelTotal,
+    labelSaldo: p.labelSaldo,
+    ocultarSaldo: p.ocultarSaldo,
+  })
   y += totalesH + GAP_TOTAL_LEYENDA
   drawPieRecibo(pdf, y, contentW, centerX)
 

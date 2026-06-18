@@ -3,6 +3,10 @@
 import { jsPDF } from 'jspdf'
 import { WHATSAPP_ICON_PNG_BASE64 } from './whatsappIconBase64.js'
 
+/** Leyenda legal en comprobantes y órdenes de servicio (PDF). */
+export const LEGAL_ORDEN_SERVICIO =
+  'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
+
 /** Tamaño carta (216 × 279 mm), orientación vertical. */
 export const SISTEBIT_PDF_FORMAT = 'letter'
 

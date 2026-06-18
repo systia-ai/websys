@@ -15,13 +15,13 @@ import {
   finalizarPaginasMediaCarta,
   mediaCartaZonaMaxY,
   printSistebitPdfDocument,
+  LEGAL_ORDEN_SERVICIO,
 } from './sistebitPdfCommon.js'
 
 /** @deprecated Use RECIBO_PAGE_FORMAT (Carta vertical, media hoja arriba) */
 export const ORDEN_PDF_FORMAT = RECIBO_PAGE_FORMAT
 
-export const LEGAL_ORDEN_SERVICIO =
-  'Toda revisión tiene un costo. Garantía del servicio 15 días sobre la misma falla. Cuenta con 30 días para recoger su equipo una vez que se le informó del diagnóstico de su equipo. Todo Servicio, Limpieza y drenado del cabezal consume tinta del mismo equipo. Nuestro horario es de Lunes a Viernes de 10:00 AM a 6:00 PM y sábados de 9:00 AM a 2:00 PM'
+export { LEGAL_ORDEN_SERVICIO } from './sistebitPdfCommon.js'
 
 const AVISO_TINTA_ORDEN = 'LA TINTA CONSUMIDA CSA NO LA RELLENA'
 
