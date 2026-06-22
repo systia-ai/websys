@@ -162,7 +162,7 @@ const ESTATUS_ORDEN_MONITOR = [
   'EN REVISION',
 ]
 
-/** Fila superior del grid; debajo van Fecha registrado / Fecha entrega alineados con Ingresado / Entregado. */
+/** Fila principal del grid de estatus (los modos por fecha viven en «Rango de fechas»). */
 const ESTATUS_MONITOR_FILA_SUPERIOR = [
   'INGRESADO',
   'ENTREGADO',
@@ -248,7 +248,7 @@ export default function MonitorOrdenesModulo({
   const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(
     filtrosIniciales.filtroModoVerificadas,
   )
-  /** Buscador: «12 días» = exactamente 12 días en taller; otro texto = cliente, #orden, problema, etc. */
+  /** Buscador: refina sobre filtros activos; «12 días» = exactamente 12 días en taller. */
   const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda)
 
   /** Catálogo de técnicos (controlado por el usuario). */
@@ -467,53 +467,51 @@ export default function MonitorOrdenesModulo({
     const reparacionesMonitor = reparaciones.filter(ordenUsaSistemaWeb)
 
     let filtradas
+    if (hayRangoFechaInvalido || modoFechaSinRango) {
+      return []
+    }
     if (filtroAvisoActivo) {
       filtradas = reparacionesMonitor.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
-    } else if (hayRangoFechaInvalido || modoFechaSinRango) {
-      return []
     } else {
-      const diasExactos = parsearFiltroDiasExactos(busqueda)
-      const qTexto = String(busqueda ?? '').trim()
-      const busquedaLibreActiva = Boolean(qTexto) && diasExactos == null
-
-      if (busquedaLibreActiva) {
-        filtradas = reparacionesMonitor.filter((r) =>
-          repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
-        )
-      } else {
-        const sel = estatusSeleccionados
-        const desde = String(fechaDesde ?? '').trim()
-        const hasta = String(fechaHasta ?? '').trim()
-        filtradas = reparacionesMonitor.filter((r) => {
-          const rid = String(r.id)
-          return repCoincideFiltroMonitor(r, {
-            estatusSeleccionados: sel,
-            desde,
-            hasta,
-            modoFecha: modoFechaActivo,
-            cuentaVinculada: cuentaPorReparaId.get(rid),
-            ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
-            estatusParaFiltroFn: estatusParaFiltro,
-          })
+      const sel = estatusSeleccionados
+      const desde = String(fechaDesde ?? '').trim()
+      const hasta = String(fechaHasta ?? '').trim()
+      filtradas = reparacionesMonitor.filter((r) => {
+        const rid = String(r.id)
+        return repCoincideFiltroMonitor(r, {
+          estatusSeleccionados: sel,
+          desde,
+          hasta,
+          modoFecha: modoFechaActivo,
+          cuentaVinculada: cuentaPorReparaId.get(rid),
+          ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
+          estatusParaFiltroFn: estatusParaFiltro,
         })
-        const tiposSel = tiposServicioSeleccionados
-        if (tiposSel.size === 0) {
-          filtradas = []
-        } else if (!todosTiposServicioSeleccionados(tiposSel)) {
-          filtradas = filtradas.filter((r) => {
-            const t = tipoServicioDeRep(r, equipoPorId)
-            return t != null && tiposSel.has(t)
-          })
-        }
-        if (tecnicoFiltro === TECNICO_SIN) {
-          filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
-        } else if (tecnicoFiltro !== TECNICO_TODAS) {
-          filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
-        }
-        if (diasExactos != null) {
-          filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
-        }
+      })
+      const tiposSel = tiposServicioSeleccionados
+      if (tiposSel.size === 0) {
+        filtradas = []
+      } else if (!todosTiposServicioSeleccionados(tiposSel)) {
+        filtradas = filtradas.filter((r) => {
+          const t = tipoServicioDeRep(r, equipoPorId)
+          return t != null && tiposSel.has(t)
+        })
       }
+      if (tecnicoFiltro === TECNICO_SIN) {
+        filtradas = filtradas.filter((r) => !String(r.tecnico ?? '').trim())
+      } else if (tecnicoFiltro !== TECNICO_TODAS) {
+        filtradas = filtradas.filter((r) => tecnicoRepCoincideFiltro(r.tecnico, tecnicoFiltro))
+      }
+    }
+
+    const diasExactos = parsearFiltroDiasExactos(busqueda)
+    const qTexto = String(busqueda ?? '').trim()
+    if (diasExactos != null) {
+      filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
+    } else if (qTexto) {
+      filtradas = filtradas.filter((r) =>
+        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
+      )
     }
     const conTiempo = filtradas.map((r) => {
       const rid = String(r.id)
@@ -804,7 +802,7 @@ export default function MonitorOrdenesModulo({
   const filtroReparadoActivo = filtroModoFechaReparado
   const filtroVerificadasActivo = filtroModoVerificadas
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
-  const busquedaLibreActivaUi =
+  const busquedaTextoActivaUi =
     filtroBusquedaActivo && parsearFiltroDiasExactos(busqueda) == null
 
   function badgeEstatus(rep) {
@@ -1001,118 +999,98 @@ export default function MonitorOrdenesModulo({
                   Limpiar fechas
                 </button>
               </div>
+              <div className="monitor-ordenes-rango-modos" role="group" aria-label="Filtrar por tipo de fecha en el rango">
+                <label
+                  key="fecha-registrado"
+                  className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroIngresoActivo)}`}
+                >
+                  <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                  <input
+                    type="checkbox"
+                    className="monitor-ordenes-check-input"
+                    checked={filtroModoFechaIngreso}
+                    onChange={() => toggleModoFechaIngreso()}
+                  />
+                  <span className="monitor-ordenes-check-text">Fecha registrado</span>
+                  <button
+                    type="button"
+                    className="monitor-ordenes-solo"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      soloModoFechaIngreso()
+                    }}
+                    title="Órdenes con fecha_ingreso en el rango (todas las que entraron ese día, sin importar el estatus actual)."
+                  >
+                    Solo
+                  </button>
+                </label>
+                <label
+                  key="fecha-entrega"
+                  className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroEntregaActivo)}`}
+                >
+                  <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                  <input
+                    type="checkbox"
+                    className="monitor-ordenes-check-input"
+                    checked={filtroModoFechaEntrega}
+                    onChange={() => toggleModoFechaEntrega()}
+                  />
+                  <span className="monitor-ordenes-check-text">Fecha entrega</span>
+                  <button
+                    type="button"
+                    className="monitor-ordenes-solo"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      soloModoFechaEntrega()
+                    }}
+                    title="Órdenes con fecha_entrega en el rango (todas las entregadas ese día, sin importar los chips de estatus)."
+                  >
+                    Solo
+                  </button>
+                </label>
+                <label
+                  key="fecha-reparado"
+                  className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroReparadoActivo)}`}
+                >
+                  <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+                  <input
+                    type="checkbox"
+                    className="monitor-ordenes-check-input"
+                    checked={filtroModoFechaReparado}
+                    onChange={() => toggleModoFechaReparado()}
+                  />
+                  <span className="monitor-ordenes-check-text">Fecha reparado</span>
+                  <button
+                    type="button"
+                    className="monitor-ordenes-solo"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      soloModoFechaReparado()
+                    }}
+                    title="Órdenes con fecha_reparado en el rango (todas las que pasaron a reparado ese día, sin importar el estatus actual)."
+                  >
+                    Solo
+                  </button>
+                </label>
+              </div>
               {rangoFechasInvalido ? (
                 <p className="monitor-ordenes-rango-aviso" role="alert">
                   La fecha inicial no puede ser posterior a la final.
                 </p>
               ) : null}
+              {modoFechaSinRango ? (
+                <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--modos" role="alert">
+                  Indique «Desde» y/o «Hasta» arriba para usar «Fecha registrado», «Fecha entrega» o «Fecha reparado».
+                </p>
+              ) : null}
             </div>
-
-            <label
-              className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroBusquedaActivo)}`}
-            >
-              <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-              <span className="monitor-ordenes-tile-label">Buscador</span>
-              <div className="monitor-ordenes-fecha-desde">
-                <input
-                  type="search"
-                  className="monitor-ordenes-busqueda-input"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Nombre cliente, #469, problema… (ignora filtros de estatus/fecha)"
-                  aria-label="Buscador: cliente, número de orden o texto libre"
-                />
-                <button
-                  type="button"
-                  className="monitor-ordenes-fecha-clear"
-                  onClick={() => setBusqueda('')}
-                  disabled={!busqueda.trim()}
-                  title="Limpiar buscador"
-                  aria-label="Limpiar buscador"
-                >
-                  Limpiar
-                </button>
-              </div>
-            </label>
           </div>
 
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
             <div className="monitor-ordenes-estatus-grid">
               {ESTATUS_MONITOR_FILA_SUPERIOR.map((est) => chipFiltroEstatus(est))}
-              <label
-                key="fecha-registrado"
-                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroIngresoActivo)}`}
-              >
-                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-                <input
-                  type="checkbox"
-                  className="monitor-ordenes-check-input"
-                  checked={filtroModoFechaIngreso}
-                  onChange={() => toggleModoFechaIngreso()}
-                />
-                <span className="monitor-ordenes-check-text">Fecha registrado</span>
-                <button
-                  type="button"
-                  className="monitor-ordenes-solo"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    soloModoFechaIngreso()
-                  }}
-                  title="Órdenes con fecha_ingreso en el rango (todas las que entraron ese día, sin importar el estatus actual)."
-                >
-                  Solo
-                </button>
-              </label>
-              <label
-                key="fecha-entrega"
-                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroEntregaActivo)}`}
-              >
-                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-                <input
-                  type="checkbox"
-                  className="monitor-ordenes-check-input"
-                  checked={filtroModoFechaEntrega}
-                  onChange={() => toggleModoFechaEntrega()}
-                />
-                <span className="monitor-ordenes-check-text">Fecha entrega</span>
-                <button
-                  type="button"
-                  className="monitor-ordenes-solo"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    soloModoFechaEntrega()
-                  }}
-                  title="Órdenes con fecha_entrega en el rango (todas las entregadas ese día, sin importar los chips de estatus)."
-                >
-                  Solo
-                </button>
-              </label>
               {ESTATUS_MONITOR_TRAS_FECHAS.map((est) => chipFiltroEstatus(est))}
-              <label
-                key="fecha-reparado"
-                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroReparadoActivo)}`}
-              >
-                <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-                <input
-                  type="checkbox"
-                  className="monitor-ordenes-check-input"
-                  checked={filtroModoFechaReparado}
-                  onChange={() => toggleModoFechaReparado()}
-                />
-                <span className="monitor-ordenes-check-text">Fecha reparado</span>
-                <button
-                  type="button"
-                  className="monitor-ordenes-solo"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    soloModoFechaReparado()
-                  }}
-                  title="Órdenes con fecha_reparado en el rango (todas las que pasaron a reparado ese día, sin importar el estatus actual)."
-                >
-                  Solo
-                </button>
-              </label>
               <label
                 key="verificadas"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip monitor-ordenes-tile--verificadas${tileActive(filtroVerificadasActivo)}`}
@@ -1138,12 +1116,6 @@ export default function MonitorOrdenesModulo({
                 </button>
               </label>
             </div>
-            {modoFechaSinRango ? (
-              <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="alert">
-                Indique «Desde» y/o «Hasta» en el rango de fechas de arriba para usar «Fecha registrado», «Fecha
-                entrega» o «Fecha reparado».
-              </p>
-            ) : null}
           </fieldset>
 
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
@@ -1180,6 +1152,33 @@ export default function MonitorOrdenesModulo({
               })}
             </div>
           </fieldset>
+
+          <label
+            className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(filtroBusquedaActivo)}`}
+          >
+            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+            <span className="monitor-ordenes-tile-label">Buscador</span>
+            <div className="monitor-ordenes-fecha-desde">
+              <input
+                type="search"
+                className="monitor-ordenes-busqueda-input"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Refinar resultados: problema, cliente, #469… (respeta filtros de arriba)"
+                aria-label="Buscador: cliente, número de orden o texto libre"
+              />
+              <button
+                type="button"
+                className="monitor-ordenes-fecha-clear"
+                onClick={() => setBusqueda('')}
+                disabled={!busqueda.trim()}
+                title="Limpiar buscador"
+                aria-label="Limpiar buscador"
+              >
+                Limpiar
+              </button>
+            </div>
+          </label>
         </section>
 
         {loading ? (
@@ -1191,9 +1190,11 @@ export default function MonitorOrdenesModulo({
               <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
               <span className="monitor-ordenes-conteo-texto">
                 {filasOrdenadas.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
-                {busquedaLibreActivaUi
-                  ? ` para «${String(busqueda).trim()}» (sin filtros de estatus ni fechas)`
-                  : ' según filtros actuales'}
+                {busquedaTextoActivaUi
+                  ? ` con «${String(busqueda).trim()}» dentro de los filtros actuales`
+                  : filtroBusquedaActivo
+                    ? ` con ${String(busqueda).trim()} días en taller (dentro de los filtros actuales)`
+                    : ' según filtros actuales'}
               </span>
             </p>
 
@@ -1201,9 +1202,11 @@ export default function MonitorOrdenesModulo({
               {filasOrdenadas.length === 0 ? (
                 <div className="monitor-ordenes-vacio-card empty-card">
                   <p>
-                    {busquedaLibreActivaUi
-                      ? `No se encontró ninguna orden para «${String(busqueda).trim()}».`
-                      : 'No hay órdenes con los filtros seleccionados.'}
+                    {busquedaTextoActivaUi
+                      ? `Ninguna orden coincide con «${String(busqueda).trim()}» entre los resultados filtrados.`
+                      : filtroBusquedaActivo
+                        ? `Ninguna orden con ${String(busqueda).trim()} días en taller entre los resultados filtrados.`
+                        : 'No hay órdenes con los filtros seleccionados.'}
                   </p>
                 </div>
               ) : (

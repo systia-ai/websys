@@ -836,7 +836,7 @@ function textoBusquedaMonitorNorm(s) {
 
 /**
  * Buscador del monitor: cliente, #orden, problema, equipo, técnico, estatus.
- * Ignora filtros de estatus/fecha (se aplica sobre todas las órdenes cargadas).
+ * Se aplica sobre el conjunto ya filtrado por estatus, fechas, técnico y tipo de servicio.
  */
 export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], equipoPorId = null) {
   const q = textoBusquedaMonitorNorm(queryRaw)

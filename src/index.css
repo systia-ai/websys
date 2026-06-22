@@ -2941,6 +2941,19 @@ td {
   min-height: 34px;
 }
 
+.monitor-ordenes-rango-modos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+
+.monitor-ordenes-rango-modos .monitor-ordenes-check {
+  flex: 1 1 0;
+  min-width: min(100%, 148px);
+}
+
 .monitor-ordenes-rango-aviso {
   margin: 0;
   font-size: 0.85rem;
@@ -3424,6 +3437,10 @@ td {
   margin-top: 8px;
 }
 
+.monitor-ordenes-fieldset--estatus + .monitor-ordenes-filtros-busqueda {
+  margin-top: 8px;
+}
+
 .monitor-ordenes-fieldset.monitor-ordenes-tile--wide > .monitor-ordenes-tile-badge {
   top: 8px;
   right: 10px;
@@ -3559,6 +3576,10 @@ td {
 .monitor-ordenes-rango-aviso--fieldset {
   margin: 6px 0 0;
   width: 100%;
+}
+
+.monitor-ordenes-rango-aviso--modos {
+  margin-top: 6px;
 }
 
 @media (min-width: 900px) {
@@ -9786,7 +9807,8 @@ input.full {
   border-color: var(--app-color-border) !important;
 }
 
-:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check.monitor-ordenes-tile--chip {
+:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check.monitor-ordenes-tile--chip,
+:root[data-theme='dark'] .monitor-ordenes-rango-modos .monitor-ordenes-check.monitor-ordenes-tile--chip {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -9799,7 +9821,8 @@ input.full {
   overflow: visible;
 }
 
-:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check > .monitor-ordenes-check-text {
+:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check > .monitor-ordenes-check-text,
+:root[data-theme='dark'] .monitor-ordenes-rango-modos .monitor-ordenes-check > .monitor-ordenes-check-text {
   flex: 1 1 auto;
   min-width: min(100%, 5.5rem);
   font-size: 0.78rem;
@@ -9811,7 +9834,8 @@ input.full {
   word-break: break-word;
 }
 
-:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check > .monitor-ordenes-tile-badge {
+:root[data-theme='dark'] .monitor-ordenes-estatus-grid .monitor-ordenes-check > .monitor-ordenes-tile-badge,
+:root[data-theme='dark'] .monitor-ordenes-rango-modos .monitor-ordenes-check > .monitor-ordenes-tile-badge {
   flex: none;
   position: absolute;
 }
