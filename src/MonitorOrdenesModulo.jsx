@@ -156,22 +156,22 @@ const TECNICO_SIN = '__sin_tecnico__'
 const ESTATUS_ORDEN_MONITOR = [
   'INGRESADO',
   'ENTREGADO',
-  'EN ESPERA POR REFACCION',
   'REPARADO',
+  'EN ESPERA POR REFACCION',
   'SIN REPARACION',
   'EN REVISION',
 ]
 
-/** Fila principal del grid de estatus (los modos por fecha viven en «Rango de fechas»). */
-const ESTATUS_MONITOR_FILA_SUPERIOR = [
-  'INGRESADO',
-  'ENTREGADO',
-  'EN ESPERA POR REFACCION',
+/** Ingresado y Entregado siempre al inicio; En revisión y Verificadas al final. */
+const ESTATUS_MONITOR_ANCLADOS_INICIO = ['INGRESADO', 'ENTREGADO']
+
+const ESTATUS_MONITOR_SECUNDARIOS = [
   'REPARADO',
+  'EN ESPERA POR REFACCION',
   'SIN REPARACION',
 ]
 
-const ESTATUS_MONITOR_TRAS_FECHAS = ['EN REVISION']
+const ESTATUS_MONITOR_ANCLADOS_FIN = ['EN REVISION']
 
 const TIPOS_SERVICIO_FILTRO = TIPOS_SERVICIO_CANONICOS
 
@@ -1088,9 +1088,10 @@ export default function MonitorOrdenesModulo({
 
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
-            <div className="monitor-ordenes-estatus-grid">
-              {ESTATUS_MONITOR_FILA_SUPERIOR.map((est) => chipFiltroEstatus(est))}
-              {ESTATUS_MONITOR_TRAS_FECHAS.map((est) => chipFiltroEstatus(est))}
+            <div className="monitor-ordenes-estatus-grid monitor-ordenes-estatus-grid--orden">
+              {ESTATUS_MONITOR_ANCLADOS_INICIO.map((est) => chipFiltroEstatus(est))}
+              {ESTATUS_MONITOR_SECUNDARIOS.map((est) => chipFiltroEstatus(est))}
+              {ESTATUS_MONITOR_ANCLADOS_FIN.map((est) => chipFiltroEstatus(est))}
               <label
                 key="verificadas"
                 className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip monitor-ordenes-tile--verificadas${tileActive(filtroVerificadasActivo)}`}
