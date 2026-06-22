@@ -835,7 +835,7 @@ function textoBusquedaMonitorNorm(s) {
 }
 
 /**
- * Buscador del monitor: cliente, #orden, problema, equipo, técnico, estatus.
+ * Buscador del monitor (reportes u otros): cliente, #orden, problema, equipo, técnico, estatus.
  * Se aplica sobre el conjunto ya filtrado por estatus, fechas, técnico y tipo de servicio.
  */
 export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], equipoPorId = null) {
@@ -864,6 +864,30 @@ export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], eq
       .join(' '),
   )
   return blob.includes(q) || (qSinHash !== q && qSinHash && blob.includes(qSinHash))
+}
+
+/**
+ * Buscador del monitor de órdenes: #orden (exacta), problemas_reportados,
+ * descripcion_solucion y nombre del cliente.
+ * Se aplica sobre el conjunto ya filtrado (estatus, fechas, técnico, tipo de servicio).
+ */
+export function repCoincideBusquedaProblemaSolucionMonitor(rep, queryRaw, clientes = []) {
+  const q = textoBusquedaMonitorNorm(queryRaw)
+  if (!q) return true
+  const qSinHash = q.replace(/^#+\s*/, '').trim()
+
+  if (/^\d+$/.test(qSinHash)) {
+    const idStr = String(rep?.id ?? '').trim()
+    return idStr === qSinHash || Number(idStr) === Number(qSinHash)
+  }
+
+  const c = (clientes ?? []).find((x) => sameId(x.id, rep?.cliente_id))
+  const nombre = textoBusquedaMonitorNorm(c?.nombre ?? c?.Nombre ?? '')
+  if (nombre && nombre.includes(q)) return true
+  const blob = textoBusquedaMonitorNorm(
+    [rep?.problemas_reportados, rep?.descripcion_solucion].filter(Boolean).join(' '),
+  )
+  return blob.includes(q)
 }
 
 /**

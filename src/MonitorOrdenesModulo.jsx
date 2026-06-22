@@ -16,7 +16,7 @@ import {
   ordenUsaSistemaWeb,
   ORDEN_SISTEMA_DESDE_YMD,
   repCoincideFiltroMonitor,
-  repCoincideBusquedaTextoMonitor,
+  repCoincideBusquedaProblemaSolucionMonitor,
   tecnicoRepCoincideFiltro,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
@@ -248,7 +248,7 @@ export default function MonitorOrdenesModulo({
   const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(
     filtrosIniciales.filtroModoVerificadas,
   )
-  /** Buscador: refina sobre filtros activos; «12 días» = exactamente 12 días en taller. */
+  /** Buscador: refina sobre filtros activos; #orden, problemas, solución o nombre de cliente. */
   const [busqueda, setBusqueda] = useState(filtrosIniciales.busqueda)
 
   /** Catálogo de técnicos (controlado por el usuario). */
@@ -509,9 +509,7 @@ export default function MonitorOrdenesModulo({
     if (diasExactos != null) {
       filtradas = filtradas.filter((r) => diasEnTaller(r) === diasExactos)
     } else if (qTexto) {
-      filtradas = filtradas.filter((r) =>
-        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
-      )
+      filtradas = filtradas.filter((r) => repCoincideBusquedaProblemaSolucionMonitor(r, qTexto, clientes))
     }
     const conTiempo = filtradas.map((r) => {
       const rid = String(r.id)
@@ -1165,8 +1163,8 @@ export default function MonitorOrdenesModulo({
                 className="monitor-ordenes-busqueda-input"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Refinar resultados: problema, cliente, #469… (respeta filtros de arriba)"
-                aria-label="Buscador: cliente, número de orden o texto libre"
+                placeholder="Refinar: #orden, problema, solución o cliente… (respeta filtros de arriba)"
+                aria-label="Buscar por número de orden, problemas, solución o nombre del cliente"
               />
               <button
                 type="button"
