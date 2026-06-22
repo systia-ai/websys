@@ -10,6 +10,7 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import {
   aYmdLocalDesdeRaw,
   formatFechaLegibleEsMx,
+  repCoincideBusquedaTextoMonitor,
   repEsVerificadaListaEntrega,
   TIPOS_SERVICIO_CANONICOS,
   tipoServicioDeRep,
@@ -297,7 +298,7 @@ export default function ReportesModulo({
   }, [cargarEquipos])
 
   const cargarDatosPeriodo = useCallback(
-    async (ini, fin, estatusSet, modoFecha = null) => {
+    async (ini, fin, estatusSet, modoFecha = null, { limpiarBusqueda = false } = {}) => {
       setLoading(true)
       setSinColumnaFecha(false)
       try {
@@ -359,7 +360,7 @@ export default function ReportesModulo({
               ? 'Fecha entrega'
               : labelEstatusAplicados(estatusSet)
         setEstatusAplicado(etiquetaFiltro)
-        setBusqueda('')
+        if (limpiarBusqueda) setBusqueda('')
         if (nDup > 0) {
           onNotice?.(
             nDup === 1
@@ -443,7 +444,9 @@ export default function ReportesModulo({
   async function onGenerarReporte() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha, {
+      limpiarBusqueda: true,
+    })
     if (ok) {
       setEstadisticasDesdeReporte(false)
       setPantalla('resultados')
@@ -453,11 +456,19 @@ export default function ReportesModulo({
   async function onVerEstadisticas() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha, {
+      limpiarBusqueda: true,
+    })
     if (ok) {
       setEstadisticasDesdeReporte(false)
       setPantalla('estadisticas')
     }
+  }
+
+  async function onActualizarReporte() {
+    const rango = validarFiltros()
+    if (!rango) return
+    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
   }
 
   async function onActualizarEstadisticas() {
@@ -496,36 +507,33 @@ export default function ReportesModulo({
   }, [equipos])
 
   const filtrados = useMemo(() => {
-    const base =
-      tiposServicioSeleccionados.size === 0
-        ? []
-        : reparaciones.filter((r) => {
-            const tipoCanon = tipoServicioDeRep(r, equipoPorId, { usarEquipoSiFalta: true })
-            return tipoCanon != null && tiposServicioSeleccionados.has(tipoCanon)
-          })
-    const t = busqueda.trim().toLowerCase()
-    if (!t) return base
-    return base.filter((r) => {
-      const id = String(r.id ?? '')
-      const est = String(r.estatus ?? '').toLowerCase()
-      const nom = nombreCliente(clientes, r.cliente_id).toLowerCase()
-      const desc = String(r.descripcion_equipo ?? '').toLowerCase()
-      const tipo = String(r.tipo_reparacion ?? '').toLowerCase()
-      const tech = String(r.tecnico ?? '').toLowerCase()
-      const problema = String(r.problemas_reportados ?? '').toLowerCase()
-      const tipoCanon = String(tipoServicioDeRep(r, equipoPorId, { usarEquipoSiFalta: true }) ?? '').toLowerCase()
-      return (
-        id.includes(t) ||
-        est.includes(t) ||
-        nom.includes(t) ||
-        desc.includes(t) ||
-        tipo.includes(t) ||
-        tech.includes(t) ||
-        problema.includes(t) ||
-        tipoCanon.includes(t)
+    let filas = reparaciones
+
+    if (tiposServicioSeleccionados.size === 0) {
+      filas = []
+    } else {
+      const todosTipos =
+        TIPOS_SERVICIO_CANONICOS.length > 0 &&
+        TIPOS_SERVICIO_CANONICOS.every((t) => tiposServicioSeleccionados.has(t))
+      if (!todosTipos) {
+        filas = filas.filter((r) => {
+          const tipoCanon = tipoServicioDeRep(r, equipoPorId, { usarEquipoSiFalta: true })
+          return tipoCanon != null && tiposServicioSeleccionados.has(tipoCanon)
+        })
+      }
+    }
+
+    const qTexto = String(busqueda ?? '').trim()
+    if (qTexto) {
+      filas = filas.filter((r) =>
+        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
       )
-    })
+    }
+
+    return filas
   }, [reparaciones, busqueda, clientes, tiposServicioSeleccionados, equipoPorId])
+
+  const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
 
   function volverAElegirFechas() {
     setPantalla('fechas')
@@ -793,6 +801,17 @@ export default function ReportesModulo({
           </div>
         </section>
 
+        <ReportesFiltrosCard {...propsFiltrosReporte}>
+          <button
+            type="button"
+            className="btn-agregar-equipo btn-consultar-corte-caja"
+            onClick={() => void onActualizarReporte()}
+            disabled={loading || !filtrosListos}
+          >
+            {loading ? 'Actualizando…' : 'ACTUALIZAR REPORTE'}
+          </button>
+        </ReportesFiltrosCard>
+
         <div className="reportes-acciones-row">
           <button
             type="button"
@@ -839,8 +858,8 @@ export default function ReportesModulo({
         ) : filtrados.length === 0 ? (
           <div className="empty-card">
             <p>
-              {busqueda.trim()
-                ? 'No se encontraron resultados'
+              {filtroBusquedaActivo
+                ? `Ninguna orden coincide con «${String(busqueda).trim()}» entre los resultados filtrados.`
                 : sinColumnaFecha
                   ? 'No hay órdenes'
                   : 'No hay órdenes en el periodo y filtro seleccionados'}

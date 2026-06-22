@@ -131,36 +131,7 @@ export default function ReportesFiltrosCard({
         </p>
       ) : null}
 
-      <label
-        className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(
-          Boolean(String(busqueda ?? '').trim()),
-        )}`}
-      >
-        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-        <span className="monitor-ordenes-tile-label">Buscador</span>
-        <div className="monitor-ordenes-fecha-desde">
-          <input
-            type="search"
-            className="monitor-ordenes-busqueda-input"
-            value={busqueda}
-            onChange={(e) => onBusqueda?.(e.target.value)}
-            placeholder="Ej. Garantía Epson, reparado, entregado, #orden..."
-            aria-label="Buscar por cliente, orden, estatus, técnico, problema o tipo de servicio"
-          />
-          <button
-            type="button"
-            className="monitor-ordenes-fecha-clear"
-            onClick={() => onBusqueda?.('')}
-            disabled={!String(busqueda ?? '').trim()}
-            title="Limpiar buscador"
-            aria-label="Limpiar buscador"
-          >
-            Limpiar
-          </button>
-        </div>
-      </label>
-
-      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--fechas-tipo reportes-estatus-fieldset">
+      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus reportes-estatus-fieldset">
         <legend className="monitor-ordenes-legend">Estatus a incluir</legend>
         <div className="reportes-estatus-acciones">
           <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(crearSetEstatusTodos())}>
@@ -278,6 +249,35 @@ export default function ReportesFiltrosCard({
           })}
         </div>
       </fieldset>
+
+      <label
+        className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(
+          Boolean(String(busqueda ?? '').trim()),
+        )}`}
+      >
+        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+        <span className="monitor-ordenes-tile-label">Buscador</span>
+        <div className="monitor-ordenes-fecha-desde">
+          <input
+            type="search"
+            className="monitor-ordenes-busqueda-input"
+            value={busqueda}
+            onChange={(e) => onBusqueda?.(e.target.value)}
+            placeholder="Refinar resultados: problema, cliente, #469… (respeta filtros de arriba)"
+            aria-label="Buscador: cliente, número de orden o texto libre"
+          />
+          <button
+            type="button"
+            className="monitor-ordenes-fecha-clear"
+            onClick={() => onBusqueda?.('')}
+            disabled={!String(busqueda ?? '').trim()}
+            title="Limpiar buscador"
+            aria-label="Limpiar buscador"
+          >
+            Limpiar
+          </button>
+        </div>
+      </label>
 
       {children ? <div className="reportes-filtros-acciones">{children}</div> : null}
     </section>
