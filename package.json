@@ -12,7 +12,8 @@
     "deploy:function:whatsapp:raw": "supabase functions deploy send-whatsapp-orden --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt && supabase functions deploy send-whatsapp-anticipo --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt && supabase functions deploy send-whatsapp-liquidacion --project-ref gvxffxyygvtpmqlsrsmn --no-verify-jwt",
     "deploy:function:crear-usuario": "dotenv -e .env -- supabase functions deploy crear-usuario --project-ref gvxffxyygvtpmqlsrsmn",
     "deploy:function:crear-usuario:raw": "supabase functions deploy crear-usuario --project-ref gvxffxyygvtpmqlsrsmn",
-    "db:push": "dotenv -e .env -- node scripts/db-push.mjs"
+    "db:push": "dotenv -e .env -- node scripts/db-push.mjs",
+    "test:monitor-filtros": "node scripts/test-monitor-filtros.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
