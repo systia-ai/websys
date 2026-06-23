@@ -563,7 +563,7 @@ export default function VentasCuentaScreen({
             estatusElegidoManualRef.current = estInicial
             actualizada = { ...cuentaRow, total: totalSync, saldo: estInicial === 'LIQUIDADA' ? 0 : cuentaRow.saldo }
             if (estInicial === 'LIQUIDADA') {
-              const ridSync = normalizarReparacionId(rb ?? cuentaRow.repara_id)
+              const ridSync = rid ?? normalizarReparacionId(cuentaRow.repara_id)
               if (supabase) {
                 void entregarOrdenVinculadaSiCuentaLiquidada(supabase, cuentaRow.id, ridSync).catch(
                   () => {},
