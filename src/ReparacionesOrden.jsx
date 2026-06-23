@@ -2226,8 +2226,8 @@ export default function ReparacionesOrden({
           {esGarantiaSinCobroActiva ? (
             <p className="rep-garantia-sin-cobro-aviso muted small" role="status">
               <strong>{etiquetaGarantiaSinCobro(tipoReparacion)}</strong> — sin cobro al cliente. Al registrar la
-              orden se crea su cuenta; en Cuentas puede liquidarla en <strong>$0.00</strong> y seguir el estatus en
-              esta orden (reparado, verificado, entregado).
+              orden se crea su cuenta; al liquidarla en Cuentas (incluso en <strong>$0.00</strong>) la orden pasa a{' '}
+              <strong>ENTREGADO</strong> automáticamente.
             </p>
           ) : null}
         </div>

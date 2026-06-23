@@ -18,8 +18,8 @@ import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
   actualizarCuentaSupabase,
   aYmdLocalDesdeRaw,
-  marcarReparacionEntregadaSupabase,
-  patchReparacionEntregada,
+  entregarOrdenVinculadaSiCuentaLiquidada,
+  patchOrdenEntregadaSiAplica,
   formatFechaLegibleEsMx,
   aplicarCuentaPagadaActiva,
   formatMontoCuenta,
@@ -562,6 +562,24 @@ export default function VentasCuentaScreen({
           if (estInicial === 'LIQUIDADA' || estInicial === 'PAGADA') {
             estatusElegidoManualRef.current = estInicial
             actualizada = { ...cuentaRow, total: totalSync, saldo: estInicial === 'LIQUIDADA' ? 0 : cuentaRow.saldo }
+            if (estInicial === 'LIQUIDADA') {
+              const ridSync = normalizarReparacionId(rb ?? cuentaRow.repara_id)
+              if (supabase) {
+                void entregarOrdenVinculadaSiCuentaLiquidada(supabase, cuentaRow.id, ridSync).catch(
+                  () => {},
+                )
+              } else if (ridSync != null) {
+                const lr = readLs(LS_REP, [])
+                const repRow = lr.find((r) => sameId(r.id, ridSync)) ?? {}
+                const patchEnt = patchOrdenEntregadaSiAplica(repRow)
+                if (patchEnt) {
+                  writeLs(
+                    LS_REP,
+                    lr.map((r) => (sameId(r.id, ridSync) ? { ...r, ...patchEnt } : r)),
+                  )
+                }
+              }
+            }
           } else if (supabase) {
             actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, cuentaRow, pagos, {
               totalVenta: totalSync,
@@ -663,6 +681,17 @@ export default function VentasCuentaScreen({
           const next = { ...prev, ...patch }
           writeLs(LS_CUENTAS, list.map((c) => (sameId(c.id, cuentaId) ? next : c)))
           setCuentaInfo(next)
+          if (estFijado === 'LIQUIDADA' && ordenVinculadaId != null) {
+            const lr = readLs(LS_REP, [])
+            const repRow = lr.find((r) => sameId(r.id, ordenVinculadaId)) ?? {}
+            const patchEnt = patchOrdenEntregadaSiAplica(repRow)
+            if (patchEnt) {
+              writeLs(
+                LS_REP,
+                lr.map((r) => (sameId(r.id, ordenVinculadaId) ? { ...r, ...patchEnt } : r)),
+              )
+            }
+          }
         }
         return
       }
@@ -707,7 +736,7 @@ export default function VentasCuentaScreen({
     } catch (e) {
       onError?.(`Error al guardar total: ${e.message}`)
     }
-  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError, recargarCuentaInfoDesdeServidor])
+  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError, recargarCuentaInfoDesdeServidor, ordenVinculadaId])
 
   useEffect(() => {
     if (!esCuentaExistente || loading) return
@@ -826,7 +855,7 @@ export default function VentasCuentaScreen({
     const ok = await aplicarLiquidacionCuenta({ avisar: false })
     onNotice?.(
       ok
-        ? 'Cuenta liquidada. La orden sigue activa hasta marcarla entregada en servicio.'
+        ? 'Cuenta liquidada. La orden se marcó como entregada.'
         : 'No se pudo liquidar la cuenta.',
     )
   }
@@ -1182,9 +1211,6 @@ export default function VentasCuentaScreen({
     }
     if (supabase) {
       await actualizarCuentaSupabase(supabase, cuentaId, patchLiq)
-      if (reparaIdCuenta != null && !esGarantiaSinCobro) {
-        await marcarReparacionEntregadaSupabase(supabase, reparaIdCuenta)
-      }
       estatusElegidoManualRef.current = 'LIQUIDADA'
       const refreshed = await recargarCuentaInfoDesdeServidor(cuentaId)
       if (refreshed) setCuentaInfo(refreshed)
@@ -1195,19 +1221,17 @@ export default function VentasCuentaScreen({
         LS_CUENTAS,
         list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...patchLiq } : c)),
       )
-      if (reparaIdCuenta != null) {
+      const ridLiq = ordenVinculadaId ?? reparaIdCuenta
+      if (ridLiq != null) {
         const lr = readLs(LS_REP, [])
-        const repRow = lr.find((r) => sameId(r.id, reparaIdCuenta)) ?? {}
-        const patchEnt = esGarantiaSinCobro
-          ? null
-          : patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus })
-        writeLs(
-          LS_REP,
-          lr.map((r) => {
-            if (!sameId(r.id, reparaIdCuenta)) return r
-            return patchEnt ? { ...r, ...patchEnt } : r
-          }),
-        )
+        const repRow = lr.find((r) => sameId(r.id, ridLiq)) ?? {}
+        const patchEnt = patchOrdenEntregadaSiAplica(repRow)
+        if (patchEnt) {
+          writeLs(
+            LS_REP,
+            lr.map((r) => (sameId(r.id, ridLiq) ? { ...r, ...patchEnt } : r)),
+          )
+        }
       }
       estatusElegidoManualRef.current = 'LIQUIDADA'
       setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patchLiq }))
@@ -1218,7 +1242,7 @@ export default function VentasCuentaScreen({
   async function liquidarCuenta() {
     try {
       const ok = await aplicarLiquidacionCuenta({ avisar: true })
-      if (ok) onNotice?.('Cuenta liquidada')
+      if (ok) onNotice?.('Cuenta liquidada. La orden se marcó como entregada.')
     } catch (e) {
       onError?.(`Error al liquidar: ${e.message}`)
     }
@@ -1578,8 +1602,9 @@ export default function VentasCuentaScreen({
 
         {esGarantiaSinCobro ? (
           <p className="ventas-garantia-sin-cobro-aviso" role="status">
-            <strong>{etiquetaGarantiaSinCobro(tipoReparacionOrden)}</strong> — sin cobro. Puede liquidar la cuenta en{' '}
-            <strong>$0.00</strong>; el estatus de entrega se marca en la orden de servicio.
+            <strong>{etiquetaGarantiaSinCobro(tipoReparacionOrden)}</strong> — sin cobro. Al liquidar la cuenta en{' '}
+            <strong>$0.00</strong>, la orden vinculada pasa a <strong>ENTREGADO</strong> (igual que cualquier otra
+            cuenta liquidada).
           </p>
         ) : null}
 
@@ -1589,11 +1614,7 @@ export default function VentasCuentaScreen({
               type="button"
               className="btn-liquidar-cuenta"
               onClick={() => void liquidarCuenta()}
-              title={
-                esGarantiaSinCobro
-                  ? `Cierra la cuenta de ${etiquetaGarantiaSinCobro(tipoReparacionOrden)} en $0 (la orden se entrega desde servicio)`
-                  : 'Cierra la cuenta y marca la orden como entregada'
-              }
+              title="Cierra la cuenta y marca la orden vinculada como entregada"
             >
               {esGarantiaSinCobro ? '✅ LIQUIDAR GARANTÍA ($0)' : '✅ LIQUIDAR CUENTA'}
             </button>
@@ -1848,7 +1869,7 @@ export default function VentasCuentaScreen({
             <div className="modal-body">
               <div className="confirmar-datos-recuadro">
                 <p className="ventas-estatus-pago-opcion">
-                  <strong>Liquidar cuenta:</strong> cierra la cuenta en el sistema.
+                  <strong>Liquidar cuenta:</strong> cierra la cuenta y marca la orden como entregada.
                 </p>
                 <p className="ventas-estatus-pago-opcion">
                   <strong>Dejar activa (pagada):</strong> saldo $0, cuenta en estatus PAGADA; la orden sigue hasta

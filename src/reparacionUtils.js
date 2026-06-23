@@ -1274,6 +1274,38 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
   throw new Error('No se pudo actualizar la orden tras varios intentos.')
 }
 
+/** Patch ENTREGADO si la orden aún no está entregada (p. ej. al liquidar cuenta). */
+export function patchOrdenEntregadaSiAplica(repRow = {}, opts = {}) {
+  if (!repRow?.id || estatusEsEntregado(repRow.estatus)) return null
+  return patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus, ...opts })
+}
+
+/**
+ * Cuenta LIQUIDADA implica entrega al cliente: la orden vinculada pasa a ENTREGADO si aún no lo está.
+ */
+export async function entregarOrdenVinculadaSiCuentaLiquidada(supabase, cuentaId, reparaIdOpt = null) {
+  if (!supabase?.from || cuentaId == null) return null
+  let rid = normalizarReparacionId(reparaIdOpt)
+  if (rid == null) {
+    const { data: cuenta, error } = await supabase
+      .from('cuentas')
+      .select('repara_id')
+      .eq('id', cuentaId)
+      .maybeSingle()
+    if (error) throw error
+    rid = normalizarReparacionId(cuenta?.repara_id)
+  }
+  if (rid == null) return null
+  const { data: rep, error: eRep } = await supabase
+    .from('reparaciones')
+    .select('estatus')
+    .eq('id', rid)
+    .maybeSingle()
+  if (eRep) throw eRep
+  if (!rep || estatusEsEntregado(rep.estatus)) return null
+  return marcarReparacionEntregadaSupabase(supabase, rid)
+}
+
 /** Actualiza reparación a entregada con todas las fechas de hito correspondientes. */
 export async function marcarReparacionEntregadaSupabase(supabase, reparaId) {
   const rid = normalizarReparacionId(reparaId)
@@ -1684,9 +1716,20 @@ export async function sincronizarCuentaLiquidadaSiSaldoCero(
 /** UPDATE en cuentas; reintenta sin columnas opcionales (fecha_liquidada, updated_at). */
 export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
   let payload = { ...patch }
+  const marcaLiquidada =
+    String(patch.estatus ?? '').trim().toUpperCase() === 'LIQUIDADA'
   for (let intento = 0; intento < 6; intento += 1) {
     const { error } = await supabase.from('cuentas').update(payload).eq('id', cuentaId)
-    if (!error) return
+    if (!error) {
+      if (marcaLiquidada) {
+        try {
+          await entregarOrdenVinculadaSiCuentaLiquidada(supabase, cuentaId)
+        } catch (e) {
+          console.warn('No se pudo marcar orden entregada al liquidar cuenta:', e?.message ?? e)
+        }
+      }
+      return
+    }
     const msg = String(error.message ?? '').toLowerCase()
     if (msg.includes('permission') || msg.includes('row-level security') || msg.includes('rls')) {
       throw new Error(
