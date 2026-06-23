@@ -48,6 +48,8 @@ import {
   patchFechasHitosEstatus,
   buildPatchCambioEstatusOrden,
   patchCompletarFechasHitosFaltantes,
+  ymdIngresoPreservar,
+  fechaIngresoFiltroYmd,
   patchVerificadoEntrega,
   persistirCambioEstatusOrdenSupabase,
   persistirFechasHitosFaltantesSupabase,
@@ -379,8 +381,9 @@ export default function ReparacionesOrden({
   ])
 
   const aplicarFechasDesdeReparacion = useCallback((data) => {
-    const creacion = data.fecha_creacion ?? data.created_at ?? data.updated_at ?? null
-    const ingreso = data.fecha_ingreso ?? data.fechaIngreso ?? null
+    const creacion = data.fecha_creacion ?? data.created_at ?? null
+    const ingreso =
+      data.fecha_ingreso ?? data.fechaIngreso ?? (creacion ? aYmdLocalDesdeRaw(creacion) : null)
     const revision = aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null)
     const reparado = aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null)
     const sinReparacion = aYmdLocalDesdeRaw(
@@ -404,9 +407,10 @@ export default function ReparacionesOrden({
   }, [])
 
   function repSnapshotParaFechas(estatusVal) {
-    return {
+    const snap = {
       estatus: estatusVal,
       fecha_creacion: fechaCreacionRef.current,
+      created_at: fechaCreacionRef.current,
       fecha_ingreso: fechaIngresoRef.current,
       fecha_revision: fechaRevisionRef.current,
       fecha_reparado: fechaReparadoRef.current,
@@ -415,6 +419,11 @@ export default function ReparacionesOrden({
       verificado_entrega: verificadoEntrega,
       fecha_verificacion_entrega: fechaVerificacionEntrega,
     }
+    if (!fechaIngresoFiltroYmd(snap)) {
+      const hist = ymdIngresoPreservar(snap)
+      if (hist) snap.fecha_ingreso = hist
+    }
+    return snap
   }
 
   function aplicarPatchFechasAlEstado(patchF, estatusVal) {
@@ -1141,7 +1150,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eSel } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_creacion, created_at, estatus, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -1436,7 +1445,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_creacion, created_at, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()

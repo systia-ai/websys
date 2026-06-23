@@ -13,7 +13,8 @@
     "deploy:function:crear-usuario": "dotenv -e .env -- supabase functions deploy crear-usuario --project-ref gvxffxyygvtpmqlsrsmn",
     "deploy:function:crear-usuario:raw": "supabase functions deploy crear-usuario --project-ref gvxffxyygvtpmqlsrsmn",
     "db:push": "dotenv -e .env -- node scripts/db-push.mjs",
-    "test:monitor-filtros": "node scripts/test-monitor-filtros.mjs"
+    "test:monitor-filtros": "node scripts/test-monitor-filtros.mjs",
+    "test:fechas-hitos": "node scripts/test-fechas-hitos-orden.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",

@@ -686,6 +686,11 @@ export function fechaIngresoFiltroYmd(rep) {
   return aYmdLocalDesdeRaw(rep?.fecha_ingreso ?? rep?.fechaIngreso)
 }
 
+/** Fecha de ingreso a preservar: columna `fecha_ingreso` o, si falta, alta de la orden (nunca `updated_at`). */
+export function ymdIngresoPreservar(rep) {
+  return fechaIngresoFiltroYmd(rep) ?? aYmdLocalDesdeRaw(rep?.fecha_creacion ?? rep?.created_at)
+}
+
 /** Órdenes anteriores a esta fecha no usaban el sistema web (sin auto-correcciones ni inferencias). */
 export const ORDEN_SISTEMA_DESDE_YMD = '2026-05-01'
 
@@ -891,8 +896,8 @@ export function repCoincideBusquedaProblemaSolucionMonitor(rep, queryRaw, client
 }
 
 /**
- * Completa fechas de hitos que faltan según el estatus actual, verificación o updated_at.
- * No sobrescribe fechas ya guardadas.
+ * Completa fechas de hitos que faltan según el estatus actual o verificación.
+ * No sobrescribe fechas ya guardadas ni usa `updated_at` como ancla de ingreso.
  */
 export function patchCompletarFechasHitosFaltantes(rep) {
   const patch = {}
@@ -904,14 +909,12 @@ export function patchCompletarFechasHitosFaltantes(rep) {
   const fechaEntYmd = aYmdLocalDesdeRaw(
     rep.fecha_entrega ?? rep.fechaEntrega ?? rep.fecha_entregada ?? null,
   )
-  const updatedYmd = aYmdLocalDesdeRaw(rep.updated_at)
   const creacionYmd = aYmdLocalDesdeRaw(rep.fecha_creacion ?? rep.created_at)
   const ingresoColumna = fechaIngresoFiltroYmd(rep)
-  const ingresoExistente = ingresoColumna ?? fechaIngresoYmd(rep)
-  const fallback = updatedYmd || creacionYmd || ingresoExistente || ymdHoyLocal()
+  const ingresoAncla = ymdIngresoPreservar(rep) || creacionYmd
 
-  if (!ingresoColumna) {
-    patch.fecha_ingreso = creacionYmd || fallback
+  if (!ingresoColumna && ingresoAncla) {
+    patch.fecha_ingreso = ingresoAncla
   }
 
   const requiereRevision =
@@ -921,12 +924,12 @@ export function patchCompletarFechasHitosFaltantes(rep) {
     estatusEsEntregado(st) ||
     verificado
 
-  if (!fechaRevisionYmd(rep) && requiereRevision) {
-    patch.fecha_revision = ingresoExistente || creacionYmd || fallback
+  if (!fechaRevisionYmd(rep) && requiereRevision && ingresoAncla) {
+    patch.fecha_revision = ingresoAncla
   }
 
-  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st)) {
-    patch.fecha_sin_reparacion = ingresoExistente || creacionYmd || fallback
+  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st) && ingresoAncla) {
+    patch.fecha_sin_reparacion = ingresoAncla
   }
 
   const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
@@ -948,28 +951,32 @@ export function patchCompletarFechasHitosFaltantes(rep) {
  * al cambiar de estatus. Si hubo cambio de estatus, asigna la fecha del hito que corresponde;
  * si no cambió, solo completa columnas vacías.
  */
-export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnterior = null) {
+export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, _estatusAnterior = null) {
   const patch = {}
   const hoy = ymdFechaEntregaParaGuardar(null)
   const stNuevo = normalizarEstatusOrden(estatusNuevo)
-  const stAnt =
-    estatusAnterior != null && String(estatusAnterior).trim() !== ''
-      ? normalizarEstatusOrden(estatusAnterior)
-      : repActual?.estatus != null && String(repActual.estatus).trim() !== ''
-        ? normalizarEstatusOrden(repActual.estatus)
-        : null
-  const cambioEstatus = stAnt == null || stAnt !== stNuevo
+
+  if (!fechaIngresoFiltroYmd(repActual)) {
+    const ingresoHist = ymdIngresoPreservar(repActual)
+    if (ingresoHist) patch.fecha_ingreso = ingresoHist
+  }
 
   function asignarHito(esHito, ymdExistente, col, valor = hoy) {
     if (!esHito(stNuevo)) return
-    if (cambioEstatus || !ymdExistente(repActual)) patch[col] = valor
+    if (ymdExistente(repActual)) return
+    patch[col] = valor
   }
 
-  asignarHito(estatusEsIngresado, fechaIngresoFiltroYmd, 'fecha_ingreso')
-  asignarHito(estatusEsEnRevision, fechaRevisionYmd, 'fecha_revision')
-  asignarHito(estatusEsReparado, fechaReparadoYmd, 'fecha_reparado')
-  asignarHito(estatusEsSinReparacion, fechaSinReparacionYmd, 'fecha_sin_reparacion')
-  if (estatusEsEntregado(stNuevo) && (cambioEstatus || !fechaEntregaFiltroYmd(repActual))) {
+  asignarHito(
+    estatusEsIngresado,
+    fechaIngresoFiltroYmd,
+    'fecha_ingreso',
+    ymdIngresoPreservar(repActual) || hoy,
+  )
+  asignarHito(estatusEsEnRevision, fechaRevisionYmd, 'fecha_revision', hoy)
+  asignarHito(estatusEsReparado, fechaReparadoYmd, 'fecha_reparado', hoy)
+  asignarHito(estatusEsSinReparacion, fechaSinReparacionYmd, 'fecha_sin_reparacion', hoy)
+  if (estatusEsEntregado(stNuevo) && !fechaEntregaFiltroYmd(repActual)) {
     patch.fecha_entrega = ymdFechaEntregaParaGuardar(
       repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
     )
