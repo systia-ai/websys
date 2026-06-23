@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { deleteSupabaseVerificado } from './supabaseDeleteUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { reponerExistencia, registrarVentaEnCuenta } from './inventarioStock.js'
@@ -1069,8 +1070,7 @@ export default function VentasCuentaScreen({
     try {
       if (L.tipo === 'reparamov' && L.dbId != null) {
         if (supabase) {
-          const { error } = await supabase.from('reparamov').delete().eq('id', L.dbId)
-          if (error) throw error
+          await deleteSupabaseVerificado(supabase, 'reparamov', (q) => q.eq('id', L.dbId))
         } else {
           writeLs(
             LS_REPARAMOV,
@@ -1081,8 +1081,7 @@ export default function VentasCuentaScreen({
         const prodId = Number(L.producto_id)
         const cantLinea = Number(L.cantidad)
         if (supabase) {
-          const { error } = await supabase.from('cuentamov').delete().eq('id', L.dbId)
-          if (error) throw error
+          await deleteSupabaseVerificado(supabase, 'cuentamov', (q) => q.eq('id', L.dbId))
         } else {
           writeLs(
             LS_CUENTAMOV,
@@ -1098,8 +1097,7 @@ export default function VentasCuentaScreen({
         return
       } else if (L.tipo === 'pago' && L.dbId != null) {
         if (supabase) {
-          const { error } = await supabase.from('pagosclientes').delete().eq('id', L.dbId)
-          if (error) throw error
+          await deleteSupabaseVerificado(supabase, 'pagosclientes', (q) => q.eq('id', L.dbId))
         } else {
           writeLs(
             LS_PAGOS,

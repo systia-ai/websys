@@ -55,6 +55,8 @@ export default function ClientesCuentasVentasPanel({
   cuentas = [],
   pagosCliente = [],
   onSelectCuenta,
+  puedeEliminar = false,
+  onEliminarCuenta,
 }) {
   const [vista, setVista] = useState(leerVistaCuentas)
 
@@ -199,6 +201,7 @@ export default function ClientesCuentasVentasPanel({
                     <th>Estatus</th>
                     <th>Tipo pago</th>
                     <th aria-label="Abrir cuenta">Abrir</th>
+                    {puedeEliminar ? <th aria-label="Eliminar cuenta">Eliminar</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -249,6 +252,22 @@ export default function ClientesCuentasVentasPanel({
                           Ver →
                         </button>
                       </td>
+                      {puedeEliminar ? (
+                        <td className="cuentas-cliente-tabla-acciones">
+                          <button
+                            type="button"
+                            className="btn-icon delete clientes-lista-btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onEliminarCuenta?.(f.cuenta)
+                            }}
+                            title={`Eliminar cuenta #${f.idCuenta}`}
+                            aria-label={`Eliminar cuenta #${f.idCuenta}`}
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -257,7 +276,7 @@ export default function ClientesCuentasVentasPanel({
           ) : (
             <ul className="rep-activa-list cuentas-cliente-list">
               {filas.map((f) => (
-                <li key={f.cuenta.id}>
+                <li key={f.cuenta.id} className="cuentas-cliente-list-item">
                   <button
                     type="button"
                     className={`rep-activa-card cuenta-tarjeta-android cuentas-cliente-tile${f.liquidada ? ' rep-orden-entregada' : ''}${f.pagadaActiva ? ' rep-orden-pagada' : ''}`}
@@ -295,6 +314,17 @@ export default function ClientesCuentasVentasPanel({
                       <span className="rep-activa-etiqueta">Tipo pago:</span> {f.tipoPago}
                     </span>
                   </button>
+                  {puedeEliminar ? (
+                    <button
+                      type="button"
+                      className="btn-icon delete clientes-lista-btn-icon cuentas-cliente-btn-eliminar"
+                      onClick={() => onEliminarCuenta?.(f.cuenta)}
+                      title={`Eliminar cuenta #${f.idCuenta}`}
+                      aria-label={`Eliminar cuenta #${f.idCuenta}`}
+                    >
+                      🗑️
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>

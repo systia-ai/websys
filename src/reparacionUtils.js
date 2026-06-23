@@ -1708,6 +1708,117 @@ export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
   throw new Error('No se pudo actualizar la cuenta tras varios intentos.')
 }
 
+/** Elimina cuenta y dependencias (Supabase RPC o localStorage). */
+export async function eliminarCuentaCompleta(supabase, cuentaId, ls = null) {
+  const cid = normalizarReparacionId(cuentaId)
+  if (cid == null) throw new Error('ID de cuenta inválido.')
+
+  if (supabase) {
+    const { error } = await supabase.rpc('eliminar_cuenta_por_id', { p_cuenta_id: cid })
+    if (error) {
+      const { rpcNoExiste, eliminarCuentaSupabaseCascada } = await import('./supabaseDeleteUtils.js')
+      if (!rpcNoExiste(error)) throw error
+      await eliminarCuentaSupabaseCascada(supabase, cid)
+    }
+    return
+  }
+
+  const LS_CUENTAS = ls?.cuentas ?? 'sistefix_local_cuentas'
+  const LS_PAGOS = ls?.pagos ?? 'sistefix_local_pagosclientes'
+  const LS_CUENTAMOV = ls?.cuentamov ?? 'sistefix_local_cuentamov'
+  const LS_REPARAMOV = ls?.reparamov ?? 'sistefix_local_reparamov'
+
+  const readLs = (key, fallback) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback))
+    } catch {
+      return fallback
+    }
+  }
+  const writeLs = (key, data) => localStorage.setItem(key, JSON.stringify(data))
+
+  const cuentas = readLs(LS_CUENTAS, [])
+  const cuenta = cuentas.find((c) => Number(c.id) === cid)
+  const reparaId = cuenta?.repara_id != null ? Number(cuenta.repara_id) : null
+
+  writeLs(
+    LS_PAGOS,
+    readLs(LS_PAGOS, []).filter((p) => Number(p.cuenta_id) !== cid),
+  )
+  writeLs(
+    LS_CUENTAMOV,
+    readLs(LS_CUENTAMOV, []).filter((m) => Number(m.cuenta_id) !== cid),
+  )
+  if (reparaId != null && Number.isFinite(reparaId)) {
+    writeLs(
+      LS_REPARAMOV,
+      readLs(LS_REPARAMOV, []).filter((m) => Number(m.repara_id) !== reparaId),
+    )
+  }
+  writeLs(
+    LS_CUENTAS,
+    cuentas.filter((c) => Number(c.id) !== cid),
+  )
+}
+
+/** Elimina orden de servicio, cuenta vinculada y movimientos. */
+export async function eliminarReparacionCompleta(supabase, reparaId, ls = null) {
+  const rid = normalizarReparacionId(reparaId)
+  if (rid == null) throw new Error('ID de orden inválido.')
+
+  if (supabase) {
+    const { error } = await supabase.rpc('eliminar_reparacion_completa', { p_repara_id: rid })
+    if (error) {
+      const { rpcNoExiste, eliminarReparacionSupabaseCascada } = await import('./supabaseDeleteUtils.js')
+      if (!rpcNoExiste(error)) throw error
+      await eliminarReparacionSupabaseCascada(supabase, rid)
+    }
+    return
+  }
+
+  const LS_CUENTAS = ls?.cuentas ?? 'sistefix_local_cuentas'
+  const LS_PAGOS = ls?.pagos ?? 'sistefix_local_pagosclientes'
+  const LS_CUENTAMOV = ls?.cuentamov ?? 'sistefix_local_cuentamov'
+  const LS_REPARAMOV = ls?.reparamov ?? 'sistefix_local_reparamov'
+  const LS_REP = ls?.reparaciones ?? 'sistefix_local_reparaciones'
+
+  const readLs = (key, fallback) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback))
+    } catch {
+      return fallback
+    }
+  }
+  const writeLs = (key, data) => localStorage.setItem(key, JSON.stringify(data))
+
+  const cuentasIds = readLs(LS_CUENTAS, [])
+    .filter((c) => Number(c.repara_id) === rid)
+    .map((c) => c.id)
+
+  if (cuentasIds.length > 0) {
+    writeLs(
+      LS_PAGOS,
+      readLs(LS_PAGOS, []).filter((p) => !cuentasIds.some((cid) => Number(p.cuenta_id) === Number(cid))),
+    )
+    writeLs(
+      LS_CUENTAMOV,
+      readLs(LS_CUENTAMOV, []).filter((m) => !cuentasIds.some((cid) => Number(m.cuenta_id) === Number(cid))),
+    )
+    writeLs(
+      LS_CUENTAS,
+      readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) !== rid),
+    )
+  }
+  writeLs(
+    LS_REPARAMOV,
+    readLs(LS_REPARAMOV, []).filter((m) => Number(m.repara_id) !== rid),
+  )
+  writeLs(
+    LS_REP,
+    readLs(LS_REP, []).filter((r) => Number(r.id) !== rid),
+  )
+}
+
 /** Reparación aún en taller (no entregada). */
 export function isReparacionActiva(rep) {
   return !estatusEsEntregado(rep?.estatus)

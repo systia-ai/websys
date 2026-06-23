@@ -23,6 +23,7 @@ import {
   tienePermiso,
 } from './permisosUtils.js'
 import { cargarPermisosRolesServidor } from './permisosRolesApi.js'
+import { deleteSupabaseVerificado } from './supabaseDeleteUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { limpiarFiltrosMonitorSesion } from './monitorOrdenesFiltrosSesion.js'
 import MiAparenciaModal from './MiAparenciaModal.jsx'
@@ -384,8 +385,7 @@ function App() {
     if (!confirm('Deseas eliminar este registro?')) return
     try {
       if (supabase) {
-        const { error: deleteError } = await supabase.from(current.table).delete().eq('id', id)
-        if (deleteError) throw deleteError
+        await deleteSupabaseVerificado(supabase, current.table, (q) => q.eq('id', id))
       } else {
         const key = `sistefix_local_${current.table}`
         const existing = JSON.parse(localStorage.getItem(key) ?? '[]')
@@ -539,6 +539,7 @@ function App() {
           setNotice(msg)
           setTimeout(() => setNotice(''), 4000)
         }}
+        puedeEliminar={puedeEliminar}
       />
     )
   }

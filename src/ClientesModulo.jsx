@@ -8,10 +8,13 @@ import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
   sincronizarEstatusCuentaPorSaldo,
+  eliminarCuentaCompleta,
 } from './reparacionUtils.js'
 import ClientesCuentasVentasPanel from './ClientesCuentasVentasPanel.jsx'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import AlertaPermiso from './AlertaPermiso.jsx'
+import { usePermisoEliminar } from './usePermisoEliminar.js'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_VISTA_CLIENTES = 'sistefix_clientes_lista_vista'
@@ -95,7 +98,9 @@ export default function ClientesModulo({
   onRetornoVentasConsumido,
   retornoOrdenes = null,
   onRetornoOrdenesConsumido,
+  puedeEliminar = false,
 }) {
+  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [textoBusqueda, setTextoBusqueda] = useState('')
@@ -429,6 +434,42 @@ export default function ClientesModulo({
     await cargarCuentasVentasModal(cliente, { cerrarModalAcciones: true })
   }
 
+  async function eliminarCuentaCliente(cuenta) {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      return
+    }
+    const idCuenta = cuenta?.id
+    if (idCuenta == null) return
+    const ordenRef =
+      cuenta.repara_id != null && cuenta.repara_id !== '' && String(cuenta.repara_id) !== String(idCuenta)
+        ? String(cuenta.repara_id)
+        : null
+    const msgOrden = ordenRef
+      ? `\n\nLa orden de servicio #${ordenRef} seguirá existiendo sin esta cuenta.`
+      : ''
+    if (
+      !window.confirm(
+        `¿Eliminar la cuenta #${idCuenta} de ${clienteAccion?.nombre || 'este cliente'}?\n\nSe borrarán pagos y movimientos asociados. Esta acción no se puede deshacer.${msgOrden}`,
+      )
+    ) {
+      return
+    }
+    try {
+      await eliminarCuentaCompleta(supabase, idCuenta)
+      onNotice?.(`Cuenta #${idCuenta} eliminada`)
+      if (clienteAccion?.id) {
+        await cargarCuentasVentasModal(clienteAccion)
+      }
+    } catch (e) {
+      onError?.(`Error al eliminar cuenta: ${e.message}`)
+    }
+  }
+
+  function handleEliminarCuenta(cuenta) {
+    intentarEliminar(() => void eliminarCuentaCliente(cuenta))
+  }
+
   function seleccionarCuentaVentas(cuenta) {
     const cliente = clienteAccion
     if (!cliente) return
@@ -673,6 +714,8 @@ export default function ClientesModulo({
           <span className="servicios-appbar-placeholder" aria-hidden />
         )}
       </header>
+
+      <AlertaPermiso mensaje={alertaPermiso} />
 
       <div className="servicios-body">
         <button type="button" className="btn-agregar-equipo" onClick={abrirAgregar}>
@@ -946,6 +989,8 @@ export default function ClientesModulo({
                 cuentas={cuentasEncontradas}
                 pagosCliente={pagosClienteCuentas}
                 onSelectCuenta={(cuenta) => seleccionarCuentaVentas(cuenta)}
+                puedeEliminar={puedeEliminar}
+                onEliminarCuenta={handleEliminarCuenta}
               />
             </div>
             <div className="modal-footer modal-footer-wrap">

@@ -61,6 +61,7 @@ import {
   ymdFechaEntregaParaGuardar,
   cuentaSinOrdenVinculada,
   formatMontoCuenta,
+  eliminarReparacionCompleta,
 } from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
@@ -1632,47 +1633,13 @@ export default function ReparacionesOrden({
     }
     setEliminandoOrden(true)
     try {
-      let cuentasIds = []
-      if (supabase) {
-        const { data: cu, error: eCu } = await supabase
-          .from('cuentas')
-          .select('id')
-          .eq('repara_id', id)
-        if (eCu) throw eCu
-        cuentasIds = (cu ?? []).map((c) => c.id)
-        if (cuentasIds.length > 0) {
-          const { error: ePag } = await supabase
-            .from('pagosclientes')
-            .delete()
-            .in('cuenta_id', cuentasIds)
-          if (ePag) throw ePag
-          const { error: eCuDel } = await supabase
-            .from('cuentas')
-            .delete()
-            .eq('repara_id', id)
-          if (eCuDel) throw eCuDel
-        }
-        const { error: eRep } = await supabase.from('reparaciones').delete().eq('id', id)
-        if (eRep) throw eRep
-      } else {
-        cuentasIds = readLs(LS_CUENTAS, [])
-          .filter((c) => Number(c.repara_id) === Number(id))
-          .map((c) => c.id)
-        if (cuentasIds.length > 0) {
-          writeLs(
-            LS_PAGOS,
-            readLs(LS_PAGOS, []).filter((p) => !cuentasIds.some((cid) => sameId(cid, p.cuenta_id))),
-          )
-          writeLs(
-            LS_CUENTAS,
-            readLs(LS_CUENTAS, []).filter((c) => Number(c.repara_id) !== Number(id)),
-          )
-        }
-        writeLs(
-          LS_REP,
-          readLs(LS_REP, []).filter((r) => Number(r.id) !== Number(id)),
-        )
-      }
+      await eliminarReparacionCompleta(supabase, id, {
+        cuentas: LS_CUENTAS,
+        pagos: LS_PAGOS,
+        cuentamov: 'sistefix_local_cuentamov',
+        reparamov: 'sistefix_local_reparamov',
+        reparaciones: LS_REP,
+      })
       setEliminarConfirmAbierto(false)
       onNotice(`Orden #${id} eliminada correctamente`)
       onSalir?.()
