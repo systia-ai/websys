@@ -353,7 +353,10 @@ export default function ReparacionesOrden({
   const fechasHitosBanner = useMemo(() => {
     const rep = {
       estatus,
-      fecha_ingreso: fechaIngresoOrden,
+      fecha_ingreso: ymdIngresoPreservar({
+        fecha_ingreso: fechaIngresoOrden,
+        fecha_creacion: fechaCreacionOrden,
+      }),
       fecha_creacion: fechaCreacionOrden,
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
@@ -382,8 +385,7 @@ export default function ReparacionesOrden({
 
   const aplicarFechasDesdeReparacion = useCallback((data) => {
     const creacion = data.fecha_creacion ?? data.created_at ?? null
-    const ingreso =
-      data.fecha_ingreso ?? data.fechaIngreso ?? (creacion ? aYmdLocalDesdeRaw(creacion) : null)
+    const ingreso = ymdIngresoPreservar(data)
     const revision = aYmdLocalDesdeRaw(data.fecha_revision ?? data.fechaRevision ?? null)
     const reparado = aYmdLocalDesdeRaw(data.fecha_reparado ?? data.fechaReparado ?? null)
     const sinReparacion = aYmdLocalDesdeRaw(

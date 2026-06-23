@@ -669,26 +669,26 @@ export function formatFechaBitacora(fechaRaw) {
   return formatFechaLegibleEsMx(ymd, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Fecha de ingreso al taller (con respaldos para UI: banner, días en taller). */
+/** Fecha de ingreso al taller: coincide con la alta de la orden (fecha_creacion). */
 export function fechaIngresoYmd(rep) {
+  const creacion = ymdCreacionOrden(rep)
+  if (creacion) return creacion
   const raw =
     rep?.fecha_ingreso ??
     rep?.fechaIngreso ??
     rep?.fecha_registro ??
-    rep?.fecha_creacion ??
-    rep?.created_at ??
     rep?.fecha
   return aYmdLocalDesdeRaw(raw)
 }
 
-/** Solo columna `fecha_ingreso` (filtros del monitor / reportes). */
+/** Columna / filtro de ingreso en monitor y reportes (misma regla que fechaIngresoYmd). */
 export function fechaIngresoFiltroYmd(rep) {
-  return aYmdLocalDesdeRaw(rep?.fecha_ingreso ?? rep?.fechaIngreso)
+  return fechaIngresoYmd(rep)
 }
 
-/** Fecha de ingreso a preservar: columna `fecha_ingreso` o, si falta, alta de la orden (nunca `updated_at`). */
+/** Fecha de ingreso a guardar o mostrar: siempre la de creación de la orden. */
 export function ymdIngresoPreservar(rep) {
-  return fechaIngresoFiltroYmd(rep) ?? aYmdLocalDesdeRaw(rep?.fecha_creacion ?? rep?.created_at)
+  return ymdCreacionOrden(rep) ?? fechaIngresoFiltroYmd(rep)
 }
 
 /** Órdenes anteriores a esta fecha no usaban el sistema web (sin auto-correcciones ni inferencias). */
@@ -909,12 +909,12 @@ export function patchCompletarFechasHitosFaltantes(rep) {
   const fechaEntYmd = aYmdLocalDesdeRaw(
     rep.fecha_entrega ?? rep.fechaEntrega ?? rep.fecha_entregada ?? null,
   )
-  const creacionYmd = aYmdLocalDesdeRaw(rep.fecha_creacion ?? rep.created_at)
-  const ingresoColumna = fechaIngresoFiltroYmd(rep)
-  const ingresoAncla = ymdIngresoPreservar(rep) || creacionYmd
-
-  if (!ingresoColumna && ingresoAncla) {
-    patch.fecha_ingreso = ingresoAncla
+  const creacionYmd = ymdCreacionOrden(rep)
+  const columnaIngreso = aYmdLocalDesdeRaw(rep?.fecha_ingreso ?? rep?.fechaIngreso)
+  if (creacionYmd && columnaIngreso !== creacionYmd) {
+    patch.fecha_ingreso = creacionYmd
+  } else if (!columnaIngreso && creacionYmd) {
+    patch.fecha_ingreso = creacionYmd
   }
 
   const requiereRevision =
@@ -924,12 +924,12 @@ export function patchCompletarFechasHitosFaltantes(rep) {
     estatusEsEntregado(st) ||
     verificado
 
-  if (!fechaRevisionYmd(rep) && requiereRevision && ingresoAncla) {
-    patch.fecha_revision = ingresoAncla
+  if (!fechaRevisionYmd(rep) && requiereRevision && creacionYmd) {
+    patch.fecha_revision = creacionYmd
   }
 
-  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st) && ingresoAncla) {
-    patch.fecha_sin_reparacion = ingresoAncla
+  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st) && creacionYmd) {
+    patch.fecha_sin_reparacion = creacionYmd
   }
 
   const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
@@ -956,10 +956,8 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, _estatusAn
   const hoy = ymdFechaEntregaParaGuardar(null)
   const stNuevo = normalizarEstatusOrden(estatusNuevo)
 
-  if (!fechaIngresoFiltroYmd(repActual)) {
-    const ingresoHist = ymdIngresoPreservar(repActual)
-    if (ingresoHist) patch.fecha_ingreso = ingresoHist
-  }
+  const creacion = ymdCreacionOrden(repActual)
+  if (creacion) patch.fecha_ingreso = creacion
 
   function asignarHito(esHito, ymdExistente, col, valor = hoy) {
     if (!esHito(stNuevo)) return

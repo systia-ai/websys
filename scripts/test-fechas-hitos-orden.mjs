@@ -40,33 +40,46 @@ test('ymdIngresoPreservar usa fecha_creacion si falta fecha_ingreso', () => {
   )
 })
 
-test('INGRESADO → EN REVISION conserva ingreso 17 jun y marca revisión hoy', () => {
+test('INGRESADO → EN REVISION: ingreso = fecha_creacion (17 jun)', () => {
   const rep = {
     estatus: 'INGRESADO',
     fecha_creacion: '2026-06-17T12:00:00Z',
     updated_at: '2026-06-22T15:00:00Z',
   }
   const patch = patchFechasHitosEstatus('EN REVISION', rep, 'INGRESADO')
-  assertEqual(patch.fecha_ingreso, '2026-06-17', 'fecha_ingreso')
+  assertEqual(patch.fecha_ingreso, '2026-06-17', 'fecha_ingreso = creación')
   assertEqual(patch.fecha_revision, HOY, 'fecha_revision hoy')
 })
 
-test('No sobrescribe fecha_ingreso existente al cambiar estatus', () => {
+test('Corrige columna fecha_ingreso errónea (22) a creación (17)', () => {
+  const rep = {
+    estatus: 'EN REVISION',
+    fecha_ingreso: '2026-06-22',
+    fecha_creacion: '2026-06-17T12:00:00Z',
+    updated_at: '2026-06-22T15:00:00Z',
+  }
+  const patch = patchCompletarFechasHitosFaltantes(rep)
+  assertEqual(patch.fecha_ingreso, '2026-06-17', 'alinea ingreso a creación')
+  assertEqual(fechaIngresoYmd(rep), '2026-06-17', 'UI muestra creación')
+})
+
+test('Cambio de estatus no pisa ingreso si ya coincide con creación', () => {
   const rep = {
     estatus: 'INGRESADO',
     fecha_ingreso: '2026-06-17',
-    fecha_creacion: '2026-06-20T12:00:00Z',
+    fecha_creacion: '2026-06-17T12:00:00Z',
     updated_at: '2026-06-22T15:00:00Z',
   }
   const patch = patchFechasHitosEstatus('EN REVISION', rep, 'INGRESADO')
-  assertEqual(patch.fecha_ingreso, undefined, 'no tocar ingreso')
+  assertEqual(patch.fecha_ingreso, '2026-06-17', 'mantiene creación')
   assertEqual(patch.fecha_revision, HOY, 'solo revisión nueva')
 })
 
-test('patchCompletar no usa updated_at para ingreso', () => {
+test('patchCompletar alinea ingreso a creación', () => {
   const rep = {
     estatus: 'EN REVISION',
     fecha_creacion: '2026-06-17T12:00:00Z',
+    fecha_ingreso: '2026-06-22',
     updated_at: '2026-06-22T15:00:00Z',
   }
   const patch = patchCompletarFechasHitosFaltantes(rep)
