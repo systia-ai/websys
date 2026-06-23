@@ -132,6 +132,27 @@ export function aplicarFiltroPagosPorFechas(pagos, ini, fin, cuentasPorId = null
   return { filas, sinColumnaFecha: false, excluidosFueraDeRango, sinFechaIncluidos }
 }
 
+/**
+ * Ordena pagos por fecha de movimiento (y por id como desempate).
+ * @param {'asc'|'desc'} orden asc = más antiguo primero; desc = más nuevo primero.
+ */
+export function ordenarPagosPorFecha(pagos, orden = 'desc', cuentasPorId = null) {
+  const dir = orden === 'asc' ? 1 : -1
+  const rows = [...(pagos ?? [])]
+  rows.sort((a, b) => {
+    const ya = extractFechaPagoYmd(a, cuentasPorId)
+    const yb = extractFechaPagoYmd(b, cuentasPorId)
+    if (ya == null && yb == null) {
+      return (Number(a.id) - Number(b.id)) * dir
+    }
+    if (ya == null) return 1
+    if (yb == null) return -1
+    if (ya !== yb) return ya < yb ? -dir : dir
+    return (Number(a.id) - Number(b.id)) * dir
+  })
+  return rows
+}
+
 /** Inserta en `pagosclientes` y devuelve la fila guardada (con `created_at` del servidor). */
 export async function insertPagoCliente(supabase, row, { nextLocalId } = {}) {
   const payload = {

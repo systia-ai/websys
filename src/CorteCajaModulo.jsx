@@ -10,6 +10,7 @@ import {
   cargarCuentasMapParaPagos,
   cargarTodosPagosClientes,
   extractFechaPagoYmd,
+  ordenarPagosPorFecha,
 } from './pagosClientesUtils.js'
 import { formatFechaLegibleEsMx, ymdHoyLocal } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
@@ -21,6 +22,7 @@ import {
 
 const LS_VISTA_CORTE = 'sistefix_corte_caja_vista'
 const LS_DETALLADO_CORTE = 'sistefix_corte_caja_detallado'
+const LS_ORDEN_FECHA_CORTE = 'sistefix_corte_caja_orden_fecha'
 
 function leerVistaCorte() {
   try {
@@ -35,6 +37,14 @@ function leerDetalladoCorte() {
     return localStorage.getItem(LS_DETALLADO_CORTE) === '1'
   } catch {
     return false
+  }
+}
+
+function leerOrdenFechaCorte() {
+  try {
+    return localStorage.getItem(LS_ORDEN_FECHA_CORTE) === 'asc' ? 'asc' : 'desc'
+  } catch {
+    return 'desc'
   }
 }
 
@@ -99,6 +109,7 @@ export default function CorteCajaModulo({
   const [busqueda, setBusqueda] = useState('')
   const [vista, setVista] = useState(leerVistaCorte)
   const [detallado, setDetallado] = useState(leerDetalladoCorte)
+  const [ordenFecha, setOrdenFecha] = useState(leerOrdenFechaCorte)
   const [desglosePorCuenta, setDesglosePorCuenta] = useState(() => new Map())
   const [cargandoDesglose, setCargandoDesglose] = useState(false)
 
@@ -229,10 +240,15 @@ export default function CorteCajaModulo({
     return periodoAplicado.ini === periodoAplicado.fin ? 'Total del día' : 'Total del periodo'
   }, [periodoAplicado])
 
+  const pagosOrdenados = useMemo(
+    () => ordenarPagosPorFecha(pagos, ordenFecha, cuentasPorIdRef.current),
+    [pagos, ordenFecha],
+  )
+
   const filtrados = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
-    if (!t) return pagos
-    return pagos.filter((p) => {
+    if (!t) return pagosOrdenados
+    return pagosOrdenados.filter((p) => {
       const con = String(p.concepto ?? '').toLowerCase()
       const fp = String(p.forma_pago ?? '').toLowerCase()
       const nom = nombreCliente(clientes, p.cliente_id).toLowerCase()
@@ -240,7 +256,7 @@ export default function CorteCajaModulo({
       const cuent = String(p.cuenta_id ?? '')
       return con.includes(t) || fp.includes(t) || nom.includes(t) || cid.includes(t) || cuent.includes(t)
     })
-  }, [pagos, busqueda, clientes])
+  }, [pagosOrdenados, busqueda, clientes])
 
   function cambiarVista(modo) {
     setVista(modo)
@@ -270,6 +286,16 @@ export default function CorteCajaModulo({
     setDetallado(activo)
     try {
       localStorage.setItem(LS_DETALLADO_CORTE, activo ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function cambiarOrdenFecha(valor) {
+    const orden = valor === 'asc' ? 'asc' : 'desc'
+    setOrdenFecha(orden)
+    try {
+      localStorage.setItem(LS_ORDEN_FECHA_CORTE, orden)
     } catch {
       /* ignore */
     }
@@ -322,7 +348,7 @@ export default function CorteCajaModulo({
         formatearFechaCorta,
         etiquetaTotal: etiquetaTotalResumen,
         resumen,
-        filas: pagos.map((p) => {
+        filas: ordenarPagosPorFecha(pagos, ordenFecha, cuentasPorIdRef.current).map((p) => {
           const { titulo, lineas } = conceptoPagoFilas(p)
           const conceptoPdf =
             detallado && lineas.length > 0 ? [titulo, ...lineas.map((l) => `  · ${l}`)].join('\n') : titulo
@@ -562,6 +588,18 @@ export default function CorteCajaModulo({
               ▦ Tabla
             </button>
           </div>
+          <div className="corte-caja-vista-opciones">
+          <label className="corte-caja-orden-fecha">
+            <span className="inventario-vista-label">Orden:</span>
+            <select
+              value={ordenFecha}
+              onChange={(e) => cambiarOrdenFecha(e.target.value)}
+              aria-label="Ordenar movimientos por fecha"
+            >
+              <option value="asc">Más antiguo primero</option>
+              <option value="desc">Más nuevo primero</option>
+            </select>
+          </label>
           <label className="corte-caja-detallado-check">
             <input
               type="checkbox"
@@ -571,6 +609,7 @@ export default function CorteCajaModulo({
             />
             <span>Detallado</span>
           </label>
+          </div>
         </div>
 
         {loadingCorte ? (
@@ -590,7 +629,7 @@ export default function CorteCajaModulo({
             ariaLabel="Movimientos del corte en tabla"
             classNameWrap="corte-caja-tabla-wrap"
             showHint={false}
-            syncDeps={[vista, filtrados, loadingCorte]}
+            syncDeps={[vista, filtrados, loadingCorte, ordenFecha]}
           >
               <div className={`inventario-tabla-grid corte-caja-tabla-grid${detallado ? ' corte-caja-tabla-grid--detallado' : ''}`}>
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">

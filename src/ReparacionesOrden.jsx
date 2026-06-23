@@ -6,7 +6,7 @@ import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import ModalAlerta from './ModalAlerta.jsx'
-import { leerTecnicos, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
+import { cargarTecnicosUnificados, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import {
   abrirWhatsAppAnticipo,
@@ -228,7 +228,7 @@ export default function ReparacionesOrden({
   const [problemasReportados, setProblemasReportados] = useState('')
   const [tecnico1, setTecnico1] = useState('')
   const [tecnico2, setTecnico2] = useState('')
-  const [tecnicosCatalogo] = useState(() => leerTecnicos())
+  const [tecnicosCatalogo, setTecnicosCatalogo] = useState(() => [])
   const [nivelB, setNivelB] = useState('')
   const [nivelY, setNivelY] = useState('')
   const [nivelM, setNivelM] = useState('')
@@ -709,6 +709,16 @@ export default function ReparacionesOrden({
       waExitoTimerRef.current = null
     }
   }, [repIdStr, idReparacion])
+
+  useEffect(() => {
+    let cancelado = false
+    void cargarTecnicosUnificados(supabase).then((lista) => {
+      if (!cancelado) setTecnicosCatalogo(lista)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [supabase])
 
   useEffect(
     () => () => {

@@ -22,7 +22,7 @@ import {
   TIPOS_SERVICIO_CANONICOS,
   ymdHoyLocal,
 } from './reparacionUtils.js'
-import { leerTecnicos, agregarTecnico, eliminarTecnico } from './tecnicosCatalogo.js'
+import { leerTecnicos, agregarTecnico, eliminarTecnico, cargarTecnicosUnificados } from './tecnicosCatalogo.js'
 import {
   guardarFiltrosMonitorSesion,
   leerEstadoFiltrosInicialMonitor,
@@ -310,6 +310,16 @@ export default function MonitorOrdenesModulo({
   useEffect(() => {
     void cargarTodo()
   }, [cargarTodo])
+
+  useEffect(() => {
+    let cancelado = false
+    void cargarTecnicosUnificados(supabase).then((lista) => {
+      if (!cancelado) setTecnicosCatalogo(lista)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [supabase])
 
   useEffect(() => {
     const r = retornoVentas
@@ -674,25 +684,25 @@ export default function MonitorOrdenesModulo({
     return c ? c.nombre || `#${cid}` : cid != null ? `Cliente #${cid}` : '—'
   }
 
-  function handleAgregarTecnico() {
+  async function handleAgregarTecnico() {
     if (!puedeGestionarTecnicos) {
       mostrarSinPermiso('Su usuario no tiene permiso para gestionar técnicos.')
       return
     }
     const n = nuevoTecnico.trim()
     if (!n) return
-    const nueva = agregarTecnico(n)
+    const nueva = await agregarTecnico(n, supabase)
     setTecnicosCatalogo(nueva)
     setNuevoTecnico('')
   }
 
-  function handleEliminarTecnico(nombre) {
+  async function handleEliminarTecnico(nombre) {
     if (!puedeEliminar) {
       mostrarSinPermiso()
       return
     }
     if (!window.confirm(`¿Eliminar el técnico "${nombre}" del catálogo?\n\nLas órdenes ya asignadas a este técnico no se modifican; pero no podrás seleccionarlo de nuevo.`)) return
-    const nueva = eliminarTecnico(nombre)
+    const nueva = await eliminarTecnico(nombre, supabase)
     setTecnicosCatalogo(nueva)
     if (tecnicoFiltro === nombre) setTecnicoFiltro(TECNICO_TODAS)
   }

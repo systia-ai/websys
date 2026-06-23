@@ -29,13 +29,22 @@ function validarImagen(file) {
 }
 
 /** Carga configuración de marca global (Supabase o localStorage). */
+export async function obtenerAppConfigCrudo(supabase) {
+  if (!supabase?.rpc) {
+    const local = leerAppConfigLocal()
+    return local && typeof local === 'object' ? { ...local } : {}
+  }
+  const { data, error } = await supabase.rpc('obtener_app_config')
+  if (error) throw error
+  return data && typeof data === 'object' ? data : {}
+}
+
 export async function cargarAppConfigServidor(supabase) {
   if (!supabase) {
     return leerAppConfigLocal() ?? normalizarConfigBranding(APP_CONFIG_DEFECTO)
   }
   try {
-    const { data, error } = await supabase.rpc('obtener_app_config')
-    if (error) throw error
+    const data = await obtenerAppConfigCrudo(supabase)
     return normalizarConfigBranding(data ?? {})
   } catch {
     const local = leerAppConfigLocal()
@@ -49,9 +58,11 @@ export async function guardarAppConfigServidor(supabase, branding) {
     guardarAppConfigLocal(payload)
     return payload
   }
-  const { data, error } = await supabase.rpc('guardar_app_config', { p_config: payload })
+  const actual = await obtenerAppConfigCrudo(supabase)
+  const merged = { ...actual, ...payload }
+  const { data, error } = await supabase.rpc('guardar_app_config', { p_config: merged })
   if (error) throw error
-  const guardado = normalizarConfigBranding(data ?? payload)
+  const guardado = normalizarConfigBranding(data ?? merged)
   guardarAppConfigLocal(guardado)
   return guardado
 }
