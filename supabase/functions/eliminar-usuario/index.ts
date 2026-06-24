@@ -1,5 +1,5 @@
 /**
- * Edge Function: crear usuario en Auth + asignar rol en user_roles.
+ * Edge Function: eliminar usuario de Auth (y datos vinculados en cascada).
  * Solo invocable por sesión ADMIN (es_admin_actual).
  */
 
@@ -11,8 +11,6 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
-
-const ROLES = ['ADMIN', 'COORDINADOR', 'TECNICO', 'OPERADOR']
 
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -41,7 +39,7 @@ Deno.serve(async (req) => {
     return json(500, { error: 'Configuración del servidor incompleta.' })
   }
 
-  let body: { email?: string; password?: string; rol?: string } = {}
+  let body: { user_id?: string } = {}
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -59,67 +57,50 @@ Deno.serve(async (req) => {
 
   const { data: isAdmin, error: adminErr } = await userClient.rpc('es_admin_actual')
   if (adminErr || !isAdmin) {
-    return json(403, { error: 'Solo administradores pueden crear usuarios.' })
+    return json(403, { error: 'Solo administradores pueden eliminar usuarios.' })
   }
 
-  const email = String(body.email ?? '').trim().toLowerCase()
-  const password = String(body.password ?? '')
-  const rol = String(body.rol ?? 'TECNICO').trim().toUpperCase()
+  const userId = String(body.user_id ?? '').trim()
+  if (!userId) {
+    return json(400, { error: 'Falta el identificador del usuario.' })
+  }
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return json(400, { error: 'Correo electrónico no válido.' })
-  }
-  if (password.length < 6) {
-    return json(400, { error: 'La contraseña debe tener al menos 6 caracteres.' })
-  }
-  if (!ROLES.includes(rol)) {
-    return json(400, { error: 'Rol no válido.' })
+  if (userId === userData.user.id) {
+    return json(400, { error: 'No puede eliminar su propio usuario.' })
   }
 
   const adminClient = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  })
+  const { data: roleRow, error: roleErr } = await adminClient
+    .from('user_roles')
+    .select('rol')
+    .eq('user_id', userId)
+    .maybeSingle()
 
-  if (createErr) {
-    const msg = createErr.message ?? ''
-    if (/already registered|already exists|duplicate/i.test(msg)) {
-      return json(409, { error: 'Ya existe un usuario con ese correo.' })
+  if (roleErr) {
+    return json(500, { error: `No se pudo verificar el rol: ${roleErr.message}` })
+  }
+
+  if (String(roleRow?.rol ?? '').toUpperCase() === 'ADMIN') {
+    const { count, error: countErr } = await adminClient
+      .from('user_roles')
+      .select('*', { count: 'exact', head: true })
+      .eq('rol', 'ADMIN')
+
+    if (countErr) {
+      return json(500, { error: `No se pudo verificar administradores: ${countErr.message}` })
     }
-    return json(400, { error: msg || 'No se pudo crear el usuario.' })
+    if ((count ?? 0) <= 1) {
+      return json(400, { error: 'No se puede eliminar el último usuario ADMIN.' })
+    }
   }
 
-  const newUserId = created.user?.id
-  if (!newUserId) {
-    return json(500, { error: 'Usuario creado pero sin identificador.' })
+  const { error: delErr } = await adminClient.auth.admin.deleteUser(userId)
+  if (delErr) {
+    return json(400, { error: delErr.message || 'No se pudo eliminar el usuario.' })
   }
 
-  const { error: rolErr } = await adminClient.from('user_roles').upsert(
-    {
-      user_id: newUserId,
-      rol,
-      assigned_by: userData.user.id,
-      assigned_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' },
-  )
-
-  if (rolErr) {
-    return json(500, {
-      error: `Usuario creado pero no se pudo asignar el rol: ${rolErr.message}`,
-      user_id: newUserId,
-    })
-  }
-
-  return json(200, {
-    ok: true,
-    user_id: newUserId,
-    email,
-    rol,
-  })
+  return json(200, { ok: true, user_id: userId })
 })

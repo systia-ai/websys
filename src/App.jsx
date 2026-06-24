@@ -681,6 +681,7 @@ function App() {
           supabase={supabase}
           onHome={goBack}
           miRol={rolUsuario}
+          miUserId={user?.id ?? null}
           puedeCambiarRoles={puedeCambiarRoles}
           puedeConfigurarPermisos={puedeConfigurarPermisos}
           puedeConfigurarSistema={puedeConfigurarSistema}

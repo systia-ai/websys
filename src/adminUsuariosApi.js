@@ -64,3 +64,51 @@ export async function crearUsuarioAdmin(supabase, { email, password, rol }) {
 
   return { ok: true, data }
 }
+
+function humanizarErrorEliminarUsuario(errorMsg) {
+  const m = String(errorMsg ?? '').toLowerCase()
+  if (m.includes('not desplegada') || m.includes('failed to fetch') || m.includes('404')) {
+    return 'La función de eliminación de usuarios no está disponible. Despliegue la Edge Function eliminar-usuario en Supabase.'
+  }
+  if (m.includes('solo administradores')) {
+    return 'Solo administradores pueden eliminar usuarios.'
+  }
+  if (m.includes('último usuario admin') || m.includes('ultimo usuario admin')) {
+    return 'No se puede eliminar el último usuario ADMIN.'
+  }
+  if (m.includes('propio usuario')) {
+    return 'No puede eliminar su propio usuario.'
+  }
+  return String(errorMsg ?? 'No se pudo eliminar el usuario.')
+}
+
+/**
+ * Elimina un usuario de Supabase Auth (solo ADMIN).
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {{ userId: string }} params
+ */
+export async function eliminarUsuarioAdmin(supabase, { userId }) {
+  if (!supabase) {
+    return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  }
+
+  const id = String(userId ?? '').trim()
+  if (!id) {
+    return { ok: false, errorMsg: 'Usuario no válido.' }
+  }
+
+  const { data, error } = await supabase.functions.invoke('eliminar-usuario', {
+    body: { user_id: id },
+  })
+
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorEliminarUsuario(msg) }
+  }
+
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: humanizarErrorEliminarUsuario(String(data.error)) }
+  }
+
+  return { ok: true, data }
+}

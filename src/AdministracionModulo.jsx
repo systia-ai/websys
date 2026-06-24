@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import ModalAlerta from './ModalAlerta.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { MENSAJE_SIN_PERMISO_CREAR_USUARIO } from './permisosUtils.js'
 import { ETIQUETAS_ROL, ROLES_SISTEMA } from './permisosConfig.js'
 import AdministracionConfiguracionTabs from './AdministracionConfiguracionTabs.jsx'
-import { crearUsuarioAdmin } from './adminUsuariosApi.js'
+import { crearUsuarioAdmin, eliminarUsuarioAdmin } from './adminUsuariosApi.js'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -26,6 +27,7 @@ export default function AdministracionModulo({
   onError,
   onNotice,
   miRol = 'ADMIN',
+  miUserId = null,
   puedeCambiarRoles = false,
   puedeConfigurarPermisos = false,
   puedeConfigurarSistema = false,
@@ -41,7 +43,8 @@ export default function AdministracionModulo({
   const [nuevoPassword2, setNuevoPassword2] = useState('')
   const [nuevoRol, setNuevoRol] = useState('TECNICO')
   const [crearUsuarioExpandido, setCrearUsuarioExpandido] = useState(false)
-  const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeCambiarRoles)
+  const [usuarioEliminarConfirm, setUsuarioEliminarConfirm] = useState(null)
+  const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeCambiarRoles)
 
   const cargarUsuarios = useCallback(async () => {
     if (!supabase) {
@@ -151,27 +154,36 @@ export default function AdministracionModulo({
     setCrearUsuarioExpandido((v) => !v)
   }
 
-  async function quitarRolUsuario(userId) {
+  function solicitarEliminarUsuario(fila) {
     if (!puedeCambiarRoles) {
-      mostrarSinPermiso()
+      mostrarSinPermiso('Su usuario no tiene permisos para eliminar usuarios.')
       return
     }
-    const fila = usuarios.find((u) => String(u.user_id) === String(userId))
-    if (!fila) return
+    if (!fila?.user_id) return
+    if (miUserId && String(fila.user_id) === String(miUserId)) {
+      onError?.('No puede eliminar su propio usuario.')
+      return
+    }
     if (String(fila.rol).toUpperCase() === 'ADMIN' && totalAdmins <= 1) {
-      onError?.('No se puede quitar el rol del último usuario ADMIN.')
+      onError?.('No se puede eliminar el último usuario ADMIN.')
       return
     }
-    setGuardandoId(userId)
+    setUsuarioEliminarConfirm(fila)
+  }
+
+  async function ejecutarEliminarUsuario() {
+    const fila = usuarioEliminarConfirm
+    if (!fila || !puedeCambiarRoles) return
+    setUsuarioEliminarConfirm(null)
+    setGuardandoId(fila.user_id)
     try {
-      const { error } = await supabase.from('user_roles').delete().eq('user_id', userId)
-      if (error) throw error
-      setUsuarios((prev) =>
-        prev.map((u) => (String(u.user_id) === String(userId) ? { ...u, rol: 'TECNICO' } : u)),
-      )
-      onNotice?.('Rol personalizado eliminado. Usuario queda como TECNICO.')
-    } catch (e) {
-      onError?.(`No se pudo borrar rol: ${e.message}`)
+      const result = await eliminarUsuarioAdmin(supabase, { userId: fila.user_id })
+      if (!result.ok) {
+        onError?.(result.errorMsg)
+        return
+      }
+      setUsuarios((prev) => prev.filter((u) => String(u.user_id) !== String(fila.user_id)))
+      onNotice?.(`Usuario ${fila.email} eliminado del sistema.`)
     } finally {
       setGuardandoId(null)
     }
@@ -373,15 +385,19 @@ export default function AdministracionModulo({
                             <button
                               type="button"
                               className="administracion-btn-borrar-rol"
-                              onClick={() => intentarEliminar(() => void quitarRolUsuario(u.user_id))}
-                              disabled={guardandoId === u.user_id}
-                              title="Quitar rol personalizado (queda TECNICO)"
-                              aria-label={`Quitar rol de ${u.email}`}
+                              onClick={() => solicitarEliminarUsuario(u)}
+                              disabled={guardandoId === u.user_id || (miUserId && String(u.user_id) === String(miUserId))}
+                              title={
+                                miUserId && String(u.user_id) === String(miUserId)
+                                  ? 'No puede eliminar su propio usuario'
+                                  : 'Eliminar usuario del sistema'
+                              }
+                              aria-label={`Eliminar usuario ${u.email}`}
                             >
                               <span className="administracion-btn-borrar-rol-icon" aria-hidden="true">
                                 🗑️
                               </span>
-                              <span>Quitar rol</span>
+                              <span>Eliminar</span>
                             </button>
                           </td>
                         ) : null}
@@ -403,6 +419,40 @@ export default function AdministracionModulo({
           />
         )}
       </div>
+
+      <ModalAlerta
+        open={Boolean(usuarioEliminarConfirm)}
+        onClose={() => !guardandoId && setUsuarioEliminarConfirm(null)}
+        titulo="Eliminar usuario"
+        mensaje={
+          usuarioEliminarConfirm
+            ? `¿Eliminar definitivamente al usuario ${usuarioEliminarConfirm.email}? Ya no podrá iniciar sesión y desaparecerá de la lista.`
+            : ''
+        }
+        variante="warning"
+        backdropClose={!guardandoId}
+        tituloId="eliminar-usuario-admin-titulo"
+        footer={
+          <>
+            <button
+              type="button"
+              className="secondary"
+              disabled={Boolean(guardandoId)}
+              onClick={() => setUsuarioEliminarConfirm(null)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn-eliminar-orden modal-alerta-btn"
+              disabled={Boolean(guardandoId)}
+              onClick={() => void ejecutarEliminarUsuario()}
+            >
+              {guardandoId ? 'Eliminando…' : 'Sí, eliminar usuario'}
+            </button>
+          </>
+        }
+      />
     </div>
   )
 }
