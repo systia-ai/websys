@@ -1,3 +1,4 @@
+
 import { jsPDF } from 'jspdf'
 import {
   SISTEBIT_PDF_FORMAT,
@@ -44,27 +45,21 @@ function drawResumenReporte(pdf, p, x, y, width, pageH) {
 
   cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
   const filtroVal = estatusFiltro || 'Todos'
-  const sumaVal = `$${resumen.totalCosto.toFixed(2)}`
-  const sumaW = Math.min(
-    width,
-    Math.max(28, anchoRecuadroCompacto(pdf, 'Suma costo', sumaVal, { min: 28, max: 52, pad: 8 })),
-  )
-  const rowY = cy
-  const rowH = drawCamposCompactosFila(
-    pdf,
-    [
-      { label: 'Filtro estatus', value: filtroVal, theme: TEMA.descripcion, minW: 32 },
-      { label: 'Total órdenes', value: String(resumen.total), theme: TEMA.orden, minW: 28 },
-      { label: 'Activas', value: String(resumen.activas), theme: TEMA.problema, minW: 22 },
-      { label: 'Entregadas', value: String(resumen.entregadas), theme: TEMA.pago, minW: 26 },
-    ],
-    drawCampo,
-    anchoRecuadroCompacto,
-    CAMPO,
-    { x, y: rowY, width: width - sumaW - PDF_GAP },
-  )
-  const sumaH = drawCampo(pdf, 'Suma costo', sumaVal, x + width - sumaW, rowY, sumaW, 9, TEMA.tipo, CAMPO)
-  cy += Math.max(rowH, sumaH) + PDF_GAP
+  cy +=
+    drawCamposCompactosFila(
+      pdf,
+      [
+        { label: 'Filtro estatus', value: filtroVal, theme: TEMA.descripcion, minW: 32 },
+        { label: 'Total órdenes', value: String(resumen.total), theme: TEMA.orden, minW: 28 },
+        { label: 'Activas', value: String(resumen.activas), theme: TEMA.problema, minW: 22 },
+        { label: 'Entregadas', value: String(resumen.entregadas), theme: TEMA.pago, minW: 26 },
+        { label: 'Suma costo', value: `$${resumen.totalCosto.toFixed(2)}`, theme: TEMA.tipo, minW: 28 },
+      ],
+      drawCampo,
+      anchoRecuadroCompacto,
+      CAMPO,
+      { x, y: cy, width },
+    ) + PDF_GAP
 
   const estatusRows = Object.entries(porEstatus ?? {})
     .filter(([, n]) => n > 0)

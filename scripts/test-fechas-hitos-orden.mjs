@@ -8,6 +8,7 @@ import {
   buildPatchCambioEstatusOrden,
   ymdIngresoPreservar,
   fechaIngresoYmd,
+  fechaReparadoYmd,
   ymdHoyLocal,
 } from '../src/reparacionUtils.js'
 
@@ -95,6 +96,45 @@ test('buildPatchCambioEstatusOrden INGRESADO → EN REVISION', () => {
   assertEqual(patch.fecha_ingreso, '2026-06-17', 'ingreso preservado')
   assertEqual(patch.fecha_revision, HOY, 'revisión hoy')
   assertEqual(patch.estatus, 'EN REVISION', 'estatus')
+})
+
+test('REPARADO → EN REVISION: borra fecha_reparado', () => {
+  const rep = {
+    estatus: 'REPARADO',
+    fecha_reparado: '2026-06-23',
+    fecha_revision: '2026-06-20',
+  }
+  const patch = buildPatchCambioEstatusOrden('EN REVISION', rep, { estatusAnterior: 'REPARADO' })
+  assertEqual(patch.fecha_reparado, null, 'fecha_reparado eliminada')
+  assertEqual(patch.estatus, 'EN REVISION', 'estatus')
+})
+
+test('EN REVISION → REPARADO tras retroceso: nueva fecha_reparado hoy', () => {
+  const rep = {
+    estatus: 'EN REVISION',
+    fecha_reparado: '2026-06-23',
+    fecha_revision: '2026-06-20',
+  }
+  const patch = buildPatchCambioEstatusOrden('REPARADO', rep, { estatusAnterior: 'EN REVISION' })
+  assertEqual(patch.fecha_reparado, HOY, 'fecha_reparado nueva')
+  assertEqual(patch.estatus, 'REPARADO', 'estatus')
+})
+
+test('REPARADO → ENTREGADO: conserva fecha_reparado', () => {
+  const rep = {
+    estatus: 'REPARADO',
+    fecha_reparado: '2026-06-23',
+    verificado_entrega: true,
+    fecha_verificacion_entrega: '2026-06-24T10:00:00Z',
+  }
+  const patch = buildPatchCambioEstatusOrden('ENTREGADO', rep, {
+    estatusAnterior: 'REPARADO',
+    verificadoEntrega: true,
+    fechaVerificacionEntrega: '2026-06-24T10:00:00Z',
+  })
+  assertEqual(patch.fecha_reparado, undefined, 'no pisa fecha_reparado en patch')
+  assertEqual(fechaReparadoYmd({ ...rep, ...patch }), '2026-06-23', 'fecha_reparado conservada')
+  assertEqual(patch.estatus, 'ENTREGADO', 'estatus')
 })
 
 test('fechaIngresoYmd sigue mostrando creación si falta columna', () => {

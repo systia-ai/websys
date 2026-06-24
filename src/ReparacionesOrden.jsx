@@ -256,7 +256,6 @@ export default function ReparacionesOrden({
   const [msgExito, setMsgExito] = useState('')
 
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
-  const [confirmActualizarAbierto, setConfirmActualizarAbierto] = useState(false)
   const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
   const [alertaTransicionEstatusAbierto, setAlertaTransicionEstatusAbierto] = useState(false)
   const [mensajeTransicionEstatus, setMensajeTransicionEstatus] = useState('')
@@ -437,7 +436,7 @@ export default function ReparacionesOrden({
       fechaRevisionRef.current = patchF.fecha_revision
       setFechaRevisionOrden(patchF.fecha_revision)
     }
-    if (patchF.fecha_reparado != null) {
+    if ('fecha_reparado' in patchF) {
       fechaReparadoRef.current = patchF.fecha_reparado
       setFechaReparadoOrden(patchF.fecha_reparado)
     }
@@ -1376,20 +1375,6 @@ export default function ReparacionesOrden({
     return true
   }
 
-  function solicitarActualizarOrden() {
-    if (actualizandoRef.current) return
-    const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
-    if (!id) {
-      onError(
-        'No hay número de orden cargado. Abra la orden desde Clientes, Equipos o el Monitor (✏️), o búsquela en «Orden de servicio».',
-      )
-      return
-    }
-    const estatusGuardar = String(estatusRef.current ?? estatus).trim() || 'INGRESADO'
-    if (!validarEstatusAntesDeGuardar(estatusGuardar)) return
-    setConfirmActualizarAbierto(true)
-  }
-
   async function actualizarOrdenCore() {
     if (actualizandoRef.current) return
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
@@ -1513,7 +1498,7 @@ export default function ReparacionesOrden({
         fechaRevisionRef.current = patch.fecha_revision
         setFechaRevisionOrden(patch.fecha_revision)
       }
-      if (patch.fecha_reparado) {
+      if ('fecha_reparado' in patch) {
         fechaReparadoRef.current = patch.fecha_reparado
         setFechaReparadoOrden(patch.fecha_reparado)
       }
@@ -1552,7 +1537,6 @@ export default function ReparacionesOrden({
       onNotice('Orden actualizada')
       setMsgExito('Cambios guardados.')
       setDialogExito(true)
-      setConfirmActualizarAbierto(false)
     } catch (e) {
       onError(`Error al actualizar: ${e.message}`)
     } finally {
@@ -2621,7 +2605,7 @@ export default function ReparacionesOrden({
               type="button"
               className="btn-secondary wide btn-actualizar-orden"
               disabled={actualizandoOrden}
-              onClick={() => solicitarActualizarOrden()}
+              onClick={() => void actualizarOrdenCore()}
             >
               {actualizandoOrden ? 'Guardando…' : '💾 Actualizar orden'}
             </button>
@@ -2822,58 +2806,6 @@ export default function ReparacionesOrden({
                 }}
               >
                 {guardandoOrden ? 'Guardando…' : '✅ Confirmar y guardar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmActualizarAbierto && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => !actualizandoOrden && setConfirmActualizarAbierto(false)}
-        >
-          <div
-            className="modal modal-wide modal-alerta modal-alerta--info modal-confirmar-actualizar"
-            role="dialog"
-            aria-labelledby="confirmar-actualizar-heading"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header confirmar-datos-header">
-              <span className="confirmar-datos-header-ico" aria-hidden="true">
-                ℹ
-              </span>
-              <div>
-                <h3 id="confirmar-actualizar-heading">Verificar datos antes de actualizar</h3>
-                <p className="confirmar-datos-lead">
-                  Revise la información de la orden #{idReparacion ?? numeroOrden ?? '—'}. Si todo es correcto,
-                  confirme para guardar los cambios en la base de datos.
-                </p>
-              </div>
-            </div>
-            <div className="modal-body">
-              {renderResumenOrdenConfirmacion({ incluirNumeroOrden: true })}
-              <p className="confirmar-datos-pregunta confirmar-datos-pregunta--destacada">
-                ¿Los datos son correctos? Confirme para actualizar la orden.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setConfirmActualizarAbierto(false)}
-                disabled={actualizandoOrden}
-              >
-                Volver a editar
-              </button>
-              <button
-                type="button"
-                className="modal-alerta-btn btn-confirm-guardar"
-                disabled={actualizandoOrden}
-                onClick={() => void actualizarOrdenCore()}
-              >
-                {actualizandoOrden ? 'Guardando…' : '✅ Confirmar y actualizar'}
               </button>
             </div>
           </div>

@@ -951,10 +951,24 @@ export function patchCompletarFechasHitosFaltantes(rep) {
  * al cambiar de estatus. Si hubo cambio de estatus, asigna la fecha del hito que corresponde;
  * si no cambió, solo completa columnas vacías.
  */
-export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, _estatusAnterior = null) {
+export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnterior = null) {
   const patch = {}
   const hoy = ymdFechaEntregaParaGuardar(null)
   const stNuevo = normalizarEstatusOrden(estatusNuevo)
+  const stAnt =
+    estatusAnterior != null && String(estatusAnterior).trim() !== ''
+      ? normalizarEstatusOrden(estatusAnterior)
+      : normalizarEstatusOrden(repActual?.estatus)
+
+  // Al salir de REPARADO (excepto a ENTREGADO), borrar fecha_reparado para registrar la nueva al volver.
+  if (estatusEsReparado(stAnt) && !estatusEsReparado(stNuevo) && !estatusEsEntregado(stNuevo)) {
+    patch.fecha_reparado = null
+  }
+
+  // Al entrar a REPARADO desde otro estatus, registrar la fecha de hoy (sustituye una anterior).
+  if (estatusEsReparado(stNuevo) && !estatusEsReparado(stAnt)) {
+    patch.fecha_reparado = hoy
+  }
 
   const creacion = ymdCreacionOrden(repActual)
   if (creacion) patch.fecha_ingreso = creacion
