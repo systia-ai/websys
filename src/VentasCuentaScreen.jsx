@@ -25,6 +25,9 @@ import {
   formatMontoCuenta,
   sincronizarEstatusCuentaPorSaldo,
   totalesVisiblesCuenta,
+  totalVentaSyncDesdeLineas,
+  lineasCuentaTienenMovimientos,
+  totalCargosDesdeLineasCuenta,
   sumPagosCuenta,
   cuentaTieneSoloAnticipo,
   descripcionEquipoParaRecibo,
@@ -83,9 +86,11 @@ function sumSubtotales(lineas) {
 }
 
 function totalCargosDesdeLineas(lineas) {
-  return lineas
-    .filter((l) => l.tipo !== 'pago')
-    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+  return totalCargosDesdeLineasCuenta(lineas)
+}
+
+function totalVentaParaSync(cuentaTotal, lineas) {
+  return totalVentaSyncDesdeLineas(lineas, cuentaTotal)
 }
 
 function pagosDesdeLineas(lineas) {
@@ -100,8 +105,7 @@ function sumPagosDesdeLineas(lineas) {
 
 /** Balance neto (cargos − pagos); negativo = anticipo / saldo a favor. */
 function calcularBalanceNeto(lineas, cuentaTotal) {
-  const tieneLineas = lineas.some((l) => l.tipo === 'pago') || lineas.some((l) => l.tipo !== 'pago')
-  if (tieneLineas) {
+  if (lineasCuentaTienenMovimientos(lineas)) {
     return totalCargosDesdeLineas(lineas) - sumPagosDesdeLineas(lineas)
   }
   return Number(cuentaTotal ?? 0)
@@ -112,15 +116,9 @@ function calcularSaldoPendiente(lineas, cuentaTotal) {
   return Math.max(0, calcularBalanceNeto(lineas, cuentaTotal))
 }
 
-function totalVentaParaSync(cuentaTotal, lineas) {
-  const cargos = totalCargosDesdeLineas(lineas)
-  const ct = Number(cuentaTotal ?? 0)
-  return Math.max(ct, cargos)
-}
-
 /** Si el costo de reparación en la orden no está en reparamov, lo muestra como cargo virtual. */
 function inyectarCostoReparacionSiFalta(lineas, rep) {
-  if (!rep) return lineas
+  if (!rep || esGarantiaSinCobroTipo(rep.tipo_reparacion)) return lineas
   const costo = Number(rep.costo_reparacion ?? 0)
   if (costo <= 0.0001) return lineas
   const sumRepMov = lineas
@@ -352,10 +350,8 @@ export default function VentasCuentaScreen({
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
   const cuentaEstatus = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '')
   const totalCargos = useMemo(() => {
-    const cargos = totalCargosDesdeLineas(lineas)
-    if (cargos > 0.0001) return cargos
-    const ct = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
-    return ct > 0.0001 ? ct : cargos
+    const fallback = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
+    return totalVentaSyncDesdeLineas(lineas, fallback)
   }, [lineas, cuentaInfo?.total, cuentaInicial?.total])
   const balanceNeto = useMemo(
     () => calcularBalanceNeto(lineas, totalCargos),
@@ -648,11 +644,14 @@ export default function VentasCuentaScreen({
   ])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const persistirTotalCuenta = useCallback(async () => {
+  const persistirTotalCuenta = useCallback(
+    async (lineasOverride = null) => {
     if (cuentaId == null || Number(cuentaId) <= 0) return
+    const lineasUi = lineasOverride ?? lineas
     try {
-      const totalSync = totalVentaParaSync(totalCargos, lineas)
-      let pagosSync = pagosDesdeLineas(lineas)
+      const fallbackTotal = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
+      const totalSync = totalVentaSyncDesdeLineas(lineasUi, fallbackTotal)
+      let pagosSync = pagosDesdeLineas(lineasUi)
       if (supabase) {
         const { data: pagosDb, error: ePag } = await supabase
           .from('pagosclientes')
@@ -736,7 +735,9 @@ export default function VentasCuentaScreen({
     } catch (e) {
       onError?.(`Error al guardar total: ${e.message}`)
     }
-  }, [supabase, cuentaId, totalCargos, lineas, cuentaInfo, cuentaInicial, onError, recargarCuentaInfoDesdeServidor, ordenVinculadaId])
+  },
+    [supabase, cuentaId, lineas, cuentaInfo, cuentaInicial, onError, recargarCuentaInfoDesdeServidor, ordenVinculadaId],
+  )
 
   useEffect(() => {
     if (!esCuentaExistente || loading) return
@@ -1096,6 +1097,7 @@ export default function VentasCuentaScreen({
       return
     }
     if (!confirm('¿Eliminar este elemento de la lista?')) return
+    const lineasNuevas = lineas.filter((x) => x.key !== L.key)
     try {
       if (L.tipo === 'reparamov' && L.dbId != null) {
         if (supabase) {
@@ -1121,7 +1123,8 @@ export default function VentasCuentaScreen({
           await reponerExistencia(supabase, prodId, cantLinea)
         }
       } else if (L.virtual) {
-        setLineas((prev) => prev.filter((x) => x.key !== L.key))
+        setLineas(lineasNuevas)
+        await persistirTotalCuenta(lineasNuevas)
         onNotice?.('Cargo de referencia quitado de la lista (no estaba guardado en movimientos)')
         return
       } else if (L.tipo === 'pago' && L.dbId != null) {
@@ -1134,7 +1137,8 @@ export default function VentasCuentaScreen({
           )
         }
       }
-      setLineas((prev) => prev.filter((x) => x.key !== L.key))
+      setLineas(lineasNuevas)
+      await persistirTotalCuenta(lineasNuevas)
       onNotice?.('Eliminado')
     } catch (e) {
       onError?.(`Error al eliminar: ${e.message}`)

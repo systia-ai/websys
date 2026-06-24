@@ -1538,6 +1538,32 @@ export async function vincularCuentaAOrdenSupabase(supabase, cuentaId, reparaId)
  * Total y saldo visibles en listados y ventas.
  * Anticipo sin adeudo: Total negativo (anticipo a favor), Saldo $0.
  */
+export function lineasCuentaTienenMovimientos(lineas) {
+  return (lineas ?? []).some((l) => {
+    const t = l?.tipo
+    return t === 'pago' || (t != null && t !== '')
+  })
+}
+
+/** Suma de subtotales de cargos (excluye pagos) en la UI de cuenta/ventas. */
+export function totalCargosDesdeLineasCuenta(lineas) {
+  return (lineas ?? [])
+    .filter((l) => l.tipo !== 'pago')
+    .reduce((s, l) => s + Number(l.subtotal ?? 0), 0)
+}
+
+/**
+ * Total de cargos a persistir en cuentas.total.
+ * Si la UI ya tiene líneas cargadas, confía en ellas (permite bajar total al eliminar cargos).
+ */
+export function totalVentaSyncDesdeLineas(lineas, cuentaTotalFallback = 0) {
+  if (lineasCuentaTienenMovimientos(lineas)) {
+    return totalCargosDesdeLineasCuenta(lineas)
+  }
+  const ct = Number(cuentaTotalFallback ?? 0)
+  return ct > 0.0001 ? ct : 0
+}
+
 export function totalesVisiblesCuenta(totalCargos, pagosCuenta = []) {
   const cargos = Number(totalCargos ?? 0)
   const balanceNeto = balanceNetoCuenta(cargos, pagosCuenta)
