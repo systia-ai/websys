@@ -210,6 +210,28 @@ export function validarTransicionEstatusAlGuardar(estatusPersistido, estatusNuev
   return validarTransicionEstatus(estatusPersistido, estatusNuevo)
 }
 
+/** Transición En revisión ↔ Reparado: requiere confirmación explícita del usuario. */
+export function transicionEstatusRequiereConfirmacion(estatusActual, estatusNuevo) {
+  const actual = normalizarEstatusOrden(estatusActual)
+  const nuevo = normalizarEstatusOrden(estatusNuevo)
+  return (
+    (estatusEsEnRevision(actual) && estatusEsReparado(nuevo)) ||
+    (estatusEsReparado(actual) && estatusEsEnRevision(nuevo))
+  )
+}
+
+export function mensajeConfirmacionTransicionEstatus(estatusActual, estatusNuevo) {
+  const actual = normalizarEstatusOrden(estatusActual)
+  const nuevo = normalizarEstatusOrden(estatusNuevo)
+  if (estatusEsEnRevision(actual) && estatusEsReparado(nuevo)) {
+    return '¿Está seguro que desea cambiar el estatus a Reparado?'
+  }
+  if (estatusEsReparado(actual) && estatusEsEnRevision(nuevo)) {
+    return '¿Está seguro que desea regresar el estatus a En revisión? Se eliminará la fecha de reparado registrada.'
+  }
+  return ''
+}
+
 /** Marca de verificación previa a entrega (no es un estatus). */
 export function estaVerificadoEntrega(rep) {
   const v = rep?.verificado_entrega

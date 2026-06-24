@@ -10,6 +10,8 @@ import {
   fechaIngresoYmd,
   fechaReparadoYmd,
   ymdHoyLocal,
+  transicionEstatusRequiereConfirmacion,
+  mensajeConfirmacionTransicionEstatus,
 } from '../src/reparacionUtils.js'
 
 const HOY = ymdHoyLocal()
@@ -140,6 +142,37 @@ test('REPARADO → ENTREGADO: conserva fecha_reparado', () => {
 test('fechaIngresoYmd sigue mostrando creación si falta columna', () => {
   const ymd = fechaIngresoYmd({ fecha_creacion: '2026-06-17' })
   assertEqual(ymd, '2026-06-17', 'display ingreso')
+})
+
+test('transicionEstatusRequiereConfirmacion: revisión ↔ reparado', () => {
+  assertEqual(
+    transicionEstatusRequiereConfirmacion('EN REVISION', 'REPARADO'),
+    true,
+    'revision a reparado',
+  )
+  assertEqual(
+    transicionEstatusRequiereConfirmacion('REPARADO', 'EN REVISION'),
+    true,
+    'reparado a revision',
+  )
+  assertEqual(
+    transicionEstatusRequiereConfirmacion('INGRESADO', 'EN REVISION'),
+    false,
+    'otros sin confirmación',
+  )
+})
+
+test('mensajeConfirmacionTransicionEstatus', () => {
+  assertEqual(
+    mensajeConfirmacionTransicionEstatus('EN REVISION', 'REPARADO'),
+    '¿Está seguro que desea cambiar el estatus a Reparado?',
+    'mensaje a reparado',
+  )
+  assertEqual(
+    mensajeConfirmacionTransicionEstatus('REPARADO', 'EN REVISION').includes('En revisión'),
+    true,
+    'mensaje a revision',
+  )
 })
 
 console.log(`\nResultado: ${passed} ok, ${failed} fallos`)

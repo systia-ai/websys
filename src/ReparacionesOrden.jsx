@@ -59,6 +59,8 @@ import {
   etiquetaGarantiaSinCobro,
   validarTransicionEstatus,
   validarTransicionEstatusAlGuardar,
+  transicionEstatusRequiereConfirmacion,
+  mensajeConfirmacionTransicionEstatus,
   vincularCuentaAOrdenSupabase,
   ymdFechaEntregaParaGuardar,
   cuentaSinOrdenVinculada,
@@ -256,6 +258,8 @@ export default function ReparacionesOrden({
   const [msgExito, setMsgExito] = useState('')
 
   const [confirmGuardarAbierto, setConfirmGuardarAbierto] = useState(false)
+  const [confirmCambioEstatusAbierto, setConfirmCambioEstatusAbierto] = useState(false)
+  const [estatusPendienteConfirmar, setEstatusPendienteConfirmar] = useState(null)
   const [alertaVerificarEntregaAbierto, setAlertaVerificarEntregaAbierto] = useState(false)
   const [alertaTransicionEstatusAbierto, setAlertaTransicionEstatusAbierto] = useState(false)
   const [mensajeTransicionEstatus, setMensajeTransicionEstatus] = useState('')
@@ -1123,22 +1127,8 @@ export default function ReparacionesOrden({
     }
   }
 
-  async function cambiarEstatusDesdeSelect(v) {
-    if (!v) return
+  async function ejecutarCambioEstatus(v) {
     const actual = estatusRef.current ?? estatus
-    const val = validarTransicionEstatus(actual, v)
-    if (!val.ok) {
-      setMensajeTransicionEstatus(val.mensaje)
-      setAlertaTransicionEstatusAbierto(true)
-      onError?.(val.mensaje)
-      return
-    }
-    if (estatusEsEntregado(v) && bloqueaEntregaSinVerificacion(actual, verificadoEntrega)) {
-      setAlertaVerificarEntregaAbierto(true)
-      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
-      return
-    }
-
     const repActual = repSnapshotParaFechas(actual)
     const patchEstatus = buildPatchCambioEstatusOrden(v, repActual, {
       verificadoEntrega,
@@ -1196,6 +1186,43 @@ export default function ReparacionesOrden({
     } finally {
       setGuardandoEstatus(false)
     }
+  }
+
+  async function cambiarEstatusDesdeSelect(v) {
+    if (!v) return
+    const actual = estatusRef.current ?? estatus
+    const val = validarTransicionEstatus(actual, v)
+    if (!val.ok) {
+      setMensajeTransicionEstatus(val.mensaje)
+      setAlertaTransicionEstatusAbierto(true)
+      onError?.(val.mensaje)
+      return
+    }
+    if (estatusEsEntregado(v) && bloqueaEntregaSinVerificacion(actual, verificadoEntrega)) {
+      setAlertaVerificarEntregaAbierto(true)
+      onError?.(MENSAJE_VERIFICAR_ANTES_ENTREGADO)
+      return
+    }
+    if (transicionEstatusRequiereConfirmacion(actual, v)) {
+      setEstatusPendienteConfirmar(v)
+      setConfirmCambioEstatusAbierto(true)
+      return
+    }
+    await ejecutarCambioEstatus(v)
+  }
+
+  async function confirmarCambioEstatusPendiente() {
+    const v = estatusPendienteConfirmar
+    if (!v || guardandoEstatus) return
+    setConfirmCambioEstatusAbierto(false)
+    setEstatusPendienteConfirmar(null)
+    await ejecutarCambioEstatus(v)
+  }
+
+  function cancelarCambioEstatusPendiente() {
+    if (guardandoEstatus) return
+    setConfirmCambioEstatusAbierto(false)
+    setEstatusPendienteConfirmar(null)
   }
 
   async function marcarVerificadoEntrega() {
@@ -2739,6 +2766,40 @@ export default function ReparacionesOrden({
         mensaje={MENSAJE_VERIFICAR_ANTES_ENTREGADO}
         variante="warning"
         tituloId="alerta-verificar-entrega-titulo"
+      />
+
+      <ModalAlerta
+        open={confirmCambioEstatusAbierto}
+        onClose={cancelarCambioEstatusPendiente}
+        titulo="Confirmar cambio de estatus"
+        mensaje={
+          estatusPendienteConfirmar
+            ? mensajeConfirmacionTransicionEstatus(estatus, estatusPendienteConfirmar)
+            : ''
+        }
+        variante="warning"
+        backdropClose={!guardandoEstatus}
+        tituloId="confirmar-cambio-estatus-titulo"
+        footer={
+          <>
+            <button
+              type="button"
+              className="secondary"
+              disabled={guardandoEstatus}
+              onClick={cancelarCambioEstatusPendiente}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="modal-alerta-btn"
+              disabled={guardandoEstatus}
+              onClick={() => void confirmarCambioEstatusPendiente()}
+            >
+              {guardandoEstatus ? 'Guardando…' : 'Sí, cambiar estatus'}
+            </button>
+          </>
+        }
       />
 
       <ModalAlerta
