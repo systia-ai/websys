@@ -26,13 +26,12 @@ import {
   mapsFechasEntregaReporte,
 } from './reportesFiltros.js'
 import {
-  aplicarFiltroPagosPorFechas,
-  cargarCuentasMapParaPagos,
   cargarTodosPagosClientes,
 } from './pagosClientesUtils.js'
-import { extractFechaPagoYmd, normalizarLabelEstatus, totalPagosEnLista } from './reportesEstadisticas.js'
+import { normalizarLabelEstatus } from './reportesEstadisticas.js'
 
 const LS_VISTA_REPORTES = 'sistefix_reportes_vista'
+const LS_ORDEN_FECHA_REPORTES = 'sistefix_reportes_orden_fecha'
 
 function leerVistaReportes() {
   try {
@@ -42,10 +41,17 @@ function leerVistaReportes() {
   }
 }
 
+function leerOrdenFechaReportes() {
+  try {
+    return localStorage.getItem(LS_ORDEN_FECHA_REPORTES) === 'asc' ? 'asc' : 'desc'
+  } catch {
+    return 'desc'
+  }
+}
+
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
-const LS_PAGOS = 'sistefix_local_pagosclientes'
 const LS_CUENTAS = 'sistefix_local_cuentas'
 
 function ymdHoy() {
@@ -76,6 +82,21 @@ function extractDateYmd(row) {
     aYmdLocalDesdeRaw(row?.updated_at) ??
     aYmdLocalDesdeRaw(row?.date)
   )
+}
+
+function ordenarReparacionesPorFecha(filas, orden = 'desc') {
+  const dir = orden === 'asc' ? 1 : -1
+  return [...(filas ?? [])].sort((a, b) => {
+    const ya = extractDateYmd(a)
+    const yb = extractDateYmd(b)
+    if (ya == null && yb == null) {
+      return (Number(a.id) - Number(b.id)) * dir
+    }
+    if (ya == null) return 1
+    if (yb == null) return -1
+    if (ya !== yb) return ya < yb ? -dir : dir
+    return (Number(a.id) - Number(b.id)) * dir
+  })
 }
 
 function hayAlgunaFechaEnFilas(rows) {
@@ -117,12 +138,12 @@ function serializarEstadoReporte(estado) {
     sinColumnaFecha: estado.sinColumnaFecha,
     duplicadasExcluidas: estado.duplicadasExcluidas,
     reparaciones: estado.reparaciones ?? [],
-    pagosPeriodo: estado.pagosPeriodo ?? [],
     busqueda: estado.busqueda ?? '',
     tiposServicioSeleccionados: [...(estado.tiposServicioSeleccionados ?? TIPOS_SERVICIO_CANONICOS)],
     filtroModoFechaIngreso: Boolean(estado.filtroModoFechaIngreso),
     filtroModoFechaEntrega: Boolean(estado.filtroModoFechaEntrega),
     vista: estado.vista === 'tabla' ? 'tabla' : 'lista',
+    ordenFecha: estado.ordenFecha === 'asc' ? 'asc' : 'desc',
   }
 }
 
@@ -158,7 +179,6 @@ export default function ReportesModulo({
 
   const [reparaciones, setReparaciones] = useState([])
   const [equipos, setEquipos] = useState([])
-  const [pagosPeriodo, setPagosPeriodo] = useState([])
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
@@ -168,12 +188,23 @@ export default function ReportesModulo({
   const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
   const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
   const [vista, setVista] = useState(leerVistaReportes)
+  const [ordenFecha, setOrdenFecha] = useState(leerOrdenFechaReportes)
   const omitirResetFechasRef = useRef(false)
 
   function cambiarVista(modo) {
     setVista(modo)
     try {
       localStorage.setItem(LS_VISTA_REPORTES, modo)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function cambiarOrdenFecha(valor) {
+    const orden = valor === 'asc' ? 'asc' : 'desc'
+    setOrdenFecha(orden)
+    try {
+      localStorage.setItem(LS_ORDEN_FECHA_REPORTES, orden)
     } catch {
       /* ignore */
     }
@@ -206,12 +237,12 @@ export default function ReportesModulo({
         sinColumnaFecha,
         duplicadasExcluidas,
         reparaciones,
-        pagosPeriodo,
         busqueda,
         tiposServicioSeleccionados,
         filtroModoFechaIngreso,
         filtroModoFechaEntrega,
         vista,
+        ordenFecha,
       }),
     })
   }
@@ -256,7 +287,6 @@ export default function ReportesModulo({
     setSinColumnaFecha(Boolean(estadoRestaurar.sinColumnaFecha))
     setDuplicadasExcluidas(Number(estadoRestaurar.duplicadasExcluidas ?? 0))
     setReparaciones(Array.isArray(estadoRestaurar.reparaciones) ? estadoRestaurar.reparaciones : [])
-    setPagosPeriodo(Array.isArray(estadoRestaurar.pagosPeriodo) ? estadoRestaurar.pagosPeriodo : [])
     setBusqueda(String(estadoRestaurar.busqueda ?? ''))
     if (Array.isArray(estadoRestaurar.tiposServicioSeleccionados)) {
       setTiposServicioSeleccionados(new Set(estadoRestaurar.tiposServicioSeleccionados))
@@ -265,6 +295,9 @@ export default function ReportesModulo({
     setFiltroModoFechaEntrega(Boolean(estadoRestaurar.filtroModoFechaEntrega))
     if (estadoRestaurar.vista === 'tabla' || estadoRestaurar.vista === 'lista') {
       setVista(estadoRestaurar.vista)
+    }
+    if (estadoRestaurar.ordenFecha === 'asc' || estadoRestaurar.ordenFecha === 'desc') {
+      setOrdenFecha(estadoRestaurar.ordenFecha)
     }
     omitirResetFechasRef.current = true
     onEstadoRestaurado?.()
@@ -334,22 +367,6 @@ export default function ReportesModulo({
         const filas = excluirOrdenesDuplicadas(porFiltro)
         setReparaciones(filas)
 
-        const cuentasMap = supabase ? await cargarCuentasMapParaPagos(supabase) : new Map()
-        const { filas: pagosFiltrados, sinFechaIncluidos } = aplicarFiltroPagosPorFechas(
-          pagosTodos,
-          ini,
-          fin,
-          cuentasMap,
-        )
-        setPagosPeriodo(pagosFiltrados)
-        if (sinFechaIncluidos > 0) {
-          onNotice?.(
-            sinFechaIncluidos === 1
-              ? '1 pago sin fecha exacta se incluyó en ingresos del periodo (fecha tomada de la cuenta).'
-              : `${sinFechaIncluidos} pagos sin fecha exacta se incluyeron en ingresos del periodo.`,
-          )
-        }
-
         setDuplicadasExcluidas(nDup)
         setSinColumnaFecha(false)
         setPeriodoAplicado({ ini, fin })
@@ -372,7 +389,6 @@ export default function ReportesModulo({
       } catch (e) {
         onError?.(`Error al cargar datos: ${e.message}`)
         setReparaciones([])
-        setPagosPeriodo([])
         return false
       } finally {
         setLoading(false)
@@ -488,15 +504,14 @@ export default function ReportesModulo({
     const verificadas = reparaciones.filter(repEsVerificadaListaEntrega).length
     const activas = total - entregadas
     const enProceso = Math.max(0, activas - verificadas)
-    const totalPagos = totalPagosEnLista(pagosPeriodo)
     const totalCosto = reparaciones.reduce((s, r) => s + Number(r.costo_reparacion ?? 0), 0)
     const porEstatus = {}
     for (const r of reparaciones) {
       const k = normalizarLabelEstatus(r.estatus)
       porEstatus[k] = (porEstatus[k] ?? 0) + 1
     }
-    return { total, entregadas, activas, verificadas, enProceso, totalPagos, totalCosto, porEstatus }
-  }, [reparaciones, pagosPeriodo])
+    return { total, entregadas, activas, verificadas, enProceso, totalCosto, porEstatus }
+  }, [reparaciones])
 
   const equipoPorId = useMemo(() => {
     const m = new Map()
@@ -530,8 +545,8 @@ export default function ReportesModulo({
       )
     }
 
-    return filas
-  }, [reparaciones, busqueda, clientes, tiposServicioSeleccionados, equipoPorId])
+    return ordenarReparacionesPorFecha(filas, ordenFecha)
+  }, [reparaciones, busqueda, clientes, tiposServicioSeleccionados, equipoPorId, ordenFecha])
 
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
 
@@ -583,7 +598,6 @@ export default function ReportesModulo({
       <AlertaPermiso mensaje={alertaPermiso} />
       <ReportesEstadisticasView
         reparaciones={reparaciones}
-        pagosPeriodo={pagosPeriodo}
         resumen={resumen}
         periodoAplicado={periodoAplicado}
         estatusAplicado={estatusAplicado}
@@ -627,11 +641,10 @@ export default function ReportesModulo({
           total: resumen.total,
           activas: resumen.activas,
           entregadas: resumen.entregadas,
-          totalPagos: resumen.totalPagos,
           totalCosto: resumen.totalCosto,
         },
         porEstatus: resumen.porEstatus,
-        filas: reparaciones.map((r) => ({
+        filas: ordenarReparacionesPorFecha(reparaciones, ordenFecha).map((r) => ({
           orden: String(r.id ?? '—'),
           cliente: nombreCliente(clientes, r.cliente_id),
           estatus: String(r.estatus ?? '—'),
@@ -771,12 +784,6 @@ export default function ReportesModulo({
               </span>
               <strong>{resumen.verificadas}</strong>
             </div>
-            <div className="corte-caja-stat corte-caja-stat--tarjeta">
-              <span className="label">
-                <span aria-hidden="true">💵</span> Suma pagos
-              </span>
-              <strong>${resumen.totalPagos.toFixed(2)}</strong>
-            </div>
             <div className="corte-caja-stat corte-caja-stat--otro">
               <span className="label">
                 <span aria-hidden="true">🛠️</span> Suma costo reparación
@@ -851,6 +858,19 @@ export default function ReportesModulo({
               ▦ Tabla
             </button>
           </div>
+          <div className="corte-caja-vista-opciones">
+            <label className="corte-caja-orden-fecha">
+              <span className="inventario-vista-label">Orden:</span>
+              <select
+                value={ordenFecha}
+                onChange={(e) => cambiarOrdenFecha(e.target.value)}
+                aria-label="Ordenar órdenes por fecha"
+              >
+                <option value="asc">Más antiguo primero</option>
+                <option value="desc">Más nuevo primero</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {loading ? (
@@ -869,7 +889,7 @@ export default function ReportesModulo({
           <TablaScrollSuperior
             ariaLabel="Órdenes del reporte en tabla"
             classNameWrap="reportes-tabla-wrap"
-            syncDeps={[vista, filtrados, loading]}
+            syncDeps={[vista, filtrados, loading, ordenFecha]}
           >
               <div className="inventario-tabla-grid reportes-tabla-grid">
                 <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">

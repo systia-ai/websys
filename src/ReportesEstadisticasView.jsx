@@ -7,7 +7,6 @@ import {
   labelEstatusGrafica,
   labelPeriodoEje,
   leerAgrupacionEstadisticas,
-  pagosEnRango,
   reparacionesEnRango,
   segmentosAnioEnPeriodo,
   segmentosMesEnPeriodo,
@@ -15,11 +14,9 @@ import {
   serieEstatus,
   serieOrdenesAgrupada,
   serieOrdenesPorDia,
-  seriePagosAgrupadaDesdePagos,
   serieTieneDatos,
   serieVerificadasAgrupada,
   tituloAgrupacionOrdenes,
-  tituloAgrupacionPagos,
   tituloAgrupacionVerificadas,
 } from './reportesEstadisticas.js'
 
@@ -32,15 +29,6 @@ const BAR_COLORS = ['#1976d2', '#42a5f5', '#26a69a', '#66bb6a', '#ffa726', '#ab4
 function maxValor(series) {
   const m = Math.max(...(series ?? []).map((d) => Number(d.value) || 0), 0)
   return m <= 0 ? 1 : m
-}
-
-function formatPagoEje(v) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return '$0'
-  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
-  if (n >= 100) return `$${Math.round(n)}`
-  return `$${n.toFixed(0)}`
 }
 
 function formatCantEje(v) {
@@ -341,17 +329,13 @@ function SvgDonutChart({ title, series }) {
   )
 }
 
-function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoAplicado }) {
+function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
   const periodo = periodoAplicado
   const fmtX = useCallback((l) => labelPeriodoEje(l, agrupacion), [agrupacion])
 
   const ordenesSerie = useMemo(
     () => serieOrdenesAgrupada(reparaciones, periodo, agrupacion),
     [reparaciones, periodo, agrupacion],
-  )
-  const pagosSerie = useMemo(
-    () => seriePagosAgrupadaDesdePagos(pagosPeriodo, periodo, agrupacion),
-    [pagosPeriodo, periodo, agrupacion],
   )
   const verificadasSerie = useMemo(
     () => serieVerificadasAgrupada(reparaciones, periodo, agrupacion),
@@ -369,7 +353,6 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
   const fmtMes = useCallback((l) => labelPeriodoEje(l, 'mes'), [])
 
   const tituloOrdenes = tituloAgrupacionOrdenes(agrupacion)
-  const tituloPagos = tituloAgrupacionPagos(agrupacion)
   const tituloVerificadas = tituloAgrupacionVerificadas(agrupacion)
   const usarBarras = agrupacion === 'semana' || agrupacion === 'mes' || agrupacion === 'anio'
   const colorVerificadas = ['#00695c', '#00897b', '#26a69a', '#4db6ac', '#80cbc4']
@@ -380,14 +363,6 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
         <>
           <SvgBarChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
           <SvgBarChart
-            title={tituloPagos}
-            series={pagosSerie}
-            formatY={formatPagoEje}
-            formatBarValue={formatPagoEje}
-            formatXLabel={fmtX}
-            colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784', '#a5d6a7']}
-          />
-          <SvgBarChart
             title={tituloVerificadas}
             series={verificadasSerie}
             formatXLabel={fmtX}
@@ -397,12 +372,6 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
       ) : (
         <>
           <SvgLineChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
-          <SvgLineChart
-            title={tituloPagos}
-            series={pagosSerie}
-            formatY={formatPagoEje}
-            formatXLabel={fmtX}
-          />
           <SvgLineChart title={tituloVerificadas} series={verificadasSerie} formatXLabel={fmtX} />
         </>
       )}
@@ -417,21 +386,13 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
           </p>
           {mesesDetalle.map((seg) => {
             const repMes = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
-            const pagosMes = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesDia = serieOrdenesPorDia(repMes, { ini: seg.ini, fin: seg.fin })
-            const pagosDia = seriePagosAgrupadaDesdePagos(pagosMes, { ini: seg.ini, fin: seg.fin }, 'dia')
             const verificadasDia = serieVerificadasAgrupada(repMes, { ini: seg.ini, fin: seg.fin }, 'dia')
-            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(pagosDia) && !serieTieneDatos(verificadasDia)) return null
+            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(verificadasDia)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
                 <SvgLineChart title={`Órdenes — ${seg.label}`} series={ordenesDia} formatXLabel={labelDiaCorta} />
-                <SvgLineChart
-                  title={`Ingresos (pagos) — ${seg.label}`}
-                  series={pagosDia}
-                  formatY={formatPagoEje}
-                  formatXLabel={labelDiaCorta}
-                />
                 <SvgLineChart
                   title={`Verificaciones — ${seg.label}`}
                   series={verificadasDia}
@@ -453,23 +414,13 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
           </p>
           {aniosDetalle.map((seg) => {
             const repAnio = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
-            const pagosAnio = pagosEnRango(pagosPeriodo, seg.ini, seg.fin)
             const ordenesMes = serieOrdenesAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            const pagosMes = seriePagosAgrupadaDesdePagos(pagosAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
             const verificadasMes = serieVerificadasAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(pagosMes) && !serieTieneDatos(verificadasMes)) return null
+            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(verificadasMes)) return null
             return (
               <div key={seg.key} className="reportes-mes-detalle card-pad">
                 <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
                 <SvgBarChart title={`Órdenes por mes — ${seg.label}`} series={ordenesMes} formatXLabel={fmtMes} />
-                <SvgBarChart
-                  title={`Ingresos (pagos) por mes — ${seg.label}`}
-                  series={pagosMes}
-                  formatY={formatPagoEje}
-                  formatBarValue={formatPagoEje}
-                  formatXLabel={fmtMes}
-                  colorCycle={['#2e7d32', '#43a047', '#66bb6a', '#81c784']}
-                />
                 <SvgBarChart
                   title={`Verificaciones por mes — ${seg.label}`}
                   series={verificadasMes}
@@ -487,7 +438,6 @@ function GraficasTemporales({ agrupacion, reparaciones, pagosPeriodo, periodoApl
 
 export default function ReportesEstadisticasView({
   reparaciones,
-  pagosPeriodo = [],
   resumen,
   periodoAplicado,
   estatusAplicado,
@@ -599,12 +549,6 @@ export default function ReportesEstadisticasView({
             </div>
             <div className="reportes-kpi">
               <span className="label">
-                <span aria-hidden="true">💵</span> Pagos registrados
-              </span>
-              <strong>${resumen.totalPagos.toFixed(2)}</strong>
-            </div>
-            <div className="reportes-kpi">
-              <span className="label">
                 <span aria-hidden="true">✅</span> Entregadas
               </span>
               <strong>{resumen.entregadas}</strong>
@@ -627,7 +571,6 @@ export default function ReportesEstadisticasView({
           <GraficasTemporales
             agrupacion={agrupacion}
             reparaciones={reparaciones}
-            pagosPeriodo={pagosPeriodo}
             periodoAplicado={periodoAplicado}
           />
         ) : null}
