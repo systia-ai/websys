@@ -5,11 +5,17 @@ import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares } from './duplicadosUtils.js'
 import { cargarTodosPagosClientes } from './pagosClientesUtils.js'
 import {
+  crearCotizacionVacia,
+  eliminarCotizacionCompleta,
+  LS_COTIZACIONES,
+} from './cotizacionUtils.js'
+import {
   aYmdLocalDesdeRaw,
   isReparacionActiva,
   sincronizarEstatusCuentaPorSaldo,
   eliminarCuentaCompleta,
 } from './reparacionUtils.js'
+import ClientesCotizacionesPanel from './ClientesCotizacionesPanel.jsx'
 import ClientesCuentasVentasPanel from './ClientesCuentasVentasPanel.jsx'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
@@ -90,12 +96,15 @@ export default function ClientesModulo({
   onOpenServiciosConCliente,
   onOpenReparaciones,
   onOpenVentas,
+  onOpenCotizaciones,
   onIrEquipos,
   onIrAOrdenServicio,
   onError,
   onNotice,
   retornoVentas = null,
   onRetornoVentasConsumido,
+  retornoCotizaciones = null,
+  onRetornoCotizacionesConsumido,
   retornoOrdenes = null,
   onRetornoOrdenesConsumido,
   puedeEliminar = false,
@@ -119,6 +128,12 @@ export default function ClientesModulo({
   const [clienteAccion, setClienteAccion] = useState(null)
 
   const [modalCuentasVentas, setModalCuentasVentas] = useState(false)
+  const [modalCotizaciones, setModalCotizaciones] = useState(false)
+  const [cotizacionesEncontradas, setCotizacionesEncontradas] = useState([])
+  const [loadingCotizaciones, setLoadingCotizaciones] = useState(false)
+  const [cotizacionTitle, setCotizacionTitle] = useState('Cotizaciones')
+  const [cotizacionSubtitle, setCotizacionSubtitle] = useState('')
+  const [cotizacionResumen, setCotizacionResumen] = useState(null)
   const [cuentasEncontradas, setCuentasEncontradas] = useState([])
   const [pagosClienteCuentas, setPagosClienteCuentas] = useState([])
   const [loadingCuentas, setLoadingCuentas] = useState(false)
@@ -390,6 +405,56 @@ export default function ClientesModulo({
     [supabase, onError],
   )
 
+  const cargarCotizacionesModal = useCallback(
+    async (cliente, { cerrarModalAcciones = false } = {}) => {
+      const cli = normalizeClienteRow(cliente)
+      if (!cli?.id) {
+        onError?.('Cliente sin ID válido')
+        return
+      }
+      if (cerrarModalAcciones) {
+        setModalAcciones(false)
+        setClienteAccion(cli)
+      }
+      setLoadingCotizaciones(true)
+      setCotizacionesEncontradas([])
+      setCotizacionTitle('Cotizaciones')
+      setCotizacionSubtitle('')
+      setCotizacionResumen(null)
+      try {
+        let lista = []
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('cotizaciones')
+            .select('*')
+            .eq('cliente_id', cli.id)
+            .order('id', { ascending: false })
+          if (error) throw error
+          lista = data ?? []
+        } else {
+          lista = readLs(LS_COTIZACIONES, []).filter((c) => sameId(c.cliente_id, cli.id))
+        }
+        const activas = lista.filter((c) => String(c.estatus ?? '').toUpperCase() !== 'CONVERTIDA').length
+        setCotizacionesEncontradas(lista)
+        setCotizacionResumen({
+          nombre: String(cli.nombre || 'Cliente').trim() || 'Cliente',
+          total: lista.length,
+          activas,
+        })
+        setModalCotizaciones(true)
+      } catch (e) {
+        setCotizacionTitle('Error de búsqueda')
+        setCotizacionResumen(null)
+        setCotizacionSubtitle(`Error: ${e.message}`)
+        setCotizacionesEncontradas([])
+        setModalCotizaciones(true)
+      } finally {
+        setLoadingCotizaciones(false)
+      }
+    },
+    [supabase, onError],
+  )
+
   useEffect(() => {
     const r = retornoVentas
     if (!r?.openAccionesModal || !r?.cliente?.id) return
@@ -404,6 +469,21 @@ export default function ClientesModulo({
     }
     onRetornoVentasConsumido?.()
   }, [retornoVentas, onRetornoVentasConsumido, cargarCuentasVentasModal])
+
+  useEffect(() => {
+    const r = retornoCotizaciones
+    if (!r?.openAccionesModal || !r?.cliente?.id) return
+    const cli = normalizeClienteRow(r.cliente)
+    setClienteAccion(cli)
+    if (r.reopenCotizacionesPanel) {
+      setModalAcciones(false)
+      void cargarCotizacionesModal(cli)
+    } else {
+      setModalCotizaciones(false)
+      setModalAcciones(true)
+    }
+    onRetornoCotizacionesConsumido?.()
+  }, [retornoCotizaciones, onRetornoCotizacionesConsumido, cargarCotizacionesModal])
 
   async function crearCuentaVaciaParaCliente(cli) {
     const row = {
@@ -432,6 +512,87 @@ export default function ClientesModulo({
       return
     }
     await cargarCuentasVentasModal(cliente, { cerrarModalAcciones: true })
+  }
+
+  async function abrirCotizacionesCliente() {
+    const cliente = clienteAccion
+    if (!cliente?.id) {
+      onError?.('Cliente sin ID válido')
+      return
+    }
+    await cargarCotizacionesModal(cliente, { cerrarModalAcciones: true })
+  }
+
+  function cotizacionParaPantalla(cot) {
+    if (!cot?.id) return undefined
+    return {
+      id: cot.id,
+      total: cot.total,
+      estatus: cot.estatus,
+      notas: cot.notas ?? null,
+    }
+  }
+
+  function seleccionarCotizacion(cot) {
+    const cliente = clienteAccion
+    if (!cliente) return
+    setModalCotizaciones(false)
+    onOpenCotizaciones?.({
+      cliente: normalizeClienteRow(cliente),
+      cotizacion: cotizacionParaPantalla(cot),
+    })
+  }
+
+  async function nuevaCotizacionCliente() {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      return
+    }
+    const cliente = clienteAccion
+    if (!cliente?.id) return
+    const cli = normalizeClienteRow(cliente)
+    try {
+      const nueva = await crearCotizacionVacia(supabase, cli.id)
+      setModalCotizaciones(false)
+      onOpenCotizaciones?.({ cliente: cli, cotizacion: cotizacionParaPantalla(nueva) })
+      onNotice?.('Cotización nueva lista')
+    } catch (e) {
+      onError?.(`Error al crear cotización: ${e.message}`)
+    }
+  }
+
+  function cerrarModalCotizaciones() {
+    setModalCotizaciones(false)
+    if (clienteAccion?.id != null) {
+      setModalAcciones(true)
+    }
+  }
+
+  async function eliminarCotizacionCliente(cot) {
+    if (!puedeEliminar) {
+      mostrarSinPermiso()
+      return
+    }
+    const id = cot?.id
+    if (id == null) return
+    if (String(cot.estatus ?? '').toUpperCase() === 'CONVERTIDA') {
+      onError?.('No se puede eliminar una cotización ya convertida a cuenta')
+      return
+    }
+    if (!window.confirm(`¿Eliminar la cotización #${id} de ${clienteAccion?.nombre || 'este cliente'}?`)) return
+    try {
+      await eliminarCotizacionCompleta(supabase, id)
+      onNotice?.(`Cotización #${id} eliminada`)
+      if (clienteAccion?.id) {
+        await cargarCotizacionesModal(clienteAccion)
+      }
+    } catch (e) {
+      onError?.(`Error al eliminar cotización: ${e.message}`)
+    }
+  }
+
+  function handleEliminarCotizacion(cot) {
+    intentarEliminar(() => void eliminarCotizacionCliente(cot))
   }
 
   async function eliminarCuentaCliente(cuenta) {
@@ -672,6 +833,13 @@ export default function ClientesModulo({
   function handleAtras() {
     if (modalCuentasVentas) {
       setModalCuentasVentas(false)
+      if (clienteAccion?.id != null) {
+        setModalAcciones(true)
+      }
+      return
+    }
+    if (modalCotizaciones) {
+      setModalCotizaciones(false)
       if (clienteAccion?.id != null) {
         setModalAcciones(true)
       }
@@ -960,6 +1128,9 @@ export default function ClientesModulo({
               <button type="button" className="btn-cuentas" onClick={() => void abrirCuentasVentasCliente()}>
                 Cuentas / Ventas
               </button>
+              <button type="button" className="btn-cotizaciones" onClick={() => void abrirCotizacionesCliente()}>
+                Cotizaciones
+              </button>
               <button
                 type="button"
                 className="btn-cancelar"
@@ -1002,6 +1173,42 @@ export default function ClientesModulo({
                 Nueva Cuenta
               </button>
               <button type="button" className="secondary" onClick={cerrarModalCuentasVentas}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCotizaciones && clienteAccion && (
+        <div className="modal-backdrop" role="presentation" onClick={cerrarModalCotizaciones}>
+          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{cotizacionTitle}</h3>
+            </div>
+            <div className="modal-body modal-body--ordenes-cliente">
+              <ClientesCotizacionesPanel
+                loading={loadingCotizaciones}
+                errorSubtitle={cotizacionTitle === 'Error de búsqueda' ? cotizacionSubtitle : null}
+                resumen={cotizacionResumen}
+                cotizaciones={cotizacionesEncontradas}
+                onSelectCotizacion={(cot) => seleccionarCotizacion(cot)}
+                puedeEliminar={puedeEliminar}
+                puedeCrear={puedeEliminar}
+                onEliminarCotizacion={handleEliminarCotizacion}
+              />
+            </div>
+            <div className="modal-footer modal-footer-wrap">
+              {puedeEliminar ? (
+                <button
+                  type="button"
+                  className="btn-agregar-equipo modal-btn-compact"
+                  onClick={() => void nuevaCotizacionCliente()}
+                >
+                  Nueva cotización
+                </button>
+              ) : null}
+              <button type="button" className="secondary" onClick={cerrarModalCotizaciones}>
                 Cerrar
               </button>
             </div>

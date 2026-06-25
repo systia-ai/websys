@@ -6,6 +6,7 @@ import ServiciosEquipos from './ServiciosEquipos.jsx'
 import ClientesModulo from './ClientesModulo.jsx'
 import OrdenServicioModulo from './OrdenServicioModulo.jsx'
 import VentasCuentaScreen from './VentasCuentaScreen.jsx'
+import CotizacionesScreen from './CotizacionesScreen.jsx'
 import InventariosModulo from './InventariosModulo.jsx'
 import CatalogoPagosModulo from './CatalogoPagosModulo.jsx'
 import CorteCajaModulo from './CorteCajaModulo.jsx'
@@ -63,8 +64,9 @@ function App() {
   const [miAparenciaAbierta, setMiAparenciaAbierta] = useState(false)
   /** Desde ClientesModulo → pantalla Cuentas (VentasScreen.kt). */
   const [ventasContext, setVentasContext] = useState(null)
-  /** Al volver de Ventas → Clientes, reabrir el modal Servicio / Cuentas del mismo cliente. */
+  const [cotizacionesContext, setCotizacionesContext] = useState(null)
   const [clientesRetornoVentas, setClientesRetornoVentas] = useState(null)
+  const [clientesRetornoCotizaciones, setClientesRetornoCotizaciones] = useState(null)
   /** Al volver de Orden de servicio → Clientes, reabrir la lista de órdenes del mismo cliente. */
   const [clientesRetornoOrdenes, setClientesRetornoOrdenes] = useState(null)
   /** Al volver de Orden de servicio → Equipos, reabrir modal Reparaciones del equipo. */
@@ -80,6 +82,10 @@ function App() {
 
   const limpiarRetornoVentasClientes = useCallback(() => {
     setClientesRetornoVentas(null)
+  }, [])
+
+  const limpiarRetornoCotizacionesClientes = useCallback(() => {
+    setClientesRetornoCotizaciones(null)
   }, [])
 
   const limpiarRetornoOrdenesClientes = useCallback(() => {
@@ -193,7 +199,7 @@ function App() {
 
   function puedeAccederPantalla(mod) {
     if (mod === 'home') return true
-    if (mod === 'ventas') return puedeAccederModulo(permisosUsuario, 'clientes')
+    if (mod === 'ventas' || mod === 'cotizaciones') return puedeAccederModulo(permisosUsuario, 'clientes')
     return puedeAccederModulo(permisosUsuario, mod)
   }
 
@@ -207,8 +213,10 @@ function App() {
       navStackRef.current = ['home']
       setRepSession(null)
       setVentasContext(null)
+      setCotizacionesContext(null)
       setClienteVinculoServicios(null)
       setClientesRetornoVentas(null)
+      setClientesRetornoCotizaciones(null)
       setClientesRetornoOrdenes(null)
       setServiciosRetornoReparaciones(null)
       setMonitorRetornoVentas(null)
@@ -272,6 +280,17 @@ function App() {
         })
       }
     }
+    if (leaving === 'cotizaciones') {
+      const cctx = cotizacionesContext
+      setCotizacionesContext(null)
+      if (cctx?.returnTo === 'clientes' && cctx?.cliente) {
+        setClientesRetornoCotizaciones({
+          openAccionesModal: true,
+          cliente: normalizeClienteRow(cctx.cliente),
+          reopenCotizacionesPanel: true,
+        })
+      }
+    }
     if (leaving === 'servicios') setClienteVinculoServicios(null)
     setActiveModule(target)
     setNotice('')
@@ -319,9 +338,10 @@ function App() {
     )
       return
     if (activeModule === 'ventas' && ventasContext) return
+    if (activeModule === 'cotizaciones' && cotizacionesContext) return
     loadRows()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- recarga al cambiar de módulo (tablas genéricas)
-  }, [activeModule, ventasContext])
+  }, [activeModule, ventasContext, cotizacionesContext])
 
   async function loadRows() {
     if (!current) return
@@ -504,6 +524,8 @@ function App() {
         supabase={supabase}
         retornoVentas={clientesRetornoVentas}
         onRetornoVentasConsumido={limpiarRetornoVentasClientes}
+        retornoCotizaciones={clientesRetornoCotizaciones}
+        onRetornoCotizacionesConsumido={limpiarRetornoCotizacionesClientes}
         retornoOrdenes={clientesRetornoOrdenes}
         onRetornoOrdenesConsumido={limpiarRetornoOrdenesClientes}
         onHome={goBack}
@@ -530,6 +552,14 @@ function App() {
           }
           setVentasContext({ ...boot, returnTo: 'clientes' })
           navigateTo('ventas')
+        }}
+        onOpenCotizaciones={(boot) => {
+          const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+          if (cli?.id != null) {
+            setClientesRetornoCotizaciones({ openAccionesModal: true, cliente: cli })
+          }
+          setCotizacionesContext({ ...boot, returnTo: 'clientes' })
+          navigateTo('cotizaciones')
         }}
         onError={(msg) => {
           setError(msg)
@@ -759,6 +789,39 @@ function App() {
           setTimeout(() => setNotice(''), 4000)
         }}
       />
+    )
+  }
+
+  if (activeModule === 'cotizaciones' && cotizacionesContext) {
+    return (
+      <main className="module ventas-cuenta-module">
+        {!supabase && <p className="warning">Modo local: datos en navegador; defina variables Supabase para producción.</p>}
+        {error && <p className="error">{error}</p>}
+        {notice && <p className="ok">{notice}</p>}
+        <CotizacionesScreen
+          supabase={supabase}
+          puedeEliminar={puedeEliminar}
+          context={cotizacionesContext}
+          onSalir={goBack}
+          onAbrirCuenta={(boot) => {
+            setCotizacionesContext(null)
+            const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+            if (cli?.id != null) {
+              setClientesRetornoVentas({ openAccionesModal: true, cliente: cli })
+            }
+            setVentasContext({ ...boot, returnTo: 'clientes' })
+            navigateTo('ventas')
+          }}
+          onError={(msg) => {
+            setError(msg)
+            setTimeout(() => setError(''), 6000)
+          }}
+          onNotice={(msg) => {
+            setNotice(msg)
+            setTimeout(() => setNotice(''), 4000)
+          }}
+        />
+      </main>
     )
   }
 

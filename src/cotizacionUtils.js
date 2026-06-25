@@ -133,10 +133,14 @@ export async function insertarLineaCotizacion({
     const { data, error } = await supabase.from('cotizacionmov').insert(row).select('id').single()
     if (error) throw error
     movId = data.id
+    const { data: movs } = await supabase.from('cotizacionmov').select('*').eq('cotizacion_id', cotizacionId)
+    await persistirTotalCotizacion(supabase, cotizacionId, (movs ?? []).map(lineaCotizacionDesdeMov))
   } else {
     const list = readLs(LS_COTIZACIONMOV, [])
     movId = nextLocalId ? nextLocalId() : nextLocalCotizacionMovId(list)
     writeLs(LS_COTIZACIONMOV, [{ id: movId, ...row }, ...list])
+    const movs = readLs(LS_COTIZACIONMOV, []).filter((m) => sameId(m.cotizacion_id, cotizacionId))
+    await persistirTotalCotizacion(supabase, cotizacionId, movs.map(lineaCotizacionDesdeMov))
   }
   return { movId, linea: lineaCotizacionDesdeMov({ id: movId, ...row }) }
 }
@@ -177,13 +181,12 @@ export async function actualizarCotizacion(supabase, cotizacionId, patch) {
   return updated
 }
 
-export async function finalizarCotizacion(supabase, cotizacionId, lineas, validezHasta = null) {
+export async function finalizarCotizacion(supabase, cotizacionId, lineas) {
   const total = totalCotizacionDesdeLineas(lineas)
   if (total <= 0.0001) throw new Error('Agregue al menos un producto o servicio antes de finalizar')
   return actualizarCotizacion(supabase, cotizacionId, {
     estatus: 'FINALIZADA',
     total,
-    validez_hasta: validezHasta || null,
   })
 }
 
