@@ -178,6 +178,73 @@ function todosTiposServicioSeleccionados(sel) {
   return TIPOS_SERVICIO_FILTRO.length > 0 && TIPOS_SERVICIO_FILTRO.every((t) => sel.has(t))
 }
 
+function etiquetaEstatusResumen(est) {
+  const st = String(est).trim().toUpperCase()
+  if (st === 'INGRESADO') return 'Ingresado'
+  if (st === 'ENTREGADO') return 'Entregado'
+  return String(est).trim()
+}
+
+/** Texto legible de los filtros que determinan el listado actual. */
+function construirResumenFiltrosMonitor({
+  estatusSeleccionados,
+  tiposServicioSeleccionados,
+  tecnicoFiltro,
+  rangoFechaActivo,
+  fechaDesde,
+  fechaHasta,
+  filtroModoFechaIngreso,
+  filtroModoFechaEntrega,
+  filtroModoVerificadas,
+  sinRangoFechasActivo,
+}) {
+  const partes = []
+
+  if (filtroModoVerificadas) {
+    partes.push('Verificadas listas para entrega')
+  } else if (rangoFechaActivo && (filtroModoFechaIngreso || filtroModoFechaEntrega)) {
+    const modo = filtroModoFechaIngreso ? 'entrada de equipos' : 'salida de equipos'
+    const desde = String(fechaDesde ?? '').trim()
+    const hasta = String(fechaHasta ?? '').trim()
+    if (desde || hasta) {
+      const rango =
+        desde && hasta
+          ? `${desde} a ${hasta}`
+          : desde
+            ? `desde ${desde}`
+            : `hasta ${hasta}`
+      partes.push(`${modo} (${rango})`)
+    } else {
+      partes.push(modo)
+    }
+  } else if (sinRangoFechasActivo) {
+    if (estatusSeleccionados.size === 0) {
+      partes.push('Sin estatus seleccionado')
+    } else {
+      const est = [...estatusSeleccionados].map(etiquetaEstatusResumen).join(', ')
+      partes.push(`Estatus: ${est}`)
+    }
+  }
+
+  if (tiposServicioSeleccionados.size === 0) {
+    partes.push('Ningún tipo de servicio')
+  } else if (todosTiposServicioSeleccionados(tiposServicioSeleccionados)) {
+    partes.push('Todos los tipos de servicio')
+  } else {
+    partes.push(`Tipos: ${[...tiposServicioSeleccionados].join(', ')}`)
+  }
+
+  if (tecnicoFiltro === TECNICO_SIN) {
+    partes.push('Sin técnico asignado')
+  } else if (tecnicoFiltro) {
+    partes.push(`Técnico: ${tecnicoFiltro}`)
+  } else {
+    partes.push('Todos los técnicos')
+  }
+
+  return partes.join(' · ')
+}
+
 function cuentaParaVentas(cuenta) {
   if (!cuenta?.id) return undefined
   return {
@@ -813,6 +880,34 @@ export default function MonitorOrdenesModulo({
   const busquedaTextoActivaUi =
     filtroBusquedaActivo && parsearFiltroDiasExactos(busqueda) == null
 
+  const resumenFiltrosActuales = useMemo(
+    () =>
+      construirResumenFiltrosMonitor({
+        estatusSeleccionados,
+        tiposServicioSeleccionados,
+        tecnicoFiltro,
+        rangoFechaActivo,
+        fechaDesde,
+        fechaHasta,
+        filtroModoFechaIngreso,
+        filtroModoFechaEntrega,
+        filtroModoVerificadas,
+        sinRangoFechasActivo,
+      }),
+    [
+      estatusSeleccionados,
+      tiposServicioSeleccionados,
+      tecnicoFiltro,
+      rangoFechaActivo,
+      fechaDesde,
+      fechaHasta,
+      filtroModoFechaIngreso,
+      filtroModoFechaEntrega,
+      filtroModoVerificadas,
+      sinRangoFechasActivo,
+    ],
+  )
+
   function badgeEstatus(rep) {
     const ent = estatusEsEntregado(rep?.estatus)
     const verificada = estaVerificadoEntrega(rep)
@@ -1205,13 +1300,16 @@ export default function MonitorOrdenesModulo({
             <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
               <span className="monitor-ordenes-conteo-icon" aria-hidden="true">📋</span>
               <span className="monitor-ordenes-conteo-num">{filasOrdenadas.length}</span>
-              <span className="monitor-ordenes-conteo-texto">
-                {filasOrdenadas.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
-                {busquedaTextoActivaUi
-                  ? ` con «${String(busqueda).trim()}» dentro de los filtros actuales`
-                  : filtroBusquedaActivo
-                    ? ` con ${String(busqueda).trim()} días en taller (dentro de los filtros actuales)`
-                    : ' según filtros actuales'}
+              <span className="monitor-ordenes-conteo-cuerpo">
+                <span className="monitor-ordenes-conteo-texto">
+                  {filasOrdenadas.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
+                  {busquedaTextoActivaUi
+                    ? ` con «${String(busqueda).trim()}»`
+                    : filtroBusquedaActivo
+                      ? ` con ${String(busqueda).trim()} días en taller`
+                      : ''}
+                </span>
+                <span className="monitor-ordenes-conteo-resumen">{resumenFiltrosActuales}</span>
               </span>
             </p>
 

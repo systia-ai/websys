@@ -12,7 +12,7 @@ export function filtrosMonitorPorDefecto() {
     ordenFecha: 'asc',
     tecnicoFiltro: TECNICO_TODAS,
     usarRangoFechas: false,
-    rangoFechasElegido: false,
+    rangoFechasElegido: true,
     fechaDesde: '',
     fechaHasta: '',
     filtroModoFechaIngreso: false,
