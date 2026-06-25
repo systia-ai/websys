@@ -32,6 +32,7 @@ import {
   resolverDestino,
   truncar,
   validarConfigBase,
+  nombreClientePlantillaVineta,
 } from '../_shared/whatsapp.ts'
 
 Deno.serve(async (req) => {
@@ -75,8 +76,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  const nombreBase = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
-  const nombreCliente = `• ${nombreBase}`
+  const nombreCliente = nombreClientePlantillaVineta(body.nombreCliente)
   const numeroCotizacion = truncar(String(body.numeroCotizacion ?? '—'), 120)
   const detalle = truncar(String(body.detalle ?? '—').trim() || '—', 512)
   const total = truncar(String(body.total ?? '—'), 80)

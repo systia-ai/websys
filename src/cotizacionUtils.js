@@ -1,9 +1,17 @@
 import { sameId } from './clienteUtils.js'
-import { formatMontoCuenta } from './reparacionUtils.js'
+import {
+  formatMontoCuenta,
+  sincronizarEstatusCuentaPorSaldo,
+  totalCargosDesdeLineasCuenta,
+} from './reparacionUtils.js'
 import { registrarVentaEnCuenta } from './inventarioStock.js'
 
 export const LS_COTIZACIONES = 'sistefix_local_cotizaciones'
 export const LS_COTIZACIONMOV = 'sistefix_local_cotizacionmov'
+const LS_CUENTAS = 'sistefix_local_cuentas'
+const LS_CUENTAMOV = 'sistefix_local_cuentamov'
+const LS_PAGOS = 'sistefix_local_pagosclientes'
+const LS_REPARAMOV = 'sistefix_local_reparamov'
 
 export const ESTATUS_COTIZACION = ['BORRADOR', 'FINALIZADA', 'ACEPTADA', 'CONVERTIDA']
 
@@ -120,6 +128,33 @@ export function menorNumeroCotizacionDisponible(numerosUsados = []) {
 export async function siguienteNumeroCotizacionCliente(supabase, clienteId) {
   const usados = await obtenerNumerosCotizacionCliente(supabase, clienteId)
   return menorNumeroCotizacionDisponible(usados)
+}
+
+/** Cotizaciones del cliente, más recientes primero. */
+export async function listarCotizacionesPorCliente(supabase, clienteId) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('cotizaciones')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .order('numero', { ascending: false })
+    if (error) throw error
+    return data ?? []
+  }
+  const lista = readLs(LS_COTIZACIONES, []).filter((c) => sameId(c.cliente_id, clienteId))
+  lista.sort((a, b) => (Number(b.numero ?? b.id) || 0) - (Number(a.numero ?? a.id) || 0))
+  return lista
+}
+
+export function cotizacionResumenParaPantalla(cot) {
+  if (!cot?.id) return undefined
+  return {
+    id: cot.id,
+    numero: cot.numero ?? numeroCotizacionVisible(cot),
+    total: cot.total,
+    estatus: cot.estatus,
+    notas: cot.notas ?? null,
+  }
 }
 
 export async function crearCotizacionVacia(supabase, clienteId) {
@@ -261,6 +296,76 @@ export async function crearCuentaVaciaParaCliente(supabase, clienteId, nextLocal
   return nuevo
 }
 
+/** Cuentas del cliente que aún pueden recibir cargos (no liquidadas). */
+export async function listarCuentasAbiertasCliente(supabase, clienteId) {
+  if (!clienteId) return []
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('cuentas')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .neq('estatus', 'LIQUIDADA')
+      .order('id', { ascending: false })
+    if (error) throw error
+    return data ?? []
+  }
+  return readLs(LS_CUENTAS, []).filter(
+    (c) => sameId(c.cliente_id, clienteId) && String(c.estatus ?? '').toUpperCase() !== 'LIQUIDADA',
+  )
+}
+
+async function sincronizarTotalesCuentaTrasAgregarLineas(supabase, cuentaId) {
+  let cuenta = null
+  let movs = []
+  let pagos = []
+  let reps = []
+
+  if (supabase) {
+    const { data: c, error: eC } = await supabase.from('cuentas').select('*').eq('id', cuentaId).maybeSingle()
+    if (eC) throw eC
+    cuenta = c
+    if (cuenta) {
+      const [rMovs, rPagos] = await Promise.all([
+        supabase.from('cuentamov').select('*').eq('cuenta_id', cuentaId),
+        supabase.from('pagosclientes').select('*').eq('cuenta_id', cuentaId),
+      ])
+      if (rMovs.error) throw rMovs.error
+      if (rPagos.error) throw rPagos.error
+      movs = rMovs.data ?? []
+      pagos = rPagos.data ?? []
+      const rid = cuenta.repara_id
+      if (rid != null && rid !== '') {
+        const rReps = await supabase.from('reparamov').select('*').eq('repara_id', rid)
+        if (rReps.error) throw rReps.error
+        reps = rReps.data ?? []
+      }
+    }
+  } else {
+    cuenta = readLs(LS_CUENTAS, []).find((c) => sameId(c.id, cuentaId)) ?? null
+    movs = readLs(LS_CUENTAMOV, []).filter((m) => sameId(m.cuenta_id, cuentaId))
+    pagos = readLs(LS_PAGOS, []).filter((p) => sameId(p.cuenta_id, cuentaId))
+    if (cuenta?.repara_id != null && cuenta.repara_id !== '') {
+      reps = readLs(LS_REPARAMOV, []).filter((x) => sameId(x.repara_id, cuenta.repara_id))
+    }
+  }
+
+  if (!cuenta?.id) throw new Error('Cuenta no encontrada')
+
+  const lineasCargos = [
+    ...movs.map((m) => ({
+      tipo: 'cuentamov',
+      subtotal: Number(m.cantidad ?? 0) * Number(m.costo ?? 0),
+    })),
+    ...reps.map((r) => ({
+      tipo: 'reparamov',
+      subtotal: Number(r.cantidad ?? 0) * Number(r.costo ?? 0),
+    })),
+  ]
+  const totalVenta = totalCargosDesdeLineasCuenta(lineasCargos)
+  const actualizada = await sincronizarEstatusCuentaPorSaldo(supabase, cuenta, pagos, { totalVenta })
+  return { cuenta: actualizada, totalVenta }
+}
+
 export async function convertirCotizacionACuenta({
   supabase,
   cotizacion,
@@ -269,9 +374,10 @@ export async function convertirCotizacionACuenta({
   crearNuevaCuenta = false,
   nextLocalCuentaIdFn,
   nextLocalCuentamovIdFn,
+  clienteIdOverride = null,
 }) {
   const cotId = cotizacion?.id
-  const clienteId = cotizacion?.cliente_id
+  const clienteId = clienteIdOverride ?? cotizacion?.cliente_id
   if (!cotId || !clienteId) throw new Error('Cotización o cliente inválido')
   const est = String(cotizacion.estatus ?? '').toUpperCase()
   if (est === 'CONVERTIDA') throw new Error('Esta cotización ya fue convertida a cuenta')
@@ -279,15 +385,13 @@ export async function convertirCotizacionACuenta({
     throw new Error('La cotización debe estar finalizada o aceptada antes de pasarla a cuenta')
   }
 
-  let cuentaId = cuentaDestinoId
+  let cuentaId = crearNuevaCuenta ? null : cuentaDestinoId
   if (crearNuevaCuenta || !cuentaId) {
     const cuenta = await crearCuentaVaciaParaCliente(supabase, clienteId, nextLocalCuentaIdFn)
     cuentaId = cuenta.id
   }
 
-  const LS_CUENTAMOV = 'sistefix_local_cuentamov'
-  const LS_CUENTAS = 'sistefix_local_cuentas'
-  let total = 0
+  let totalCotizacion = 0
 
   async function insertarMovimientoCuentaSinStock(row) {
     if (supabase) {
@@ -315,7 +419,7 @@ export async function convertirCotizacionACuenta({
       descripcion: descVenta,
       costo,
     }
-    total += cant * costo
+    totalCotizacion += cant * costo
 
     if (l.producto_id) {
       try {
@@ -338,17 +442,10 @@ export async function convertirCotizacionACuenta({
     await insertarMovimientoCuentaSinStock(row)
   }
 
-  const cuentaPatch = { total, saldo: total, estatus: 'PENDIENTE' }
-  if (supabase) {
-    const { error } = await supabase.from('cuentas').update(cuentaPatch).eq('id', cuentaId)
-    if (error) throw error
-  } else {
-    const list = readLs(LS_CUENTAS, [])
-    writeLs(
-      LS_CUENTAS,
-      list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...cuentaPatch } : c)),
-    )
-  }
+  const { cuenta: cuentaActualizada, totalVenta } = await sincronizarTotalesCuentaTrasAgregarLineas(
+    supabase,
+    cuentaId,
+  )
 
   await actualizarCotizacion(supabase, cotId, {
     estatus: 'CONVERTIDA',
@@ -356,7 +453,7 @@ export async function convertirCotizacionACuenta({
     total: totalCotizacionDesdeLineas(lineas),
   })
 
-  return { cuentaId, total }
+  return { cuentaId, total: totalCotizacion, totalCuenta: totalVenta, cuenta: cuentaActualizada }
 }
 
 export async function eliminarCotizacionCompleta(supabase, cotizacionId) {

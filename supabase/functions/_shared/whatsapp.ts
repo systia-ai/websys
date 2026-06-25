@@ -81,6 +81,16 @@ export function fechaDefaultEsMx(): string {
   })
 }
 
+/** {{1}} en plantillas con etiqueta «Cliente:» (anticipo). */
+export function nombreClientePlantillaPlain(raw: unknown) {
+  return truncar(String(raw ?? 'Cliente').trim() || 'Cliente', 120)
+}
+
+/** {{1}} en plantilla en línea propia (liquidación, cotización). */
+export function nombreClientePlantillaVineta(raw: unknown) {
+  return `• ${nombreClientePlantillaPlain(raw)}`
+}
+
 export type EnviarPlantillaResult =
   | { ok: true; to: string; template: string; language: string; messages: unknown[] }
   | { ok: false; status: number; error: string; meta?: unknown; raw?: string }

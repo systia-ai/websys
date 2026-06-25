@@ -213,6 +213,8 @@ export default function ReparacionesOrden({
   onNotice,
   /** Abre la cuenta del cliente vinculada a esta orden (módulo Ventas). */
   onIrCuentaCliente,
+  /** Abre las cotizaciones del mismo cliente. */
+  onIrCotizacionesCliente,
   /** Si true, no se muestra la franja azul "Reparaciones" (el padre ya muestra el título, p. ej. OrdenServicioModulo). */
   omitOuterHeader = false,
   puedeEliminar = false,
@@ -281,6 +283,7 @@ export default function ReparacionesOrden({
   const [enviandoWa, setEnviandoWa] = useState(false)
   const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
   const [abriendoCuentaCliente, setAbriendoCuentaCliente] = useState(false)
+  const [abriendoCotizacionesCliente, setAbriendoCotizacionesCliente] = useState(false)
   /** Evita reenviar el mismo tipo de mensaje WA en la misma sesión de orden. */
   const [waEnviados, setWaEnviados] = useState({ orden: false, anticipo: false, liquidacion: false })
   const [waExitoVisible, setWaExitoVisible] = useState(false)
@@ -1772,6 +1775,24 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function irACotizacionesCliente() {
+    if (!onIrCotizacionesCliente) {
+      onError?.('No se puede abrir cotizaciones desde aquí.')
+      return
+    }
+    setAbriendoCotizacionesCliente(true)
+    try {
+      const cliente = await resolverClienteParaIrCuenta(null)
+      if (!cliente?.id) {
+        onError?.('No se encontró el cliente de esta orden.')
+        return
+      }
+      onIrCotizacionesCliente({ cliente })
+    } finally {
+      setAbriendoCotizacionesCliente(false)
+    }
+  }
+
   async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nombre = nombreClienteUi || '—'
@@ -2650,6 +2671,21 @@ export default function ReparacionesOrden({
               }
             >
               {abriendoCuentaCliente ? 'Abriendo cuenta…' : '💳 Cuenta del cliente'}
+            </button>
+          )}
+          {(esOrdenExistente || idReparacion != null) && (
+            <button
+              type="button"
+              className="btn-cotizaciones-cliente-orden wide"
+              disabled={!puedeIrCuentaCliente || abriendoCotizacionesCliente}
+              onClick={() => void irACotizacionesCliente()}
+              title={
+                puedeIrCuentaCliente
+                  ? 'Ver cotizaciones del mismo cliente'
+                  : 'Registre la orden para ver cotizaciones del cliente'
+              }
+            >
+              {abriendoCotizacionesCliente ? 'Abriendo cotizaciones…' : '📋 Cotizaciones del cliente'}
             </button>
           )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>

@@ -314,6 +314,25 @@ async function mensajeErrorInvoke(error) {
   return error?.message ?? 'Error al invocar la función.'
 }
 
+/** Interpreta respuesta de Edge Function WhatsApp (mismo criterio para todas las plantillas). */
+async function procesarRespuestaInvokeWhatsApp(data, error) {
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
+  }
+  if (data && typeof data === 'object' && data.error) {
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
+  }
+  if (!data || typeof data !== 'object' || data.ok !== true) {
+    return {
+      ok: false,
+      errorMsg: humanizarErrorWhatsApp(String(data?.error ?? 'No se confirmó el envío por WhatsApp.')),
+    }
+  }
+  const toReal = data.to ? String(data.to) : null
+  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+}
+
 /** Mensaje más claro cuando Meta aún no aprueba la plantilla o el nombre no coincide. */
 export function humanizarErrorWhatsApp(errorMsg) {
   const m = String(errorMsg ?? '').toLowerCase()
@@ -383,15 +402,7 @@ export async function enviarOrdenWhatsAppCloudApi(supabase, p) {
       ...(to ? { to } : {}),
     },
   })
-  if (error) {
-    const msg = await mensajeErrorInvoke(error)
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
-  }
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
-  }
-  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
-  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+  return procesarRespuestaInvokeWhatsApp(data, error)
 }
 
 /**
@@ -421,15 +432,7 @@ export async function enviarAnticipoWhatsAppCloudApi(supabase, p) {
       ...(to ? { to } : {}),
     },
   })
-  if (error) {
-    const msg = await mensajeErrorInvoke(error)
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
-  }
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
-  }
-  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
-  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+  return procesarRespuestaInvokeWhatsApp(data, error)
 }
 
 /**
@@ -476,15 +479,7 @@ export async function enviarLiquidacionWhatsAppCloudApi(supabase, p) {
       ...(to ? { to } : {}),
     },
   })
-  if (error) {
-    const msg = await mensajeErrorInvoke(error)
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
-  }
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
-  }
-  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
-  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+  return procesarRespuestaInvokeWhatsApp(data, error)
 }
 
 /**
@@ -514,15 +509,7 @@ export async function enviarCotizacionWhatsAppCloudApi(supabase, p) {
       ...(to ? { to } : {}),
     },
   })
-  if (error) {
-    const msg = await mensajeErrorInvoke(error)
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
-  }
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
-  }
-  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
-  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+  return procesarRespuestaInvokeWhatsApp(data, error)
 }
 
 /**

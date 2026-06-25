@@ -729,11 +729,9 @@ export function ymdEnPeriodoMonitor(ymd) {
   return !!(y && y.length >= 10 && y >= ORDEN_SISTEMA_DESDE_YMD)
 }
 
-/** Desde efectivo en filtros de fecha: nunca anterior al 1° may 2026. */
+/** Desde del rango tal como lo eligió el usuario (sin recortar al 1° may 2026). */
 export function desdeEfectivoMonitorFiltro(desde) {
-  const d = String(desde ?? '').trim()
-  if (!d) return ORDEN_SISTEMA_DESDE_YMD
-  return d < ORDEN_SISTEMA_DESDE_YMD ? ORDEN_SISTEMA_DESDE_YMD : d
+  return String(desde ?? '').trim()
 }
 
 /** True si la orden pertenece al periodo con sistema web (alta ≥ 1° may 2026). */
@@ -862,7 +860,7 @@ function textoBusquedaMonitorNorm(s) {
 }
 
 /**
- * Buscador del monitor (reportes u otros): cliente, #orden, problema, equipo, técnico, estatus.
+ * Buscador del monitor (reportes u otros): cliente, #orden, problema, equipo, técnico, estatus, folio Epson.
  * Se aplica sobre el conjunto ya filtrado por estatus, fechas, técnico y tipo de servicio.
  */
 export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], equipoPorId = null) {
@@ -871,6 +869,10 @@ export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], eq
   const qSinHash = q.replace(/^#+\s*/, '').trim()
   const idStr = String(rep?.id ?? '').trim()
   if (idStr && (textoBusquedaMonitorNorm(idStr) === qSinHash || idStr.includes(qSinHash))) {
+    return true
+  }
+  const folioNorm = textoBusquedaMonitorNorm(rep?.folio_epson ?? '')
+  if (folioNorm && (folioNorm.includes(q) || (qSinHash && folioNorm.includes(qSinHash)))) {
     return true
   }
   const c = (clientes ?? []).find((x) => sameId(x.id, rep?.cliente_id))
@@ -886,6 +888,7 @@ export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], eq
       rep?.tecnico,
       rep?.estatus,
       tipoCanon,
+      rep?.folio_epson,
     ]
       .filter(Boolean)
       .join(' '),
@@ -895,24 +898,31 @@ export function repCoincideBusquedaTextoMonitor(rep, queryRaw, clientes = [], eq
 
 /**
  * Buscador del monitor de órdenes: #orden (exacta), problemas_reportados,
- * descripcion_solucion y nombre del cliente.
+ * descripcion_solucion, nombre del cliente y folio Epson (garantía).
  * Se aplica sobre el conjunto ya filtrado (estatus, fechas, técnico, tipo de servicio).
  */
 export function repCoincideBusquedaProblemaSolucionMonitor(rep, queryRaw, clientes = []) {
   const q = textoBusquedaMonitorNorm(queryRaw)
   if (!q) return true
   const qSinHash = q.replace(/^#+\s*/, '').trim()
+  const folioNorm = textoBusquedaMonitorNorm(rep?.folio_epson ?? '')
+
+  if (folioNorm && (folioNorm.includes(q) || (qSinHash && folioNorm.includes(qSinHash)))) {
+    return true
+  }
 
   if (/^\d+$/.test(qSinHash)) {
     const idStr = String(rep?.id ?? '').trim()
-    return idStr === qSinHash || Number(idStr) === Number(qSinHash)
+    if (idStr === qSinHash || Number(idStr) === Number(qSinHash)) return true
+    if (folioNorm && folioNorm.includes(qSinHash)) return true
+    return false
   }
 
   const c = (clientes ?? []).find((x) => sameId(x.id, rep?.cliente_id))
   const nombre = textoBusquedaMonitorNorm(c?.nombre ?? c?.Nombre ?? '')
   if (nombre && nombre.includes(q)) return true
   const blob = textoBusquedaMonitorNorm(
-    [rep?.problemas_reportados, rep?.descripcion_solucion].filter(Boolean).join(' '),
+    [rep?.problemas_reportados, rep?.descripcion_solucion, rep?.folio_epson].filter(Boolean).join(' '),
   )
   return blob.includes(q)
 }
@@ -1157,11 +1167,11 @@ export function fechaHitoEstatusMonitor(rep) {
 
 function ymdEnRangoMonitor(ymd, desde, hasta) {
   if (!ymdEnPeriodoMonitor(ymd)) return false
-  return ymdEnRango(ymd, desdeEfectivoMonitorFiltro(desde), hasta)
+  return ymdEnRango(ymd, desde, hasta)
 }
 
 /**
- * Rango Desde/Hasta del monitor (solo columnas de hitos en BD; omite fechas antes del 1° may 2026).
+ * Rango Desde/Hasta del monitor (solo columnas de hitos en BD; hitos antes del 1° may 2026 no aplican).
  * @param {'todas'|'ingreso'|'entrega'|'reparado'|'revision'|'ambas'} modo
  */
 export function repEnRangoFechasMonitor(
@@ -1215,11 +1225,10 @@ export function repCoincideFiltroMonitor(
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
-  const desdeEf = desdeEfectivoMonitorFiltro(d)
 
   if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
     if (!hayRango) return false
-    if (!repEnRangoFechasMonitor(rep, desdeEf, h, cuentaVinculada, ymdDesdePagos, modoFecha)) {
+    if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) {
       return false
     }
     return true
@@ -1229,7 +1238,7 @@ export function repCoincideFiltroMonitor(
     if (!repEsVerificadaListaEntrega(rep)) return false
     if (!hayRango) return true
     const ymdVer = fechaVerificacionEntregaYmd(rep)
-    return ymdVer ? ymdEnRangoMonitor(ymdVer, desdeEf, h) : false
+    return ymdVer ? ymdEnRangoMonitor(ymdVer, d, h) : false
   }
 
   const sel = estatusSeleccionados

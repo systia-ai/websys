@@ -13,6 +13,7 @@ import {
   fechaDefaultEsMx,
   json,
   leerConfigWhatsAppBase,
+  nombreClientePlantillaPlain,
   resolverDestino,
   truncar,
   validarConfigBase,
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  const nombreCliente = truncar(String(body.nombreCliente ?? 'Cliente').trim() || 'Cliente', 120)
+  const nombreCliente = nombreClientePlantillaPlain(body.nombreCliente)
   const orden = truncar(String(body.orden ?? '—'), 120)
   const monto = truncar(String(body.monto ?? '—'), 80)
   const formaPago = truncar(String(body.formaPago ?? '—'), 80)

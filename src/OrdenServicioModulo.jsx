@@ -25,6 +25,7 @@ export default function OrdenServicioModulo({
   onError,
   onNotice,
   onIrCuentaCliente,
+  onIrCotizacionesCliente,
   error,
   notice,
   puedeEliminar = false,
@@ -97,6 +98,7 @@ export default function OrdenServicioModulo({
             onError={onError}
             onNotice={onNotice}
             onIrCuentaCliente={onIrCuentaCliente}
+            onIrCotizacionesCliente={onIrCotizacionesCliente}
             puedeEliminar={puedeEliminar}
             omitOuterHeader
           />

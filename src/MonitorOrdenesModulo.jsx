@@ -13,12 +13,12 @@ import {
   fechaIngresoYmd,
   nombresTecnicosEnOrden,
   ordenUsaSistemaWeb,
-  ORDEN_SISTEMA_DESDE_YMD,
   repCoincideFiltroMonitor,
   repCoincideBusquedaProblemaSolucionMonitor,
   tecnicoRepCoincideFiltro,
   tipoServicioDeRep,
   TIPOS_SERVICIO_CANONICOS,
+  TIPO_GARANTIA_EPSON,
   ymdHoyLocal,
 } from './reparacionUtils.js'
 import { leerTecnicos, agregarTecnico, eliminarTecnico, cargarTecnicosUnificados } from './tecnicosCatalogo.js'
@@ -908,6 +908,28 @@ export default function MonitorOrdenesModulo({
     ],
   )
 
+  function celdaTipoServicio(rep, equipoPorId) {
+    const tipoCanon = tipoServicioDeRep(rep, equipoPorId)
+    const tipoServicio = tipoCanon ?? '—'
+    const folioEpson = String(rep?.folio_epson ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+    const mostrarFolio = tipoCanon === TIPO_GARANTIA_EPSON && folioEpson !== ''
+    return (
+      <div className="monitor-ordenes-tipo-servicio-inner">
+        <span className="monitor-ordenes-tipo-servicio-texto">{tipoServicio}</span>
+        {mostrarFolio ? (
+          <span
+            className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--folio-epson"
+            title={`Folio Epson: ${folioEpson}`}
+          >
+            Folio {folioEpson}
+          </span>
+        ) : null}
+      </div>
+    )
+  }
+
   function badgeEstatus(rep) {
     const ent = estatusEsEntregado(rep?.estatus)
     const verificada = estaVerificadoEntrega(rep)
@@ -1096,7 +1118,6 @@ export default function MonitorOrdenesModulo({
                   <input
                     type="date"
                     value={fechaDesde}
-                    min={ORDEN_SISTEMA_DESDE_YMD}
                     max={fechaHasta || undefined}
                     onChange={(e) => setFechaDesde(e.target.value)}
                     aria-label="Fecha inicial del rango"
@@ -1276,7 +1297,7 @@ export default function MonitorOrdenesModulo({
                 className="monitor-ordenes-busqueda-input"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Refinar: #orden, problema, solución o cliente… (respeta filtros de arriba)"
+                placeholder="Refinar: #orden, folio Epson, problema, solución o cliente… (respeta filtros de arriba)"
                 aria-label="Buscar por número de orden, problemas, solución o nombre del cliente"
               />
               <button
@@ -1350,7 +1371,6 @@ export default function MonitorOrdenesModulo({
                     <tbody>
                       {filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
                         const { tipo, desc } = datosEquipo(rep)
-                        const tipoServicio = tipoServicioDeRep(rep, equipoPorId) ?? '—'
                         const tech = String(rep.tecnico ?? '').trim()
                         const ent = estatusEsEntregado(rep?.estatus)
                         const verificada = estaVerificadoEntrega(rep)
@@ -1396,7 +1416,7 @@ export default function MonitorOrdenesModulo({
                             <td className="monitor-ordenes-num cuentas-cliente-tabla-orden">{rep.id ?? '—'}</td>
                             <td className="monitor-ordenes-col-cliente">{nombreCliente(rep.cliente_id)}</td>
                             <td>{tipo}</td>
-                            <td className="monitor-ordenes-tipo-servicio">{tipoServicio}</td>
+                            <td className="monitor-ordenes-tipo-servicio">{celdaTipoServicio(rep, equipoPorId)}</td>
                             <td className="monitor-ordenes-col-texto">{desc}</td>
                             <td className="monitor-ordenes-col-texto">{String(rep.problemas_reportados ?? '—')}</td>
                             <td>{tech || '—'}</td>

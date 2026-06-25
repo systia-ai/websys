@@ -4129,6 +4129,40 @@ td {
   gap: 4px;
 }
 
+.monitor-ordenes-tipo-servicio-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 11rem;
+}
+
+.monitor-ordenes-tipo-servicio-texto {
+  line-height: 1.25;
+  font-size: inherit;
+}
+
+.rep-orden-badge.rep-orden-badge--tabla.rep-orden-badge--folio-epson {
+  background: linear-gradient(180deg, #ffe082 0%, #ffb300 55%, #ff9800 100%);
+  color: #3e2723;
+  font-weight: 700;
+  border: 1px solid #ffa000;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.55);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: fit-content;
+  max-width: 100%;
+}
+
+:root[data-theme='dark'] .rep-orden-badge.rep-orden-badge--tabla.rep-orden-badge--folio-epson {
+  background: linear-gradient(180deg, #ffca28 0%, #ff9800 55%, #f57c00 100%);
+  color: #1a0f00;
+  border-color: #ffb74d;
+  box-shadow: 0 0 5px rgba(255, 193, 7, 0.65);
+}
+
 .monitor-accion-orden-modal {
   max-width: 480px;
 }
@@ -6381,6 +6415,14 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   border-radius: 6px;
 }
 
+.rep-orden-badge.rep-orden-badge--tabla {
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-bottom: 0;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
 .rep-ordenes-resumen-caja {
   user-select: none;
   margin: 0 0 12px;
@@ -7950,20 +7992,30 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
 .rep-actions {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
   margin-top: 8px;
   margin-bottom: 32px;
+  width: 100%;
 }
 
 .rep-actions .wide {
-  width: 100%;
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
   min-height: 56px;
+  padding: 14px 16px;
+  box-sizing: border-box;
   border: 0;
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 700;
+  line-height: 1.25;
   cursor: pointer;
   color: #fff;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rep-actions .btn-primary.wide {
@@ -8030,6 +8082,49 @@ li.equipo-card:has(button.equipo-card-main:focus-visible) {
   background: #ce93d8;
   color: #fff;
   cursor: not-allowed;
+}
+
+.rep-actions .btn-cotizaciones-cliente-orden.wide {
+  background: #00897b;
+  color: #fff;
+}
+
+.rep-actions .btn-cotizaciones-cliente-orden.wide:hover:not(:disabled) {
+  background: #00796b;
+}
+
+.rep-actions .btn-cotizaciones-cliente-orden.wide:disabled {
+  background: #80cbc4;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.ventas-acciones .btn-cotizaciones-cliente-ventas {
+  background: #9c27b0;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(156, 39, 176, 0.35);
+}
+
+.ventas-acciones .btn-cotizaciones-cliente-ventas:hover:not(:disabled) {
+  background: #8e24aa;
+}
+
+.cliente-cotizaciones-lista-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.cliente-cotizaciones-lista-titulo {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.cliente-cotizaciones-lista-acciones.ventas-acciones {
+  margin-top: 1rem;
 }
 
 .wa-menu-body .wa-menu-option.btn-primary.wide {
@@ -8155,6 +8250,17 @@ input.full {
 }
 
 /* Pantalla Cuentas / Ventas (paridad con Android VentasScreen) */
+/* Ancho del panel central (botones, total/saldo, estatus): más ancho, sin llenar la pantalla */
+.ventas-cuenta-root,
+.cotizaciones-screen-root,
+.cliente-cotizaciones-lista,
+.rep-module-wrap {
+  --ventas-panel-ancho-max: 540px;
+  --ventas-boton-ancho: min(100%, var(--ventas-panel-ancho-max));
+  --ventas-resumen-ancho-max: 720px;
+  --ventas-resumen-ancho: min(100%, var(--ventas-resumen-ancho-max));
+}
+
 .ventas-cuenta-module {
   max-width: 100%;
 }
@@ -8183,6 +8289,7 @@ input.full {
 .ventas-cuenta-body {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 14px;
   padding-top: 16px;
 }
@@ -8344,7 +8451,9 @@ input.full {
 }
 
 .btn-agregar-pago-ventas {
-  width: 100%;
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
+  align-self: center;
   border: 0;
   padding: 14px;
   border-radius: 8px;
@@ -8361,7 +8470,9 @@ input.full {
 }
 
 .btn-agregar-prod-ventas {
-  width: 100%;
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
+  align-self: center;
   border: 0;
   padding: 14px;
   border-radius: 8px;
@@ -8655,70 +8766,71 @@ input.full {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin: 12px 0 4px;
+  width: var(--ventas-resumen-ancho, min(100%, 720px));
+  max-width: var(--ventas-resumen-ancho-max, 720px);
+  align-self: center;
 }
 
 @media (max-width: 520px) {
   .ventas-cuenta-resumen {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 }
 
 .ventas-cuenta-recuadro {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 2px solid #b3e5fc;
-  background: linear-gradient(180deg, #f5fbff 0%, #e8f4fc 100%);
-  box-shadow: 0 1px 4px rgba(33, 150, 243, 0.08);
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 20px;
+  min-height: 58px;
+  border-radius: 8px;
+  border: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .ventas-cuenta-recuadro--total {
-  border-color: #90caf9;
+  background: #1976d2;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.35);
 }
 
 .ventas-cuenta-recuadro--saldo {
-  border-color: #a5d6a7;
-  background: linear-gradient(180deg, #f1f8e9 0%, #e8f5e9 100%);
+  background: #2e7d32;
+  box-shadow: 0 2px 10px rgba(46, 125, 50, 0.35);
 }
 
 .ventas-cuenta-recuadro--saldo-pend {
-  border-color: #ef9a9a;
-  background: linear-gradient(180deg, #fff5f5 0%, #ffebee 100%);
+  background: #c62828;
+  box-shadow: 0 2px 10px rgba(198, 40, 40, 0.35);
 }
 
 .ventas-cuenta-recuadro-etiqueta {
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: 0.72rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #546e7a;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto {
-  color: #1565c0;
+.ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto,
+.ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto,
+.ventas-cuenta-recuadro--saldo-pend .ventas-cuenta-recuadro-monto,
+.ventas-cuenta-recuadro--saldo-cero .ventas-cuenta-recuadro-monto,
+.ventas-cuenta-recuadro--saldo-favor .ventas-cuenta-recuadro-monto {
+  color: #fff;
 }
 
 .ventas-cuenta-recuadro--saldo-favor {
-  border-color: #64b5f6;
-  background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%);
+  background: #1565c0;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.35);
 }
 
-.ventas-cuenta-recuadro--saldo-favor .ventas-cuenta-recuadro-monto {
-  color: #0d47a1;
-}
-
-.ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto {
-  color: #2e7d32;
-}
-
-.ventas-cuenta-recuadro--saldo-pend .ventas-cuenta-recuadro-monto {
-  color: #c62828;
-}
-
-.ventas-cuenta-recuadro--saldo-cero .ventas-cuenta-recuadro-monto {
-  color: #546e7a;
+.ventas-cuenta-recuadro--saldo-cero {
+  background: #546e7a;
+  box-shadow: 0 2px 10px rgba(84, 110, 122, 0.35);
 }
 
 .cuenta-tarjeta-saldo-favor strong {
@@ -8726,10 +8838,11 @@ input.full {
 }
 
 .ventas-cuenta-recuadro-monto {
-  font-size: 1.45rem;
+  font-size: 1.25rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1.15;
+  color: #fff;
 }
 
 .ventas-total-block {
@@ -8738,32 +8851,67 @@ input.full {
   gap: 6px;
   font-weight: 600;
   color: #374151;
+  width: var(--ventas-resumen-ancho, min(100%, 720px));
+  max-width: var(--ventas-resumen-ancho-max, 720px);
+  align-self: center;
+}
+
+.ventas-total-block > span:first-child {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #546e7a;
 }
 
 .ventas-total-block input {
-  padding: 12px;
+  padding: 14px 20px;
   border-radius: 8px;
-  border: 2px solid #1976d2;
-  font-size: 1.1rem;
+  border: 0;
+  font-size: 1rem;
   font-weight: 700;
-  background: #e3f2fd;
+  text-align: center;
+  background: #546e7a;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(84, 110, 122, 0.35);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ventas-total-block input.readonly-field {
-  border-color: #bdbdbd;
-  background: #f5f5f5;
-  font-weight: 500;
+  background: #546e7a;
+  color: #fff;
+  font-weight: 700;
+  cursor: default;
+}
+
+.ventas-cuenta-root .ventas-garantia-sin-cobro-aviso,
+.ventas-cuenta-root .ventas-garantia-epson-aviso {
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
+  align-self: center;
 }
 
 .ventas-acciones {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
   margin-top: 8px;
   margin-bottom: 24px;
+  width: 100%;
 }
 
 .ventas-acciones > button {
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  box-sizing: border-box;
   border: 0;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
@@ -9037,28 +9185,32 @@ input.full {
 
 .cotizaciones-screen-root .ventas-cotizacion-notas-block {
   margin: 0;
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
+  align-self: center;
 }
 
 .cotizaciones-screen-root .ventas-cotizacion-notas {
   width: 100%;
   box-sizing: border-box;
-  padding: 12px;
+  padding: 14px;
   border-radius: 8px;
-  border: 2px solid #1976d2;
+  border: 0;
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.45;
-  background: #e3f2fd;
-  color: #1e293b;
+  background: #546e7a;
+  color: #fff;
   resize: vertical;
   min-height: 4.5rem;
+  box-shadow: 0 2px 10px rgba(84, 110, 122, 0.35);
 }
 
 .cotizaciones-screen-root .ventas-cotizacion-notas.readonly-field {
-  border-color: #bdbdbd;
-  background: #f5f5f5;
-  color: #374151;
+  background: #546e7a;
+  color: #fff;
+  cursor: default;
 }
 
 .cotizaciones-screen-root .ventas-cotizacion-captura {
@@ -9122,10 +9274,12 @@ input.full {
 
 .cotizaciones-screen-root .ventas-acciones--cotizacion {
   margin-top: 4px;
+  align-items: center;
 }
 
 .cotizaciones-screen-root .ventas-acciones--cotizacion > button {
-  width: 100%;
+  width: var(--ventas-boton-ancho, min(100%, 540px));
+  max-width: var(--ventas-panel-ancho-max, 540px);
   padding: 14px;
   font-size: 1rem;
   font-weight: 700;
@@ -9153,6 +9307,91 @@ input.full {
   opacity: 0.55;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.modal-cotizacion-finalizar {
+  max-width: 480px;
+}
+
+.modal-cotizacion-finalizar .modal-footer-col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.modal-cotizacion-finalizar .modal-footer-col .wide {
+  width: 100%;
+  margin: 0;
+}
+
+.modal-cotizacion-a-cuenta {
+  max-width: 560px;
+}
+
+.cotizacion-a-cuenta-etiqueta {
+  margin: 0 0 8px;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.cotizacion-a-cuenta-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.cotizacion-a-cuenta-opcion {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 2px solid var(--app-color-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--app-color-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.cotizacion-a-cuenta-opcion--sel {
+  border-color: #9c27b0;
+  background: rgba(156, 39, 176, 0.08);
+  box-shadow: 0 0 0 1px rgba(156, 39, 176, 0.25);
+}
+
+.cotizacion-a-cuenta-opcion-titulo {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.cotizacion-a-cuenta-vacio {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  line-height: 1.45;
+}
+
+:root[data-theme='dark'] .cotizacion-a-cuenta-opcion {
+  background: var(--app-color-surface);
+  border-color: var(--app-color-border);
+  color: #fff;
+}
+
+:root[data-theme='dark'] .cotizacion-a-cuenta-opcion--sel {
+  background: rgba(156, 39, 176, 0.18);
+  border-color: #ce93d8;
+}
+
+:root[data-theme='dark'] .cotizacion-a-cuenta-vacio {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
 }
 
 .cotizaciones-screen-root .ventas-recibo-hint {
@@ -9288,13 +9527,15 @@ input.full {
 
 /* Cotizaciones — recuadros total/estatus (mismo criterio que ventas) */
 :root[data-theme='dark'] .cotizaciones-screen-root .ventas-cuenta-recuadro--total {
-  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
-  border-color: #42a5f5 !important;
+  background: #1565c0 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.45) !important;
 }
 
 :root[data-theme='dark'] .cotizaciones-screen-root .ventas-cuenta-recuadro--saldo {
-  background: linear-gradient(180deg, #1b3d24 0%, #142d1c 100%) !important;
-  border-color: #4caf50 !important;
+  background: #546e7a !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(84, 110, 122, 0.45) !important;
 }
 
 :root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-wrap {
@@ -12544,43 +12785,36 @@ input.full {
 }
 
 :root[data-theme='dark'] .ventas-cuenta-recuadro-etiqueta {
-  color: #cbd5e1 !important;
+  color: rgba(255, 255, 255, 0.92) !important;
 }
 
-:root[data-theme='dark'] .ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto {
-  color: #93c5fd !important;
-}
-
-:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto {
-  color: #a5d6a7 !important;
-}
-
-:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo-pend .ventas-cuenta-recuadro-monto {
-  color: #fca5a5 !important;
-}
-
-:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo-favor .ventas-cuenta-recuadro-monto {
-  color: #90caf9 !important;
-}
-
+:root[data-theme='dark'] .ventas-cuenta-recuadro--total .ventas-cuenta-recuadro-monto,
+:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo .ventas-cuenta-recuadro-monto,
+:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo-pend .ventas-cuenta-recuadro-monto,
+:root[data-theme='dark'] .ventas-cuenta-recuadro--saldo-favor .ventas-cuenta-recuadro-monto,
 :root[data-theme='dark'] .ventas-cuenta-recuadro--saldo-cero .ventas-cuenta-recuadro-monto {
-  color: #e2e8f0 !important;
+  color: #ffffff !important;
 }
 
 :root[data-theme='dark'] .ventas-total-block {
   color: #ffffff;
 }
 
+:root[data-theme='dark'] .ventas-total-block > span:first-child {
+  color: #cbd5e1 !important;
+}
+
 :root[data-theme='dark'] .ventas-total-block input {
-  background: var(--app-color-input-bg);
-  color: #ffffff;
-  border-color: var(--app-color-border);
+  background: #455a64 !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
 }
 
 :root[data-theme='dark'] .ventas-total-block input.readonly-field {
-  background: var(--app-color-surface-2);
-  color: #e2e8f0;
-  border-color: var(--app-color-border);
+  background: #455a64 !important;
+  color: #ffffff !important;
+  border: 0 !important;
 }
 
 /* Cuentas (ventas) — avisos, tabla y recuadros en modo oscuro */
@@ -12660,23 +12894,33 @@ input.full {
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--total {
-  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
-  border-color: #42a5f5 !important;
+  background: #1565c0 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.45) !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo {
-  background: linear-gradient(180deg, #1b3d24 0%, #142d1c 100%) !important;
-  border-color: #4caf50 !important;
+  background: #2e7d32 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(46, 125, 50, 0.45) !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo-pend {
-  background: linear-gradient(180deg, #3d2020 0%, #2d1818 100%) !important;
-  border-color: #ef5350 !important;
+  background: #c62828 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(198, 40, 40, 0.45) !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo-favor {
-  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
-  border-color: #64b5f6 !important;
+  background: #1565c0 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(21, 101, 192, 0.45) !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-cuenta-recuadro--saldo-cero {
+  background: #546e7a !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 10px rgba(84, 110, 122, 0.45) !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-cliente-card .muted {

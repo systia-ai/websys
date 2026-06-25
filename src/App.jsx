@@ -7,6 +7,7 @@ import ClientesModulo from './ClientesModulo.jsx'
 import OrdenServicioModulo from './OrdenServicioModulo.jsx'
 import VentasCuentaScreen from './VentasCuentaScreen.jsx'
 import CotizacionesScreen from './CotizacionesScreen.jsx'
+import ClienteCotizacionesListaScreen from './ClienteCotizacionesListaScreen.jsx'
 import InventariosModulo from './InventariosModulo.jsx'
 import CatalogoPagosModulo from './CatalogoPagosModulo.jsx'
 import CorteCajaModulo from './CorteCajaModulo.jsx'
@@ -283,6 +284,12 @@ function App() {
     if (leaving === 'cotizaciones') {
       const cctx = cotizacionesContext
       setCotizacionesContext(null)
+      if (cctx?.returnTo === 'reparaciones' && cctx?.repSessionRestore != null) {
+        setRepSession({ ...cctx.repSessionRestore, _recargarOrden: Date.now() })
+      }
+      if (cctx?.returnTo === 'ventas' && cctx?.ventasContextRestore != null) {
+        setVentasContext({ ...cctx.ventasContextRestore })
+      }
       if (cctx?.returnTo === 'clientes' && cctx?.cliente) {
         setClientesRetornoCotizaciones({
           openAccionesModal: true,
@@ -780,6 +787,21 @@ function App() {
           })
           navigateTo('ventas')
         }}
+        onIrCotizacionesCliente={(boot) => {
+          const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+          if (!cli?.id) {
+            setError('Cliente sin ID válido')
+            setTimeout(() => setError(''), 5000)
+            return
+          }
+          setCotizacionesContext({
+            mode: 'lista',
+            cliente: cli,
+            returnTo: 'reparaciones',
+            repSessionRestore: repSession ?? {},
+          })
+          navigateTo('cotizaciones')
+        }}
         onError={(msg) => {
           setError(msg)
           setTimeout(() => setError(''), 6000)
@@ -793,34 +815,75 @@ function App() {
   }
 
   if (activeModule === 'cotizaciones' && cotizacionesContext) {
+    const salirDetalleCotizacion = () => {
+      const cctx = cotizacionesContext
+      if (
+        cctx?.mode === 'detalle' &&
+        (cctx?.returnTo === 'reparaciones' || cctx?.returnTo === 'ventas')
+      ) {
+        setCotizacionesContext((prev) => {
+          if (!prev) return null
+          const { cotizacion: _cot, ...rest } = prev
+          return { ...rest, mode: 'lista' }
+        })
+        return
+      }
+      goBack()
+    }
+
     return (
       <main className="module ventas-cuenta-module">
         {!supabase && <p className="warning">Modo local: datos en navegador; defina variables Supabase para producción.</p>}
         {error && <p className="error">{error}</p>}
         {notice && <p className="ok">{notice}</p>}
-        <CotizacionesScreen
-          supabase={supabase}
-          puedeEliminar={puedeEliminar}
-          context={cotizacionesContext}
-          onSalir={goBack}
-          onAbrirCuenta={(boot) => {
-            setCotizacionesContext(null)
-            const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
-            if (cli?.id != null) {
-              setClientesRetornoVentas({ openAccionesModal: true, cliente: cli })
-            }
-            setVentasContext({ ...boot, returnTo: 'clientes' })
-            navigateTo('ventas')
-          }}
-          onError={(msg) => {
-            setError(msg)
-            setTimeout(() => setError(''), 6000)
-          }}
-          onNotice={(msg) => {
-            setNotice(msg)
-            setTimeout(() => setNotice(''), 4000)
-          }}
-        />
+        {cotizacionesContext.mode === 'lista' ? (
+          <ClienteCotizacionesListaScreen
+            supabase={supabase}
+            puedeEliminar={puedeEliminar}
+            context={cotizacionesContext}
+            onSalir={goBack}
+            onSelectCotizacion={(boot) => {
+              setCotizacionesContext((prev) => ({
+                ...prev,
+                mode: 'detalle',
+                cliente: boot?.cliente ? normalizeClienteRow(boot.cliente) : prev?.cliente,
+                cotizacion: boot?.cotizacion,
+              }))
+            }}
+            onError={(msg) => {
+              setError(msg)
+              setTimeout(() => setError(''), 6000)
+            }}
+            onNotice={(msg) => {
+              setNotice(msg)
+              setTimeout(() => setNotice(''), 4000)
+            }}
+          />
+        ) : (
+          <CotizacionesScreen
+            supabase={supabase}
+            puedeEliminar={puedeEliminar}
+            context={cotizacionesContext}
+            onSalir={salirDetalleCotizacion}
+            onAbrirCuenta={(boot) => {
+              setCotizacionesContext(null)
+              const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+              if (cli?.id != null) {
+                setClientesRetornoVentas({ openAccionesModal: true, cliente: cli })
+              }
+              setVentasContext({ ...boot, returnTo: 'clientes' })
+              navigateTo('ventas')
+            }}
+            onError={(msg) => {
+              setError(msg)
+              setTimeout(() => setError(''), 6000)
+            }}
+            onNotice={(msg) => {
+              setNotice(msg)
+              setTimeout(() => setNotice(''), 4000)
+            }}
+          />
+        )}
       </main>
     )
   }
@@ -837,6 +900,21 @@ function App() {
           puedeLiquidarCuentas={puedeLiquidarCuentas}
           context={ventasContext}
           onSalir={goBack}
+          onIrCotizacionesCliente={(boot) => {
+            const cli = boot?.cliente ? normalizeClienteRow(boot.cliente) : null
+            if (!cli?.id) {
+              setError('Cliente sin ID válido')
+              setTimeout(() => setError(''), 5000)
+              return
+            }
+            setCotizacionesContext({
+              mode: 'lista',
+              cliente: cli,
+              returnTo: 'ventas',
+              ventasContextRestore: ventasContext ?? {},
+            })
+            navigateTo('cotizaciones')
+          }}
           onError={(msg) => {
             setError(msg)
             setTimeout(() => setError(''), 6000)

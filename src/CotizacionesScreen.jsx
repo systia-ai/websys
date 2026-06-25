@@ -17,6 +17,7 @@ import {
   convertirCotizacionACuenta,
   actualizarCotizacion,
   eliminarCotizacionCompleta,
+  listarCuentasAbiertasCliente,
   LS_COTIZACIONES,
   LS_COTIZACIONMOV,
 } from './cotizacionUtils.js'
@@ -33,7 +34,6 @@ import {
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_CUENTAS = 'sistefix_local_cuentas'
-const LS_CUENTAMOV = 'sistefix_local_cuentamov'
 
 let __seq = 1
 function nextLocalId() {
@@ -84,11 +84,13 @@ export default function CotizacionesScreen({
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [modalConvertir, setModalConvertir] = useState(false)
+  const [modalFinalizar, setModalFinalizar] = useState(false)
   const [cuentasCliente, setCuentasCliente] = useState([])
   const [cuentaDestinoId, setCuentaDestinoId] = useState('')
   const [convirtiendo, setConvirtiendo] = useState(false)
   const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
   const [eliminandoCotizacion, setEliminandoCotizacion] = useState(false)
+  const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false)
 
   const cotizacionId = cotizacionInfo?.id ?? cotizacionInicial?.id ?? null
   const numeroCotizacion = numeroCotizacionVisible(cotizacionInfo ?? cotizacionInicial)
@@ -262,10 +264,29 @@ export default function CotizacionesScreen({
     }
   }
 
-  async function finalizar() {
+  async function cargarCuentasDelCliente() {
+    if (!cliente?.id) {
+      onError?.('Cliente sin ID válido')
+      return []
+    }
+    const cuentas = await listarCuentasAbiertasCliente(supabase, cliente.id)
+    setCuentasCliente(cuentas)
+    setCuentaDestinoId('')
+    return cuentas
+  }
+
+  function solicitarFinalizar() {
     if (!requiereGestionar()) return
     if (!cotizacionId) return
-    if (!window.confirm('¿Finalizar esta cotización? Ya no podrá agregar líneas.')) return
+    if (lineas.length === 0 || total <= 0.0001) {
+      onError?.('Agregue al menos un producto o servicio antes de finalizar')
+      return
+    }
+    setModalFinalizar(true)
+  }
+
+  async function ejecutarFinalizarSolo() {
+    if (!cotizacionId) return
     setGuardando(true)
     try {
       await actualizarCotizacion(supabase, cotizacionId, {
@@ -273,12 +294,112 @@ export default function CotizacionesScreen({
       })
       const data = await finalizarCotizacion(supabase, cotizacionId, lineas)
       setCotizacionInfo(data)
+      setModalFinalizar(false)
       onNotice?.('Cotización finalizada. Ya puede imprimirla o enviarla al cliente.')
     } catch (e) {
       onError?.(e.message)
     } finally {
       setGuardando(false)
     }
+  }
+
+  async function ejecutarFinalizarYAgregarACuenta() {
+    if (!cotizacionId) return
+    setGuardando(true)
+    try {
+      await actualizarCotizacion(supabase, cotizacionId, {
+        notas: notas.trim() || null,
+      })
+      const data = await finalizarCotizacion(supabase, cotizacionId, lineas)
+      setCotizacionInfo(data)
+      setModalFinalizar(false)
+      await cargarCuentasDelCliente()
+      setModalConvertir(true)
+      onNotice?.('Cotización finalizada. Elija la cuenta donde agregar los productos.')
+    } catch (e) {
+      onError?.(e.message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function abrirModalConvertir() {
+    if (!requiereGestionar()) return
+    if (estatus !== 'ACEPTADA' && estatus !== 'FINALIZADA') {
+      onError?.('Finalice la cotización antes de agregarla a una cuenta')
+      return
+    }
+    try {
+      await cargarCuentasDelCliente()
+      setModalConvertir(true)
+    } catch (e) {
+      onError?.(`Error al cargar cuentas: ${e.message}`)
+    }
+  }
+
+  async function ejecutarConversion(crearNueva) {
+    if (!requiereGestionar()) return
+    if (!cotizacionId || !cotizacionInfo) return
+    if (!crearNueva && cuentasCliente.length > 0 && !cuentaDestinoId) {
+      onError?.('Seleccione una cuenta del cliente o cree una cuenta nueva')
+      return
+    }
+    setConvirtiendo(true)
+    try {
+      const cotizacionParaConvertir = {
+        ...cotizacionInfo,
+        cliente_id: cotizacionInfo.cliente_id ?? cliente.id,
+      }
+      const { cuentaId, cuenta: cuentaActualizada } = await convertirCotizacionACuenta({
+        supabase,
+        cotizacion: cotizacionParaConvertir,
+        lineas,
+        cuentaDestinoId: crearNueva ? null : cuentaDestinoId || null,
+        crearNuevaCuenta: crearNueva,
+        clienteIdOverride: cliente.id,
+        nextLocalCuentaIdFn: (list) => nextMaxId(list),
+        nextLocalCuentamovIdFn: (list) => nextMaxId(list),
+      })
+      setCotizacionInfo((prev) =>
+        prev ? { ...prev, estatus: 'CONVERTIDA', cuenta_id: cuentaId } : prev,
+      )
+      setModalConvertir(false)
+      onNotice?.(
+        crearNueva
+          ? `Cotización agregada a la cuenta nueva #${cuentaId}`
+          : `Cotización agregada a la cuenta #${cuentaId} de ${cliente.nombre || 'el cliente'}`,
+      )
+      const cuenta =
+        cuentaActualizada ??
+        (await (async () => {
+          if (supabase) {
+            const { data } = await supabase.from('cuentas').select('*').eq('id', cuentaId).maybeSingle()
+            return data
+          }
+          return readLs(LS_CUENTAS, []).find((c) => sameId(c.id, cuentaId)) ?? null
+        })()) ?? {
+          id: cuentaId,
+          total,
+          saldo: total,
+          estatus: 'PENDIENTE',
+          repara_id: null,
+        }
+      onAbrirCuenta?.({ cliente, cuenta })
+    } catch (e) {
+      onError?.(`Error al agregar a cuenta: ${e.message}`)
+    } finally {
+      setConvirtiendo(false)
+    }
+  }
+
+  function etiquetaCuentaCliente(c) {
+    const est = String(c.estatus ?? '—').trim()
+    const monto = formatoTotalCotizacion(c.total ?? 0)
+    const orden =
+      c.repara_id != null && c.repara_id !== '' && String(c.repara_id) !== String(c.id)
+        ? ` · Orden #${c.repara_id}`
+        : ''
+    return `Cuenta #${c.id} · ${est} · ${monto}${orden}`
   }
 
   async function marcarAceptada() {
@@ -312,7 +433,8 @@ export default function CotizacionesScreen({
     }
   }
 
-  function enviarWhatsAppCotizacion() {
+  async function enviarWhatsAppCotizacion() {
+    if (enviandoWhatsApp) return
     if (lineas.length === 0) {
       onError?.('Agregue al menos un concepto a la cotización')
       return
@@ -332,7 +454,8 @@ export default function CotizacionesScreen({
       notas,
     }
 
-    void (async () => {
+    setEnviandoWhatsApp(true)
+    try {
       if (supabase) {
         const tel = telefonoWaParaEnvio(telCliente)
         if (!tel.ok) {
@@ -374,67 +497,8 @@ export default function CotizacionesScreen({
       } else if (wa.motivo === 'popup-bloqueado') {
         onError?.('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
       }
-    })()
-  }
-
-  async function abrirModalConvertir() {
-    if (!requiereGestionar()) return
-    if (estatus !== 'ACEPTADA' && estatus !== 'FINALIZADA') {
-      onError?.('Finalice o marque como aceptada la cotización antes de pasarla a cuenta')
-      return
-    }
-    try {
-      let cuentas = []
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('cuentas')
-          .select('*')
-          .eq('cliente_id', cliente.id)
-          .neq('estatus', 'LIQUIDADA')
-          .order('id', { ascending: false })
-        if (error) throw error
-        cuentas = data ?? []
-      } else {
-        cuentas = readLs(LS_CUENTAS, []).filter(
-          (c) => sameId(c.cliente_id, cliente.id) && String(c.estatus).toUpperCase() !== 'LIQUIDADA',
-        )
-      }
-      setCuentasCliente(cuentas)
-      setCuentaDestinoId('')
-      setModalConvertir(true)
-    } catch (e) {
-      onError?.(`Error al cargar cuentas: ${e.message}`)
-    }
-  }
-
-  async function ejecutarConversion(crearNueva) {
-    if (!requiereGestionar()) return
-    if (!cotizacionId || !cotizacionInfo) return
-    setConvirtiendo(true)
-    try {
-      const { cuentaId } = await convertirCotizacionACuenta({
-        supabase,
-        cotizacion: cotizacionInfo,
-        lineas,
-        cuentaDestinoId: crearNueva ? null : cuentaDestinoId || null,
-        crearNuevaCuenta: crearNueva,
-        nextLocalCuentaIdFn: (list) => nextMaxId(list),
-        nextLocalCuentamovIdFn: (list) => nextMaxId(list),
-      })
-      setModalConvertir(false)
-      onNotice?.(`Cotización convertida a cuenta #${cuentaId}`)
-      const cuenta = {
-        id: cuentaId,
-        total,
-        saldo: total,
-        estatus: 'PENDIENTE',
-        repara_id: null,
-      }
-      onAbrirCuenta?.({ cliente, cuenta })
-    } catch (e) {
-      onError?.(`Error al convertir: ${e.message}`)
     } finally {
-      setConvirtiendo(false)
+      setEnviandoWhatsApp(false)
     }
   }
 
@@ -621,7 +685,7 @@ export default function CotizacionesScreen({
                 </button>
               ) : null}
               {editableEnPantalla ? (
-                <button type="button" className="btn-liquidar-cuenta" onClick={() => void finalizar()} disabled={guardando}>
+                <button type="button" className="btn-liquidar-cuenta" onClick={solicitarFinalizar} disabled={guardando}>
                   ✓ FINALIZAR COTIZACIÓN
                 </button>
               ) : null}
@@ -641,19 +705,19 @@ export default function CotizacionesScreen({
               <button
                 type="button"
                 className="btn-comprobante-ventas btn-whatsapp-cotizacion"
-                onClick={() => enviarWhatsAppCotizacion()}
-                disabled={lineas.length === 0 || !telCliente}
+                onClick={() => void enviarWhatsAppCotizacion()}
+                disabled={lineas.length === 0 || !telCliente || enviandoWhatsApp}
                 title={
                   !telCliente
                     ? 'El cliente no tiene teléfono registrado'
                     : 'Enviar cotización por WhatsApp al cliente'
                 }
               >
-                📲 ENVIAR POR WHATSAPP
+                {enviandoWhatsApp ? 'Enviando…' : '📲 ENVIAR POR WHATSAPP'}
               </button>
               {puedeGestionar && (estatus === 'ACEPTADA' || estatus === 'FINALIZADA') && estatus !== 'CONVERTIDA' ? (
-                <button type="button" className="btn-cuentas" onClick={() => void abrirModalConvertir()}>
-                  PASAR A CUENTA
+                <button type="button" className="btn-cotizaciones-cliente-ventas" onClick={() => void abrirModalConvertir()}>
+                  💳 AGREGAR COTIZACIÓN A CUENTA
                 </button>
               ) : null}
               {puedeGestionar && estatus !== 'CONVERTIDA' ? (
@@ -709,41 +773,132 @@ export default function CotizacionesScreen({
         </div>
       ) : null}
 
+      {modalFinalizar ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !guardando && setModalFinalizar(false)}
+        >
+          <div
+            className="modal modal-cotizacion-finalizar"
+            role="dialog"
+            aria-labelledby="cotizacion-finalizar-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="cotizacion-finalizar-titulo">Finalizar cotización</h3>
+              <p className="muted small">
+                Total: <strong>{totalStr}</strong> · {lineas.length}{' '}
+                {lineas.length === 1 ? 'concepto' : 'conceptos'}. Ya no podrá agregar líneas.
+              </p>
+            </div>
+            <div className="modal-body form-stack">
+              <p>¿Cómo desea continuar?</p>
+            </div>
+            <div className="modal-footer modal-footer-wrap modal-footer-col">
+              <button
+                type="button"
+                className="btn-liquidar-cuenta wide"
+                disabled={guardando}
+                onClick={() => void ejecutarFinalizarYAgregarACuenta()}
+              >
+                {guardando ? 'Finalizando…' : '✓ Finalizar y agregar a cuenta del cliente'}
+              </button>
+              <button
+                type="button"
+                className="btn-comprobante-ventas wide"
+                disabled={guardando}
+                onClick={() => void ejecutarFinalizarSolo()}
+              >
+                {guardando ? 'Finalizando…' : 'Solo finalizar cotización'}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={guardando}
+                onClick={() => setModalFinalizar(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {modalConvertir ? (
         <div className="modal-backdrop" role="presentation" onClick={() => !convirtiendo && setModalConvertir(false)}>
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal modal-wide modal-cotizacion-a-cuenta"
+            role="dialog"
+            aria-labelledby="cotizacion-a-cuenta-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
-              <h3>Pasar cotización a cuenta</h3>
-              <p className="muted small">Elija una cuenta existente del cliente o cree una nueva.</p>
+              <h3 id="cotizacion-a-cuenta-titulo">Agregar cotización a cuenta del cliente</h3>
+              <p className="muted small">
+                <strong>{cliente.nombre || 'Cliente'}</strong> · Total cotización:{' '}
+                <strong>{totalStr}</strong>
+              </p>
+              <p className="muted small">
+                Los productos y servicios de esta cotización se sumarán a la cuenta que elija (no reemplazan lo que ya
+                tiene).
+              </p>
             </div>
             <div className="modal-body form-stack">
               {cuentasCliente.length > 0 ? (
-                <label>
-                  Cuenta existente (pendiente / activa)
-                  <select value={cuentaDestinoId} onChange={(e) => setCuentaDestinoId(e.target.value)}>
-                    <option value="">— Seleccione —</option>
-                    {cuentasCliente.map((c) => (
-                      <option key={c.id} value={String(c.id)}>
-                        Cuenta #{c.id} · {String(c.estatus ?? '—')} · ${Number(c.total ?? 0).toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <>
+                  <p className="cotizacion-a-cuenta-etiqueta">Cuentas abiertas de {cliente.nombre || 'este cliente'}</p>
+                  <ul className="cotizacion-a-cuenta-lista">
+                    {cuentasCliente.map((c) => {
+                      const idStr = String(c.id)
+                      const sel = cuentaDestinoId === idStr
+                      return (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            className={`cotizacion-a-cuenta-opcion${sel ? ' cotizacion-a-cuenta-opcion--sel' : ''}`}
+                            onClick={() => setCuentaDestinoId(idStr)}
+                          >
+                            <span className="cotizacion-a-cuenta-opcion-titulo">{etiquetaCuentaCliente(c)}</span>
+                            {c.repara_id != null && c.repara_id !== '' ? (
+                              <span className="muted small">Vinculada a orden de servicio #{c.repara_id}</span>
+                            ) : (
+                              <span className="muted small">Cuenta general del cliente</span>
+                            )}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
               ) : (
-                <p className="muted">No hay cuentas abiertas. Se creará una cuenta nueva.</p>
+                <p className="cotizacion-a-cuenta-vacio">
+                  {cliente.nombre || 'Este cliente'} no tiene cuentas abiertas. Puede crear una cuenta nueva con los
+                  productos de la cotización.
+                </p>
               )}
             </div>
             <div className="modal-footer modal-footer-wrap">
               <button type="button" className="secondary" onClick={() => setModalConvertir(false)} disabled={convirtiendo}>
                 Cancelar
               </button>
-              {cuentasCliente.length > 0 && cuentaDestinoId ? (
-                <button type="button" onClick={() => void ejecutarConversion(false)} disabled={convirtiendo}>
-                  Agregar a cuenta #{cuentaDestinoId}
+              {cuentasCliente.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn-cotizaciones-cliente-ventas"
+                  onClick={() => void ejecutarConversion(false)}
+                  disabled={convirtiendo || !cuentaDestinoId}
+                >
+                  {convirtiendo ? 'Agregando…' : `Agregar a cuenta #${cuentaDestinoId || '…'}`}
                 </button>
               ) : null}
-              <button type="button" className="btn-cuentas" onClick={() => void ejecutarConversion(true)} disabled={convirtiendo}>
-                Crear cuenta nueva
+              <button
+                type="button"
+                className="btn-cuentas"
+                onClick={() => void ejecutarConversion(true)}
+                disabled={convirtiendo}
+              >
+                {convirtiendo ? 'Creando…' : 'Crear cuenta nueva'}
               </button>
             </div>
           </div>

@@ -292,6 +292,7 @@ export default function VentasCuentaScreen({
   onNotice,
   puedeEliminar = false,
   puedeLiquidarCuentas = true,
+  onIrCotizacionesCliente,
 }) {
   const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const cliente = useMemo(() => normalizeClienteRow(context?.cliente ?? {}), [context?.cliente])
@@ -1630,6 +1631,16 @@ export default function VentasCuentaScreen({
               onClick={() => abrirModalNotificarCliente()}
             >
               📱 NOTIFICAR AL CLIENTE
+            </button>
+          ) : null}
+          {cliente?.id && onIrCotizacionesCliente ? (
+            <button
+              type="button"
+              className="btn-cotizaciones-cliente-ventas"
+              onClick={() => onIrCotizacionesCliente({ cliente })}
+              title="Ver cotizaciones del mismo cliente"
+            >
+              📋 COTIZACIONES DEL CLIENTE
             </button>
           ) : null}
           <button
