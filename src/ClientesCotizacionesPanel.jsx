@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { etiquetaEstatusCotizacion, formatoTotalCotizacion } from './cotizacionUtils.js'
+import { etiquetaEstatusCotizacion, formatoTotalCotizacion, numeroCotizacionVisible } from './cotizacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
 function fmtFecha(v) {
@@ -33,7 +33,7 @@ export default function ClientesCotizacionesPanel({
       const est = String(c.estatus ?? 'BORRADOR').trim().toUpperCase()
       return {
         cotizacion: c,
-        id: c.id != null ? String(c.id) : '—',
+        id: numeroCotizacionVisible(c) != null ? String(numeroCotizacionVisible(c)) : '—',
         fecha: fmtFecha(c.created_at ?? c.createdAt),
         total: formatoTotalCotizacion(c.total ?? 0),
         estatus: etiquetaEstatusCotizacion(est),
@@ -59,7 +59,7 @@ export default function ClientesCotizacionesPanel({
               <span className="rep-ordenes-resumen-nombre">{resumen.nombre}</span>
             </div>
             <div className="rep-ordenes-resumen-stats">
-              <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--total">
+              <span className="rep-ordenes-resumen-chip rep-ordenes-resumen-chip--total rep-ordenes-resumen-chip--cotizaciones">
                 <span aria-hidden>📋</span> {resumen.total}{' '}
                 {resumen.total === 1 ? 'cotización' : 'cotizaciones'}
               </span>
@@ -91,10 +91,10 @@ export default function ClientesCotizacionesPanel({
       {filas.length > 0 ? (
         <TablaScrollSuperior
           ariaLabel="Cotizaciones del cliente"
-          classNameWrap="cuentas-cliente-tabla-wrap clientes-ordenes-tabla-wrap"
+          classNameWrap="cuentas-cliente-tabla-wrap clientes-ordenes-tabla-wrap clientes-cotizaciones-tabla-wrap"
           syncDeps={[filas, loading]}
         >
-          <table className="cuentas-cliente-tabla cuentas-cliente-tabla--resumen clientes-ordenes-tabla">
+          <table className="cuentas-cliente-tabla cuentas-cliente-tabla--cotizaciones clientes-ordenes-tabla clientes-cotizaciones-tabla">
             <thead>
               <tr>
                 <th>No.</th>

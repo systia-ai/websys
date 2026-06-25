@@ -1,5 +1,7 @@
 import { sameId } from './clienteUtils.js'
 import { formatMontoCuenta } from './reparacionUtils.js'
+import { esProductoContable } from './productoUtils.js'
+import { existenciaNumerica, registrarVentaEnCuenta } from './inventarioStock.js'
 
 export const LS_COTIZACIONES = 'sistefix_local_cotizaciones'
 export const LS_COTIZACIONMOV = 'sistefix_local_cotizacionmov'
@@ -78,9 +80,105 @@ export function cotizacionEditable(est) {
   return String(est ?? '').trim().toUpperCase() === 'BORRADOR'
 }
 
+/** Nombre legible de la línea (sin prefijo [COTIZACIÓN]). */
+export function nombreProductoCotizacion(descripcion, producto = null) {
+  const deLinea = String(descripcion ?? '')
+    .replace(/^\[COTIZACIÓN\]\s*/i, '')
+    .trim()
+  if (deLinea) return deLinea
+  const deProd = String(producto?.descripcion ?? producto?.serie ?? '').trim()
+  return deProd || 'producto'
+}
+
+/**
+ * Si la cantidad cotizada supera el stock de un producto contable, devuelve cuánto faltaría surtir.
+ * La cotización no modifica inventario; solo informa.
+ */
+export function surtidoPendienteDesdeProducto(producto, cantidadSolicitada) {
+  if (!producto || !esProductoContable(producto)) return null
+  const solicitado = Number(cantidadSolicitada)
+  if (!Number.isFinite(solicitado) || solicitado <= 0) return null
+  const stock = existenciaNumerica(producto)
+  if (solicitado <= stock) return null
+  const faltante = solicitado - stock
+  const nombre = nombreProductoCotizacion(null, producto)
+  return { productoId: producto.id, nombre, solicitado, stock, faltante }
+}
+
+export function mensajeSurtidoPendiente({ nombre, faltante, stock, solicitado }) {
+  const n = nombre || 'producto'
+  const u = faltante === 1 ? 'unidad' : 'unidades'
+  if (stock <= 0) {
+    return `Faltaría surtir ${faltante} ${u} de «${n}» para completar el total de la cotización (sin stock actual; cotiza ${solicitado}).`
+  }
+  return `Faltaría surtir ${faltante} ${u} de «${n}» para completar el total de la cotización (hay ${stock} en stock; cotiza ${solicitado}).`
+}
+
+/** Agrupa líneas por producto y lista lo que habría que surtir para cubrir la cotización. */
+export function listarSurtidoPendienteCotizacion(lineas = [], productosPorId) {
+  const agg = new Map()
+  for (const l of lineas) {
+    const pid = l.producto_id
+    if (pid == null || Number(pid) <= 0) continue
+    const p = productosPorId?.get?.(String(pid)) ?? null
+    if (!p || !esProductoContable(p)) continue
+    const key = String(pid)
+    const prev = agg.get(key) ?? { producto: p, cantidad: 0 }
+    prev.cantidad += Number(l.cantidad ?? 0)
+    agg.set(key, prev)
+  }
+  const out = []
+  for (const { producto, cantidad } of agg.values()) {
+    const item = surtidoPendienteDesdeProducto(producto, cantidad)
+    if (item) out.push(item)
+  }
+  return out.sort((a, b) => b.faltante - a.faltante)
+}
+
+/** Número visible de la cotización (por cliente); si falta en datos viejos, usa el id interno. */
+export function numeroCotizacionVisible(cot) {
+  if (!cot) return null
+  const n = Number(cot.numero)
+  if (Number.isFinite(n) && n > 0) return Math.floor(n)
+  const id = Number(cot.id)
+  return Number.isFinite(id) && id > 0 ? Math.floor(id) : null
+}
+
+async function obtenerNumerosCotizacionCliente(supabase, clienteId) {
+  if (supabase) {
+    const { data, error } = await supabase.from('cotizaciones').select('numero').eq('cliente_id', clienteId)
+    if (error) throw error
+    return (data ?? []).map((r) => Number(r.numero)).filter((n) => Number.isFinite(n) && n > 0)
+  }
+  return readLs(LS_COTIZACIONES, [])
+    .filter((c) => sameId(c.cliente_id, clienteId))
+    .map((c) => {
+      const n = Number(c.numero)
+      if (Number.isFinite(n) && n > 0) return n
+      const id = Number(c.id)
+      return Number.isFinite(id) && id > 0 ? id : null
+    })
+    .filter((n) => n != null && n > 0)
+}
+
+/** Menor entero positivo libre para el cliente (reutiliza huecos tras eliminar). */
+export function menorNumeroCotizacionDisponible(numerosUsados = []) {
+  const set = new Set(numerosUsados.map((n) => Math.floor(Number(n))).filter((n) => n > 0))
+  let n = 1
+  while (set.has(n)) n += 1
+  return n
+}
+
+export async function siguienteNumeroCotizacionCliente(supabase, clienteId) {
+  const usados = await obtenerNumerosCotizacionCliente(supabase, clienteId)
+  return menorNumeroCotizacionDisponible(usados)
+}
+
 export async function crearCotizacionVacia(supabase, clienteId) {
+  const numero = await siguienteNumeroCotizacionCliente(supabase, clienteId)
   const row = {
     cliente_id: clienteId,
+    numero,
     total: 0,
     estatus: 'BORRADOR',
   }
@@ -243,6 +341,17 @@ export async function convertirCotizacionACuenta({
   const LS_CUENTAS = 'sistefix_local_cuentas'
   let total = 0
 
+  async function insertarMovimientoCuentaSinStock(row) {
+    if (supabase) {
+      const { error } = await supabase.from('cuentamov').insert(row)
+      if (error) throw error
+      return
+    }
+    const list = readLs(LS_CUENTAMOV, [])
+    const id = nextLocalCuentamovIdFn(list)
+    writeLs(LS_CUENTAMOV, [{ id, ...row }, ...list])
+  }
+
   for (const l of lineas) {
     const cant = Number(l.cantidad ?? 0)
     const costo = Number(l.precioUnitario ?? 0)
@@ -250,22 +359,35 @@ export async function convertirCotizacionACuenta({
     const desc = String(l.descripcion ?? '')
       .replace(/^\[COTIZACIÓN\]\s*/i, '')
       .trim()
+    const descVenta = desc.startsWith('[VENTA]') ? desc : `[VENTA] ${desc}`
     const row = {
       cuenta_id: cuentaId,
       producto_id: l.producto_id ?? null,
       cantidad: cant,
-      descripcion: desc.startsWith('[VENTA]') ? desc : `[VENTA] ${desc}`,
+      descripcion: descVenta,
       costo,
     }
     total += cant * costo
-    if (supabase) {
-      const { error } = await supabase.from('cuentamov').insert(row)
-      if (error) throw error
-    } else {
-      const list = readLs(LS_CUENTAMOV, [])
-      const id = nextLocalCuentamovIdFn(list)
-      writeLs(LS_CUENTAMOV, [{ id, ...row }, ...list])
+
+    if (l.producto_id) {
+      try {
+        await registrarVentaEnCuenta({
+          supabase,
+          cuentaId,
+          productoId: l.producto_id,
+          descripcion: descVenta,
+          cantidad: cant,
+          precio: costo,
+          nextLocalId: () => nextLocalCuentamovIdFn(readLs(LS_CUENTAMOV, [])),
+        })
+        continue
+      } catch (e) {
+        const msg = String(e?.message ?? '')
+        if (!/stock insuficiente/i.test(msg)) throw e
+      }
     }
+
+    await insertarMovimientoCuentaSinStock(row)
   }
 
   const cuentaPatch = { total, saldo: total, estatus: 'PENDIENTE' }

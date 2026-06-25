@@ -12,10 +12,15 @@ import {
   formatoTotalCotizacion,
   insertarLineaCotizacion,
   lineaCotizacionDesdeMov,
+  listarSurtidoPendienteCotizacion,
   marcarCotizacionAceptada,
+  mensajeSurtidoPendiente,
+  numeroCotizacionVisible,
+  surtidoPendienteDesdeProducto,
   totalCotizacionDesdeLineas,
   convertirCotizacionACuenta,
   actualizarCotizacion,
+  eliminarCotizacionCompleta,
   LS_COTIZACIONES,
   LS_COTIZACIONMOV,
 } from './cotizacionUtils.js'
@@ -71,14 +76,18 @@ export default function CotizacionesScreen({
   const [cantProd, setCantProd] = useState('')
   const [precioProd, setPrecioProd] = useState('')
   const [productoIdSel, setProductoIdSel] = useState(0)
+  const [productoSel, setProductoSel] = useState(null)
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [modalConvertir, setModalConvertir] = useState(false)
   const [cuentasCliente, setCuentasCliente] = useState([])
   const [cuentaDestinoId, setCuentaDestinoId] = useState('')
   const [convirtiendo, setConvirtiendo] = useState(false)
+  const [eliminarConfirmAbierto, setEliminarConfirmAbierto] = useState(false)
+  const [eliminandoCotizacion, setEliminandoCotizacion] = useState(false)
 
   const cotizacionId = cotizacionInfo?.id ?? cotizacionInicial?.id ?? null
+  const numeroCotizacion = numeroCotizacionVisible(cotizacionInfo ?? cotizacionInicial)
   const estatus = String(cotizacionInfo?.estatus ?? cotizacionInicial?.estatus ?? 'BORRADOR').toUpperCase()
   const editable = cotizacionEditable(estatus)
   /** Crear, editar y convertir cotizaciones requiere el mismo permiso que eliminar (solo ADMIN por defecto). */
@@ -97,6 +106,27 @@ export default function CotizacionesScreen({
           .includes(t) || String(p.descripcion ?? '').toLowerCase().includes(t),
     )
   }, [todosProductos, busqProd])
+
+  const productosPorId = useMemo(() => {
+    const m = new Map()
+    for (const p of todosProductos) {
+      if (p?.id != null) m.set(String(p.id), p)
+    }
+    return m
+  }, [todosProductos])
+
+  const surtidoPendiente = useMemo(
+    () => listarSurtidoPendienteCotizacion(lineas, productosPorId),
+    [lineas, productosPorId],
+  )
+
+  const avisoCantidadCaptura = useMemo(() => {
+    if (!productoSel || !cantProd.trim()) return null
+    const cant = Number(cantProd)
+    if (!Number.isFinite(cant) || cant <= 0) return null
+    const item = surtidoPendienteDesdeProducto(productoSel, cant)
+    return item ? mensajeSurtidoPendiente(item) : null
+  }, [productoSel, cantProd])
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -152,9 +182,11 @@ export default function CotizacionesScreen({
     setCantProd('')
     setPrecioProd('')
     setProductoIdSel(0)
+    setProductoSel(null)
   }
 
   function seleccionarProducto(p) {
+    setProductoSel(p)
     setProductoIdSel(Number(p.id) || 0)
     setSerieProd(String(p.serie ?? '').toUpperCase())
     setDescProd(String(p.descripcion ?? '').toUpperCase())
@@ -209,8 +241,13 @@ export default function CotizacionesScreen({
       setLineas((prev) => [...prev, linea])
       setCotizacionInfo((prev) => (prev ? { ...prev, total: totalCotizacionDesdeLineas([...lineas, linea]) } : prev))
       setMostrarCaptura(false)
+      const pendiente = productoSel ? surtidoPendienteDesdeProducto(productoSel, cant) : null
       limpiarCaptura()
-      onNotice?.('Línea agregada a la cotización')
+      if (pendiente) {
+        onNotice?.(mensajeSurtidoPendiente(pendiente))
+      } else {
+        onNotice?.('Línea agregada a la cotización')
+      }
     } catch (e) {
       onError?.(`Error al agregar: ${e.message}`)
     }
@@ -252,6 +289,15 @@ export default function CotizacionesScreen({
     if (!requiereGestionar()) return
     if (!cotizacionId) return
     if (!window.confirm('¿Finalizar esta cotización? Ya no podrá agregar líneas.')) return
+    if (surtidoPendiente.length > 0) {
+      const resumen = surtidoPendiente
+        .map((s) => `· ${mensajeSurtidoPendiente(s)}`)
+        .join('\n')
+      const ok = window.confirm(
+        `Hay productos por surtir para completar esta cotización:\n\n${resumen}\n\n¿Finalizar de todos modos? El inventario no se modifica hasta pasarla a cuenta.`,
+      )
+      if (!ok) return
+    }
     setGuardando(true)
     try {
       await actualizarCotizacion(supabase, cotizacionId, {
@@ -288,7 +334,7 @@ export default function CotizacionesScreen({
     try {
       await printCotizacionPdf({
         cliente,
-        cotizacionId,
+        cotizacionId: numeroCotizacion,
         lineas,
         total,
         notas,
@@ -359,6 +405,32 @@ export default function CotizacionesScreen({
     }
   }
 
+  function solicitarEliminarCotizacion() {
+    if (!requiereGestionar()) return
+    if (!cotizacionId) return
+    if (estatus === 'CONVERTIDA') {
+      onError?.('No se puede eliminar una cotización ya convertida a cuenta')
+      return
+    }
+    setEliminarConfirmAbierto(true)
+  }
+
+  async function confirmarEliminarCotizacion() {
+    if (!requiereGestionar()) return
+    if (!cotizacionId || eliminandoCotizacion) return
+    setEliminandoCotizacion(true)
+    try {
+      await eliminarCotizacionCompleta(supabase, cotizacionId)
+      setEliminarConfirmAbierto(false)
+      onNotice?.(`Cotización #${numeroCotizacion ?? cotizacionId} eliminada`)
+      onSalir?.()
+    } catch (e) {
+      onError?.(`Error al eliminar cotización: ${e.message}`)
+    } finally {
+      setEliminandoCotizacion(false)
+    }
+  }
+
   return (
     <div className="servicios-root ventas-cuenta-root cotizaciones-screen-root">
       <header className="servicios-appbar">
@@ -369,7 +441,7 @@ export default function CotizacionesScreen({
           <span className="appbar-title-emoji" aria-hidden="true">
             📋
           </span>
-          Cotización {cotizacionId ? `#${cotizacionId}` : ''}
+          Cotización {numeroCotizacion != null ? `#${numeroCotizacion}` : ''}
         </h1>
         <span className="servicios-appbar-placeholder" aria-hidden />
       </header>
@@ -432,6 +504,23 @@ export default function CotizacionesScreen({
               )}
             </section>
 
+            {surtidoPendiente.length > 0 ? (
+              <div className="ventas-cotizacion-surtido-aviso" role="status" aria-live="polite">
+                <p className="ventas-cotizacion-surtido-aviso-titulo">
+                  <span aria-hidden="true">📦</span> Surtido pendiente para completar la cotización
+                </p>
+                <p className="ventas-cotizacion-surtido-aviso-lead muted small">
+                  El precio total incluye todas las unidades cotizadas. El inventario no se descuenta hasta pasar la
+                  cotización a una cuenta.
+                </p>
+                <ul className="ventas-cotizacion-surtido-lista">
+                  {surtidoPendiente.map((s) => (
+                    <li key={String(s.productoId)}>{mensajeSurtidoPendiente(s)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {editableEnPantalla ? (
               <>
                 <button
@@ -446,6 +535,17 @@ export default function CotizacionesScreen({
                     <p className="ventas-cotizacion-captura-titulo">
                       <strong>{serieProd}</strong> · {descProd}
                     </p>
+                    {productoSel ? (
+                      <p className="ventas-cotizacion-stock-hint muted small">
+                        {esProductoContable(productoSel) ? (
+                          <>
+                            En stock: <strong>{productoSel.existencia ?? 0}</strong>
+                          </>
+                        ) : (
+                          etiquetaExistencia(productoSel)
+                        )}
+                      </p>
+                    ) : null}
                     <div className="ventas-cotizacion-captura-campos">
                       <label className="ventas-cotizacion-campo">
                         <span>Cantidad</span>
@@ -456,6 +556,11 @@ export default function CotizacionesScreen({
                         <input inputMode="decimal" value={precioProd} onChange={(e) => setPrecioProd(e.target.value)} />
                       </label>
                     </div>
+                    {avisoCantidadCaptura ? (
+                      <p className="ventas-cotizacion-surtido-inline" role="status">
+                        {avisoCantidadCaptura}
+                      </p>
+                    ) : null}
                     <div className="ventas-cotizacion-captura-acciones">
                       <button
                         type="button"
@@ -536,6 +641,16 @@ export default function CotizacionesScreen({
               {puedeGestionar && (estatus === 'ACEPTADA' || estatus === 'FINALIZADA') && estatus !== 'CONVERTIDA' ? (
                 <button type="button" className="btn-cuentas" onClick={() => void abrirModalConvertir()}>
                   PASAR A CUENTA
+                </button>
+              ) : null}
+              {puedeGestionar && estatus !== 'CONVERTIDA' ? (
+                <button
+                  type="button"
+                  className="btn-eliminar-orden btn-eliminar-cotizacion"
+                  onClick={() => solicitarEliminarCotizacion()}
+                  disabled={eliminandoCotizacion}
+                >
+                  🗑️ ELIMINAR COTIZACIÓN
                 </button>
               ) : null}
             </div>
@@ -621,6 +736,59 @@ export default function CotizacionesScreen({
               ) : null}
               <button type="button" className="btn-cuentas" onClick={() => void ejecutarConversion(true)} disabled={convirtiendo}>
                 Crear cuenta nueva
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {eliminarConfirmAbierto ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !eliminandoCotizacion && setEliminarConfirmAbierto(false)}
+        >
+          <div
+            className="modal modal-narrow modal-alerta modal-alerta--error"
+            role="alertdialog"
+            aria-labelledby="eliminar-cotizacion-pantalla-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="eliminar-cotizacion-pantalla-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  🚨
+                </span>
+                Eliminar cotización
+              </h3>
+            </div>
+            <div className="modal-body">
+              <p className="modal-alerta-mensaje">¿Seguro que quieres eliminar esta cotización?</p>
+              <p className="modal-alerta-sugerencia">
+                Se eliminará la cotización <strong>#{numeroCotizacion ?? '—'}</strong> de{' '}
+                <strong>{cliente.nombre || 'este cliente'}</strong>, incluyendo todas sus líneas.
+              </p>
+              <p className="modal-alerta-sugerencia">
+                Esta acción <strong>no se puede deshacer</strong>. El número quedará disponible para una cotización
+                nueva.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setEliminarConfirmAbierto(false)}
+                disabled={eliminandoCotizacion}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void confirmarEliminarCotizacion()}
+                disabled={eliminandoCotizacion}
+              >
+                {eliminandoCotizacion ? 'Eliminando…' : 'Sí, eliminar cotización'}
               </button>
             </div>
           </div>

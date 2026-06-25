@@ -8,6 +8,7 @@ import {
   crearCotizacionVacia,
   eliminarCotizacionCompleta,
   LS_COTIZACIONES,
+  numeroCotizacionVisible,
 } from './cotizacionUtils.js'
 import {
   aYmdLocalDesdeRaw,
@@ -134,6 +135,8 @@ export default function ClientesModulo({
   const [cotizacionTitle, setCotizacionTitle] = useState('Cotizaciones')
   const [cotizacionSubtitle, setCotizacionSubtitle] = useState('')
   const [cotizacionResumen, setCotizacionResumen] = useState(null)
+  const [cotizacionEliminarConfirm, setCotizacionEliminarConfirm] = useState(null)
+  const [eliminandoCotizacion, setEliminandoCotizacion] = useState(false)
   const [cuentasEncontradas, setCuentasEncontradas] = useState([])
   const [pagosClienteCuentas, setPagosClienteCuentas] = useState([])
   const [loadingCuentas, setLoadingCuentas] = useState(false)
@@ -428,11 +431,12 @@ export default function ClientesModulo({
             .from('cotizaciones')
             .select('*')
             .eq('cliente_id', cli.id)
-            .order('id', { ascending: false })
+            .order('numero', { ascending: false })
           if (error) throw error
           lista = data ?? []
         } else {
           lista = readLs(LS_COTIZACIONES, []).filter((c) => sameId(c.cliente_id, cli.id))
+          lista.sort((a, b) => (Number(b.numero ?? b.id) || 0) - (Number(a.numero ?? a.id) || 0))
         }
         const activas = lista.filter((c) => String(c.estatus ?? '').toUpperCase() !== 'CONVERTIDA').length
         setCotizacionesEncontradas(lista)
@@ -527,6 +531,7 @@ export default function ClientesModulo({
     if (!cot?.id) return undefined
     return {
       id: cot.id,
+      numero: cot.numero ?? numeroCotizacionVisible(cot),
       total: cot.total,
       estatus: cot.estatus,
       notas: cot.notas ?? null,
@@ -568,7 +573,7 @@ export default function ClientesModulo({
     }
   }
 
-  async function eliminarCotizacionCliente(cot) {
+  function solicitarEliminarCotizacion(cot) {
     if (!puedeEliminar) {
       mostrarSinPermiso()
       return
@@ -579,20 +584,30 @@ export default function ClientesModulo({
       onError?.('No se puede eliminar una cotización ya convertida a cuenta')
       return
     }
-    if (!window.confirm(`¿Eliminar la cotización #${id} de ${clienteAccion?.nombre || 'este cliente'}?`)) return
+    setCotizacionEliminarConfirm(cot)
+  }
+
+  async function confirmarEliminarCotizacion() {
+    const cot = cotizacionEliminarConfirm
+    if (!cot?.id) return
+    const num = numeroCotizacionVisible(cot)
+    setEliminandoCotizacion(true)
     try {
-      await eliminarCotizacionCompleta(supabase, id)
-      onNotice?.(`Cotización #${id} eliminada`)
+      await eliminarCotizacionCompleta(supabase, cot.id)
+      setCotizacionEliminarConfirm(null)
+      onNotice?.(`Cotización #${num ?? cot.id} eliminada`)
       if (clienteAccion?.id) {
         await cargarCotizacionesModal(clienteAccion)
       }
     } catch (e) {
       onError?.(`Error al eliminar cotización: ${e.message}`)
+    } finally {
+      setEliminandoCotizacion(false)
     }
   }
 
   function handleEliminarCotizacion(cot) {
-    intentarEliminar(() => void eliminarCotizacionCliente(cot))
+    intentarEliminar(() => solicitarEliminarCotizacion(cot))
   }
 
   async function eliminarCuentaCliente(cuenta) {
@@ -1182,7 +1197,7 @@ export default function ClientesModulo({
 
       {modalCotizaciones && clienteAccion && (
         <div className="modal-backdrop" role="presentation" onClick={cerrarModalCotizaciones}>
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-wide modal-cotizaciones-cliente" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{cotizacionTitle}</h3>
             </div>
@@ -1202,7 +1217,7 @@ export default function ClientesModulo({
               {puedeEliminar ? (
                 <button
                   type="button"
-                  className="btn-agregar-equipo modal-btn-compact"
+                  className="btn-cotizaciones modal-btn-compact"
                   onClick={() => void nuevaCotizacionCliente()}
                 >
                   Nueva cotización
@@ -1245,6 +1260,60 @@ export default function ClientesModulo({
           </div>
         </div>
       )}
+
+      {cotizacionEliminarConfirm ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !eliminandoCotizacion && setCotizacionEliminarConfirm(null)}
+        >
+          <div
+            className="modal modal-narrow modal-alerta modal-alerta--error"
+            role="alertdialog"
+            aria-labelledby="eliminar-cotizacion-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="eliminar-cotizacion-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  🚨
+                </span>
+                Eliminar cotización
+              </h3>
+            </div>
+            <div className="modal-body">
+              <p className="modal-alerta-mensaje">¿Seguro que quieres eliminar esta cotización?</p>
+              <p className="modal-alerta-sugerencia">
+                Se eliminará la cotización{' '}
+                <strong>#{numeroCotizacionVisible(cotizacionEliminarConfirm) ?? '—'}</strong> de{' '}
+                <strong>{clienteAccion?.nombre || 'este cliente'}</strong>, incluyendo todas sus líneas.
+              </p>
+              <p className="modal-alerta-sugerencia">
+                Esta acción <strong>no se puede deshacer</strong>. El número quedará disponible para una cotización
+                nueva.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setCotizacionEliminarConfirm(null)}
+                disabled={eliminandoCotizacion}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void confirmarEliminarCotizacion()}
+                disabled={eliminandoCotizacion}
+              >
+                {eliminandoCotizacion ? 'Eliminando…' : 'Sí, eliminar cotización'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cargandoEquipoRep && (
         <div className="modal-backdrop">

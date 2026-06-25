@@ -8958,11 +8958,69 @@ input.full {
   margin-top: 0;
 }
 
+.cotizaciones-screen-root .ventas-acciones--cotizacion > .btn-eliminar-cotizacion {
+  margin-top: 4px;
+  padding: 14px;
+  font-size: 1rem;
+  box-shadow: 0 2px 10px rgba(198, 40, 40, 0.35);
+}
+
 .cotizaciones-screen-root .ventas-recibo-hint {
   margin: -6px 0 8px;
   text-align: center;
   font-size: 0.85rem;
   line-height: 1.4;
+}
+
+.ventas-cotizacion-surtido-aviso {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #ffb74d;
+  background: #fff8e1;
+  color: #5d4037;
+}
+
+.ventas-cotizacion-surtido-aviso-titulo {
+  margin: 0 0 6px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.ventas-cotizacion-surtido-aviso-lead {
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.ventas-cotizacion-surtido-lista {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ventas-cotizacion-surtido-lista li + li {
+  margin-top: 6px;
+}
+
+.ventas-cotizacion-surtido-inline {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ffcc80;
+  background: #fff3e0;
+  color: #e65100;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.ventas-cotizacion-stock-hint {
+  margin: -4px 0 0;
+}
+
+.ventas-cotizacion-stock-hint strong {
+  color: #1565c0;
 }
 
 :root[data-theme='dark'] .cotizaciones-screen-root .ventas-cuenta-cliente-bar {
@@ -9008,6 +9066,184 @@ input.full {
 
 :root[data-theme='dark'] .cotizaciones-screen-root .ventas-recibo-hint {
   color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-surtido-aviso {
+  background: #4a3520 !important;
+  border-color: #ffb74d !important;
+  color: #ffe082 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-surtido-aviso-titulo {
+  color: #ffcc80 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-surtido-aviso-lead {
+  color: #ffe082 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-surtido-lista {
+  color: #fff8e1 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-surtido-inline {
+  background: #4a3520 !important;
+  border-color: #ffb74d !important;
+  color: #ffcc80 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cotizacion-stock-hint strong {
+  color: #93c5fd !important;
+}
+
+/* Cotizaciones — recuadros total/estatus (mismo criterio que ventas) */
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cuenta-recuadro--total {
+  background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%) !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-cuenta-recuadro--saldo {
+  background: linear-gradient(180deg, #1b3d24 0%, #142d1c 100%) !important;
+  border-color: #4caf50 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-wrap {
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .tabla-scroll-wrap.ventas-tabla-scroll-outer > .inventario-tabla-scroll {
+  background: transparent !important;
+  border-color: var(--app-color-border) !important;
+  box-shadow: none;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .tabla-scroll-wrap.ventas-tabla-scroll-outer .inventario-tabla-scroll-top {
+  background: var(--app-color-surface-2) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .tabla-scroll-wrap.ventas-tabla-scroll-outer .inventario-tabla-scroll-hint {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-head {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-fila {
+  border-top-color: var(--app-color-border) !important;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-fila.stripe {
+  background: var(--app-color-surface-2) !important;
+}
+
+:root[data-theme='dark'] .cotizaciones-screen-root .ventas-tabla-vacia {
+  color: #94a3b8 !important;
+  background: var(--app-color-surface) !important;
+  border-color: var(--app-color-border) !important;
+}
+
+/* Modal cotizaciones del cliente */
+.cuentas-cliente-tabla--cotizaciones,
+.clientes-cotizaciones-tabla {
+  min-width: 560px;
+}
+
+.clientes-cotizaciones-tabla-wrap > .inventario-tabla-scroll {
+  margin-bottom: 0;
+}
+
+:root[data-theme='dark'] .modal-cotizaciones-cliente .modal-header {
+  border-bottom-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .modal-cotizaciones-cliente .modal-footer {
+  border-top-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .modal-cotizaciones-cliente .modal-footer .btn-cotizaciones {
+  background: linear-gradient(180deg, #9333ea 0%, #7e22ce 55%, #6b21a8 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #a855f7 !important;
+  box-shadow: 0 2px 10px rgba(126, 34, 206, 0.35);
+}
+
+:root[data-theme='dark'] .modal-cotizaciones-cliente .modal-footer .btn-cotizaciones:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+:root[data-theme='dark'] .rep-ordenes-resumen-chip--cotizaciones {
+  background: #4c1d95 !important;
+  color: #e9d5ff !important;
+  border-color: #7c3aed !important;
+}
+
+/* Modales cliente: tablas con scroll (cuentas, órdenes, cotizaciones) */
+:root[data-theme='dark'] .tabla-scroll-wrap.cuentas-cliente-tabla-wrap,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-ordenes-tabla-wrap,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-cotizaciones-tabla-wrap {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme='dark'] .tabla-scroll-wrap.cuentas-cliente-tabla-wrap > .inventario-tabla-scroll,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-ordenes-tabla-wrap > .inventario-tabla-scroll,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-cotizaciones-tabla-wrap > .inventario-tabla-scroll {
+  background: var(--app-color-surface) !important;
+  border: 1px solid var(--app-color-border) !important;
+  border-radius: 0 0 10px 10px !important;
+  box-shadow: none;
+  padding: 8px 10px 12px;
+}
+
+:root[data-theme='dark'] .tabla-scroll-wrap.cuentas-cliente-tabla-wrap .inventario-tabla-scroll-top,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-ordenes-tabla-wrap .inventario-tabla-scroll-top,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-cotizaciones-tabla-wrap .inventario-tabla-scroll-top {
+  background: var(--app-color-surface-2) !important;
+  border: 1px solid var(--app-color-border) !important;
+  border-bottom: none !important;
+  border-radius: 10px 10px 0 0 !important;
+}
+
+:root[data-theme='dark'] .tabla-scroll-wrap.cuentas-cliente-tabla-wrap .inventario-tabla-scroll-hint,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-ordenes-tabla-wrap .inventario-tabla-scroll-hint,
+:root[data-theme='dark'] .tabla-scroll-wrap.clientes-cotizaciones-tabla-wrap .inventario-tabla-scroll-hint {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla-fecha {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .cuentas-cliente-tabla-total {
+  color: #86efac !important;
+}
+
+:root[data-theme='dark'] .inventario-tabla-scroll-top,
+:root[data-theme='dark'] .inventario-tabla-scroll {
+  scrollbar-color: #64748b var(--app-color-surface-2);
+  scrollbar-width: thin;
+}
+
+:root[data-theme='dark'] .inventario-tabla-scroll-top::-webkit-scrollbar,
+:root[data-theme='dark'] .inventario-tabla-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+:root[data-theme='dark'] .inventario-tabla-scroll-top::-webkit-scrollbar-thumb,
+:root[data-theme='dark'] .inventario-tabla-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 4px;
+}
+
+:root[data-theme='dark'] .inventario-tabla-scroll-top::-webkit-scrollbar-track,
+:root[data-theme='dark'] .inventario-tabla-scroll::-webkit-scrollbar-track {
+  background: var(--app-color-surface-2);
 }
 
 /* Vista pública al escanear el QR de la etiqueta (#/etiqueta?…) */
