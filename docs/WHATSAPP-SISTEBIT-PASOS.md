@@ -27,6 +27,7 @@ Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 | `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` |
 | `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` |
 | `WHATSAPP_TEMPLATE_LIQUIDACION_NAME` | `liquidacion_orden_s` |
+| `WHATSAPP_TEMPLATE_COTIZACION_NAME` | `cotizacion_sisteb` |
 | `WHATSAPP_API_VERSION` | `v25.0` |
 | `WHATSAPP_TEST_TO` | `524622090526` → **modo prueba:** todos los mensajes van a **462 209 0526** (quitar en producción) |
 
@@ -69,7 +70,7 @@ El token del botón «Generar identificador» en API Setup **caduca en ~24 h**. 
 
 ## Paso 3 — Plantillas en WhatsApp Manager
 
-Crear las 3 plantillas en **es_MX**, categoría **Utilidad**, estado **Activa**:
+Crear las 4 plantillas en **es_MX**, categoría **Utilidad**, estado **Activa**:
 
 Ver textos exactos en `docs/WHATSAPP-SETUP.md`.
 
@@ -78,6 +79,7 @@ Ver textos exactos en `docs/WHATSAPP-SETUP.md`.
 | `orden_servicio_sisteb` | 3 |
 | `anticipo_recibido_sisteb` | 5 |
 | `liquidacion_orden_s` | 5 |
+| `cotizacion_sisteb` | 5 |
 
 ---
 

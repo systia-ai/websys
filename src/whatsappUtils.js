@@ -122,6 +122,137 @@ export function buildMensajeOrden(numeroOrden, negocio = NEGOCIO_DEFAULT) {
   return `Hola buen día, de parte de ${negocio} le informo que su número de orden es ${numeroOrden}.`
 }
 
+function montoMensajeWa(value) {
+  const v = Number(value)
+  if (!Number.isFinite(v)) return '$0.00'
+  return `$${v.toFixed(2)}`
+}
+
+function limpiarDescripcionCotizacionWa(descripcion) {
+  return String(descripcion ?? '')
+    .replace(/^\[(COTIZACIÓN|VENTA)\]\s*/i, '')
+    .trim() || '—'
+}
+
+function buildDetalleLineasCotizacionWa(lineas = []) {
+  if (!lineas.length) return '• (Sin conceptos)'
+  return lineas
+    .map((l) => {
+      const cant = Number(l.cantidad ?? 0)
+      const desc = limpiarDescripcionCotizacionWa(l.descripcion)
+      const sub = montoMensajeWa(l.subtotal ?? cant * Number(l.precioUnitario ?? l.costo ?? 0))
+      return `• ${cant} × ${desc} — ${sub}`
+    })
+    .join('\n')
+}
+
+/**
+ * Detalle de líneas en una sola línea para plantilla Meta (sin saltos de línea).
+ * @param {object[]} lineas
+ * @param {string|null} [notas]
+ */
+export function buildDetalleCotizacionPlantillaWa(lineas = [], notas = null) {
+  const partes = []
+  if (lineas.length) {
+    partes.push(
+      lineas
+        .map((l) => {
+          const cant = Number(l.cantidad ?? 0)
+          const desc = limpiarDescripcionCotizacionWa(l.descripcion)
+          const sub = montoMensajeWa(l.subtotal ?? cant * Number(l.precioUnitario ?? l.costo ?? 0))
+          return `${cant} x ${desc} (${sub})`
+        })
+        .join(' | '),
+    )
+  } else {
+    partes.push('Sin conceptos')
+  }
+  const n = String(notas ?? '').trim()
+  if (n) partes.push(`Notas: ${n}`)
+  return partes.join(' | ')
+}
+
+/**
+ * Mensaje de cotización para el cliente (wa.me).
+ *
+ * @param {object} p
+ * @param {string} [p.negocio]
+ * @param {string|number} p.numeroCotizacion
+ * @param {string|Date|null} [p.fechaCreacion]
+ * @param {string} [p.nombreCliente]
+ * @param {object[]} [p.lineas]
+ * @param {string|number} [p.total]
+ * @param {string|null} [p.notas]
+ */
+export function buildMensajeCotizacionCliente(p) {
+  const neg = String(p?.negocio ?? NEGOCIO_DEFAULT).trim() || NEGOCIO_DEFAULT
+  const num = String(p?.numeroCotizacion ?? '').trim() || '—'
+  const fecha = formatFechaOrdenMensaje(p?.fechaCreacion)
+  const nom = String(p?.nombreCliente ?? '').trim() || '—'
+  const detalle = buildDetalleLineasCotizacionWa(p?.lineas ?? [])
+  const total = montoMensajeWa(p?.total)
+  let msg =
+    `Hola buen día, de parte de ${neg} le compartimos su cotización:\n\n` +
+    `• Número de cotización: ${num}\n` +
+    `• Fecha: ${fecha}\n` +
+    `• Cliente: ${nom}\n\n` +
+    `Detalle:\n${detalle}\n\n` +
+    `Total cotización: ${total}`
+  const notas = String(p?.notas ?? '').trim()
+  if (notas) msg += `\n\nNotas: ${notas}`
+  msg += '\n\nQuedamos atentos a sus comentarios.'
+  return msg
+}
+
+/**
+ * Abre WhatsApp Web/app con el mensaje de cotización ya escrito.
+ *
+ * @param {{
+ *   telefono: string,
+ *   mensaje?: string,
+ *   numeroCotizacion?: string|number,
+ *   negocio?: string,
+ *   fechaCreacion?: string|Date|null,
+ *   nombreCliente?: string,
+ *   lineas?: object[],
+ *   total?: string|number,
+ *   notas?: string|null,
+ * }} p
+ */
+export function abrirWhatsAppCotizacion(p) {
+  const {
+    telefono,
+    mensaje: mensajePre,
+    numeroCotizacion,
+    negocio,
+    fechaCreacion,
+    nombreCliente,
+    lineas,
+    total,
+    notas,
+  } = p
+  if (!telefono || !String(telefono).trim()) {
+    return { ok: false, motivo: 'sin-telefono' }
+  }
+  const mensaje =
+    mensajePre != null && String(mensajePre).trim()
+      ? String(mensajePre).trim()
+      : buildMensajeCotizacionCliente({
+          negocio,
+          numeroCotizacion,
+          fechaCreacion,
+          nombreCliente,
+          lineas,
+          total,
+          notas,
+        })
+  const url = buildWhatsAppUrl({ telefono, mensaje })
+  if (!url) return { ok: false, motivo: 'telefono-invalido' }
+  const win = window.open(url, '_blank', 'noopener')
+  if (!win) return { ok: false, motivo: 'popup-bloqueado' }
+  return { ok: true, url }
+}
+
 /**
  * Construye la URL `https://wa.me/...` para una conversación con un teléfono y mensaje dados.
  * @param {{ telefono: string, mensaje: string }} p
@@ -200,7 +331,7 @@ export function humanizarErrorWhatsApp(errorMsg) {
     )
   }
   if (m.includes('(#132001)') || m.includes('132001')) {
-    return 'Plantilla no encontrada: revise WHATSAPP_TEMPLATE_NAME y WHATSAPP_TEMPLATE_LANG (es_MX) en Supabase.'
+    return 'Plantilla no encontrada: revise los nombres WHATSAPP_TEMPLATE_* y WHATSAPP_TEMPLATE_LANG (es_MX) en Supabase.'
   }
   if (
     m.includes('131030') ||
@@ -341,6 +472,44 @@ export async function enviarLiquidacionWhatsAppCloudApi(supabase, p) {
       nombreCliente: truncarMetaTexto(nombreCliente),
       monto: truncarMetaTexto(monto, 80),
       formaPago: truncarMetaTexto(formaPago, 80),
+      ...(fecha != null && String(fecha).trim() ? { fecha: truncarMetaTexto(String(fecha).trim(), 120) } : {}),
+      ...(to ? { to } : {}),
+    },
+  })
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(msg) }
+  }
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: humanizarErrorWhatsApp(String(data.error)) }
+  }
+  const toReal = data && typeof data === 'object' && data.to ? String(data.to) : null
+  return { ok: true, data, toDisplay: toReal ? formatearTelefonoWaDisplay(toReal) : null }
+}
+
+/**
+ * Cotización vía Edge Function `send-whatsapp-cotizacion`.
+ * Plantilla Meta: {{1}} cliente, {{2}} número cotización, {{3}} detalle, {{4}} total, {{5}} fecha.
+ *
+ * @param {object} supabase
+ * @param {{
+ *   nombreCliente?: string,
+ *   numeroCotizacion: string|number,
+ *   detalle: string,
+ *   total: string,
+ *   fecha?: string,
+ *   to?: string,
+ * }} p
+ */
+export async function enviarCotizacionWhatsAppCloudApi(supabase, p) {
+  if (!supabase) return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  const { numeroCotizacion, nombreCliente = '', detalle, total, fecha, to } = p
+  const { data, error } = await supabase.functions.invoke('send-whatsapp-cotizacion', {
+    body: {
+      numeroCotizacion: String(numeroCotizacion),
+      nombreCliente: truncarMetaTexto(nombreCliente),
+      detalle: truncarMetaTexto(detalle, 512),
+      total: truncarMetaTexto(total, 80),
       ...(fecha != null && String(fecha).trim() ? { fecha: truncarMetaTexto(String(fecha).trim(), 120) } : {}),
       ...(to ? { to } : {}),
     },

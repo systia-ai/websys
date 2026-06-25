@@ -9140,6 +9140,21 @@ input.full {
   box-shadow: 0 2px 10px rgba(198, 40, 40, 0.35);
 }
 
+.cotizaciones-screen-root .ventas-acciones--cotizacion > .btn-whatsapp-cotizacion {
+  background: #4caf50;
+  box-shadow: 0 2px 10px rgba(76, 175, 80, 0.35);
+}
+
+.cotizaciones-screen-root .ventas-acciones--cotizacion > .btn-whatsapp-cotizacion:hover:not(:disabled) {
+  background: #43a047;
+}
+
+.cotizaciones-screen-root .ventas-acciones--cotizacion > .btn-whatsapp-cotizacion:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .cotizaciones-screen-root .ventas-recibo-hint {
   margin: -6px 0 8px;
   text-align: center;

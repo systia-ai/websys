@@ -1,7 +1,6 @@
 import { sameId } from './clienteUtils.js'
 import { formatMontoCuenta } from './reparacionUtils.js'
-import { esProductoContable } from './productoUtils.js'
-import { existenciaNumerica, registrarVentaEnCuenta } from './inventarioStock.js'
+import { registrarVentaEnCuenta } from './inventarioStock.js'
 
 export const LS_COTIZACIONES = 'sistefix_local_cotizaciones'
 export const LS_COTIZACIONMOV = 'sistefix_local_cotizacionmov'
@@ -58,13 +57,17 @@ export function lineaCotizacionDesdeMov(m) {
 }
 
 export function lineasCotizacionParaReciboPdf(lineas = []) {
-  return lineas.map((l) => ({
-    tipo: 'cuentamov',
-    cantidad: l.cantidad,
-    descripcion: String(l.descripcion ?? '').replace(/^\[COTIZACIÓN\]\s*/i, '[VENTA] '),
-    precioUnitario: l.precioUnitario,
-    subtotal: l.subtotal,
-  }))
+  return lineas.map((l) => {
+    const raw = String(l.descripcion ?? '').trim() || 'Sin descripción'
+    const body = raw.replace(/^\[(COTIZACIÓN|VENTA)\]\s*/i, '').trim()
+    return {
+      tipo: 'cuentamov',
+      cantidad: l.cantidad,
+      descripcion: body ? `[COTIZACIÓN] ${body}` : '[COTIZACIÓN] Sin descripción',
+      precioUnitario: l.precioUnitario,
+      subtotal: l.subtotal,
+    }
+  })
 }
 
 export function etiquetaEstatusCotizacion(est) {
@@ -78,61 +81,6 @@ export function etiquetaEstatusCotizacion(est) {
 
 export function cotizacionEditable(est) {
   return String(est ?? '').trim().toUpperCase() === 'BORRADOR'
-}
-
-/** Nombre legible de la línea (sin prefijo [COTIZACIÓN]). */
-export function nombreProductoCotizacion(descripcion, producto = null) {
-  const deLinea = String(descripcion ?? '')
-    .replace(/^\[COTIZACIÓN\]\s*/i, '')
-    .trim()
-  if (deLinea) return deLinea
-  const deProd = String(producto?.descripcion ?? producto?.serie ?? '').trim()
-  return deProd || 'producto'
-}
-
-/**
- * Si la cantidad cotizada supera el stock de un producto contable, devuelve cuánto faltaría surtir.
- * La cotización no modifica inventario; solo informa.
- */
-export function surtidoPendienteDesdeProducto(producto, cantidadSolicitada) {
-  if (!producto || !esProductoContable(producto)) return null
-  const solicitado = Number(cantidadSolicitada)
-  if (!Number.isFinite(solicitado) || solicitado <= 0) return null
-  const stock = existenciaNumerica(producto)
-  if (solicitado <= stock) return null
-  const faltante = solicitado - stock
-  const nombre = nombreProductoCotizacion(null, producto)
-  return { productoId: producto.id, nombre, solicitado, stock, faltante }
-}
-
-export function mensajeSurtidoPendiente({ nombre, faltante, stock, solicitado }) {
-  const n = nombre || 'producto'
-  const u = faltante === 1 ? 'unidad' : 'unidades'
-  if (stock <= 0) {
-    return `Faltaría surtir ${faltante} ${u} de «${n}» para completar el total de la cotización (sin stock actual; cotiza ${solicitado}).`
-  }
-  return `Faltaría surtir ${faltante} ${u} de «${n}» para completar el total de la cotización (hay ${stock} en stock; cotiza ${solicitado}).`
-}
-
-/** Agrupa líneas por producto y lista lo que habría que surtir para cubrir la cotización. */
-export function listarSurtidoPendienteCotizacion(lineas = [], productosPorId) {
-  const agg = new Map()
-  for (const l of lineas) {
-    const pid = l.producto_id
-    if (pid == null || Number(pid) <= 0) continue
-    const p = productosPorId?.get?.(String(pid)) ?? null
-    if (!p || !esProductoContable(p)) continue
-    const key = String(pid)
-    const prev = agg.get(key) ?? { producto: p, cantidad: 0 }
-    prev.cantidad += Number(l.cantidad ?? 0)
-    agg.set(key, prev)
-  }
-  const out = []
-  for (const { producto, cantidad } of agg.values()) {
-    const item = surtidoPendienteDesdeProducto(producto, cantidad)
-    if (item) out.push(item)
-  }
-  return out.sort((a, b) => b.faltante - a.faltante)
 }
 
 /** Número visible de la cotización (por cliente); si falta en datos viejos, usa el id interno. */

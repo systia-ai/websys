@@ -3,7 +3,6 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
-import { esProductoContable, etiquetaExistencia } from './productoUtils.js'
 import {
   cotizacionEditable,
   eliminarLineaCotizacion,
@@ -12,11 +11,8 @@ import {
   formatoTotalCotizacion,
   insertarLineaCotizacion,
   lineaCotizacionDesdeMov,
-  listarSurtidoPendienteCotizacion,
   marcarCotizacionAceptada,
-  mensajeSurtidoPendiente,
   numeroCotizacionVisible,
-  surtidoPendienteDesdeProducto,
   totalCotizacionDesdeLineas,
   convertirCotizacionACuenta,
   actualizarCotizacion,
@@ -24,7 +20,16 @@ import {
   LS_COTIZACIONES,
   LS_COTIZACIONMOV,
 } from './cotizacionUtils.js'
-import { printCotizacionPdf, COTIZACION_PRINT_HINT } from './reciboCotizacionPdf.js'
+import { printCotizacionPdf } from './reciboCotizacionPdf.js'
+import {
+  abrirWhatsAppCotizacion,
+  buildDetalleCotizacionPlantillaWa,
+  enviarCotizacionWhatsAppCloudApi,
+  enviarWhatsAppConRespaldoManual,
+  formatFechaOrdenMensaje,
+  formatMontoAnticipoWa,
+  telefonoWaParaEnvio,
+} from './whatsappUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -76,7 +81,6 @@ export default function CotizacionesScreen({
   const [cantProd, setCantProd] = useState('')
   const [precioProd, setPrecioProd] = useState('')
   const [productoIdSel, setProductoIdSel] = useState(0)
-  const [productoSel, setProductoSel] = useState(null)
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [modalConvertir, setModalConvertir] = useState(false)
@@ -95,6 +99,7 @@ export default function CotizacionesScreen({
   const editableEnPantalla = editable && puedeGestionar
   const total = useMemo(() => totalCotizacionDesdeLineas(lineas), [lineas])
   const totalStr = formatoTotalCotizacion(total)
+  const telCliente = String(cliente?.telefono ?? '').trim()
 
   const productosFiltrados = useMemo(() => {
     const t = busqProd.trim().toLowerCase()
@@ -106,27 +111,6 @@ export default function CotizacionesScreen({
           .includes(t) || String(p.descripcion ?? '').toLowerCase().includes(t),
     )
   }, [todosProductos, busqProd])
-
-  const productosPorId = useMemo(() => {
-    const m = new Map()
-    for (const p of todosProductos) {
-      if (p?.id != null) m.set(String(p.id), p)
-    }
-    return m
-  }, [todosProductos])
-
-  const surtidoPendiente = useMemo(
-    () => listarSurtidoPendienteCotizacion(lineas, productosPorId),
-    [lineas, productosPorId],
-  )
-
-  const avisoCantidadCaptura = useMemo(() => {
-    if (!productoSel || !cantProd.trim()) return null
-    const cant = Number(cantProd)
-    if (!Number.isFinite(cant) || cant <= 0) return null
-    const item = surtidoPendienteDesdeProducto(productoSel, cant)
-    return item ? mensajeSurtidoPendiente(item) : null
-  }, [productoSel, cantProd])
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -182,11 +166,9 @@ export default function CotizacionesScreen({
     setCantProd('')
     setPrecioProd('')
     setProductoIdSel(0)
-    setProductoSel(null)
   }
 
   function seleccionarProducto(p) {
-    setProductoSel(p)
     setProductoIdSel(Number(p.id) || 0)
     setSerieProd(String(p.serie ?? '').toUpperCase())
     setDescProd(String(p.descripcion ?? '').toUpperCase())
@@ -241,13 +223,8 @@ export default function CotizacionesScreen({
       setLineas((prev) => [...prev, linea])
       setCotizacionInfo((prev) => (prev ? { ...prev, total: totalCotizacionDesdeLineas([...lineas, linea]) } : prev))
       setMostrarCaptura(false)
-      const pendiente = productoSel ? surtidoPendienteDesdeProducto(productoSel, cant) : null
       limpiarCaptura()
-      if (pendiente) {
-        onNotice?.(mensajeSurtidoPendiente(pendiente))
-      } else {
-        onNotice?.('Línea agregada a la cotización')
-      }
+      onNotice?.('Línea agregada a la cotización')
     } catch (e) {
       onError?.(`Error al agregar: ${e.message}`)
     }
@@ -289,15 +266,6 @@ export default function CotizacionesScreen({
     if (!requiereGestionar()) return
     if (!cotizacionId) return
     if (!window.confirm('¿Finalizar esta cotización? Ya no podrá agregar líneas.')) return
-    if (surtidoPendiente.length > 0) {
-      const resumen = surtidoPendiente
-        .map((s) => `· ${mensajeSurtidoPendiente(s)}`)
-        .join('\n')
-      const ok = window.confirm(
-        `Hay productos por surtir para completar esta cotización:\n\n${resumen}\n\n¿Finalizar de todos modos? El inventario no se modifica hasta pasarla a cuenta.`,
-      )
-      if (!ok) return
-    }
     setGuardando(true)
     try {
       await actualizarCotizacion(supabase, cotizacionId, {
@@ -342,6 +310,71 @@ export default function CotizacionesScreen({
     } catch (e) {
       onError?.(`Error al imprimir: ${e.message}`)
     }
+  }
+
+  function enviarWhatsAppCotizacion() {
+    if (lineas.length === 0) {
+      onError?.('Agregue al menos un concepto a la cotización')
+      return
+    }
+    if (!telCliente) {
+      onError?.('El cliente no tiene teléfono registrado.')
+      return
+    }
+
+    const waParams = {
+      telefono: telCliente,
+      numeroCotizacion,
+      fechaCreacion: cotizacionInfo?.created_at ?? cotizacionInicial?.created_at,
+      nombreCliente: cliente?.nombre,
+      lineas,
+      total,
+      notas,
+    }
+
+    void (async () => {
+      if (supabase) {
+        const tel = telefonoWaParaEnvio(telCliente)
+        if (!tel.ok) {
+          onError?.(tel.errorMsg)
+          return
+        }
+        const res = await enviarCotizacionWhatsAppCloudApi(supabase, {
+          to: tel.to,
+          numeroCotizacion,
+          nombreCliente: cliente?.nombre,
+          detalle: buildDetalleCotizacionPlantillaWa(lineas, notas),
+          total: formatMontoAnticipoWa(total),
+          fecha: formatFechaOrdenMensaje(waParams.fechaCreacion),
+        })
+        const outcome = enviarWhatsAppConRespaldoManual(res, abrirWhatsAppCotizacion, waParams)
+        if (!outcome.ok) {
+          onError?.(outcome.errorMsg)
+          return
+        }
+        if (outcome.modo === 'manual') {
+          onNotice?.(
+            `${outcome.aviso ?? 'Envío automático no disponible.'} Se abrió WhatsApp con el mensaje — pulse Enviar en la app.`,
+          )
+        } else {
+          onNotice?.(
+            `Cotización enviada por WhatsApp${outcome.toDisplay ? ` a ${outcome.toDisplay}` : ''}.`,
+          )
+        }
+        return
+      }
+
+      const wa = abrirWhatsAppCotizacion(waParams)
+      if (wa.ok) {
+        onNotice?.('Mensaje de cotización listo en WhatsApp. Pulsa enviar en la app.')
+        return
+      }
+      if (wa.motivo === 'telefono-invalido') {
+        onError?.(`El teléfono "${telCliente}" no tiene un formato válido para WhatsApp.`)
+      } else if (wa.motivo === 'popup-bloqueado') {
+        onError?.('El navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes e intenta de nuevo.')
+      }
+    })()
   }
 
   async function abrirModalConvertir() {
@@ -504,23 +537,6 @@ export default function CotizacionesScreen({
               )}
             </section>
 
-            {surtidoPendiente.length > 0 ? (
-              <div className="ventas-cotizacion-surtido-aviso" role="status" aria-live="polite">
-                <p className="ventas-cotizacion-surtido-aviso-titulo">
-                  <span aria-hidden="true">📦</span> Surtido pendiente para completar la cotización
-                </p>
-                <p className="ventas-cotizacion-surtido-aviso-lead muted small">
-                  El precio total incluye todas las unidades cotizadas. El inventario no se descuenta hasta pasar la
-                  cotización a una cuenta.
-                </p>
-                <ul className="ventas-cotizacion-surtido-lista">
-                  {surtidoPendiente.map((s) => (
-                    <li key={String(s.productoId)}>{mensajeSurtidoPendiente(s)}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
             {editableEnPantalla ? (
               <>
                 <button
@@ -535,17 +551,6 @@ export default function CotizacionesScreen({
                     <p className="ventas-cotizacion-captura-titulo">
                       <strong>{serieProd}</strong> · {descProd}
                     </p>
-                    {productoSel ? (
-                      <p className="ventas-cotizacion-stock-hint muted small">
-                        {esProductoContable(productoSel) ? (
-                          <>
-                            En stock: <strong>{productoSel.existencia ?? 0}</strong>
-                          </>
-                        ) : (
-                          etiquetaExistencia(productoSel)
-                        )}
-                      </p>
-                    ) : null}
                     <div className="ventas-cotizacion-captura-campos">
                       <label className="ventas-cotizacion-campo">
                         <span>Cantidad</span>
@@ -556,11 +561,6 @@ export default function CotizacionesScreen({
                         <input inputMode="decimal" value={precioProd} onChange={(e) => setPrecioProd(e.target.value)} />
                       </label>
                     </div>
-                    {avisoCantidadCaptura ? (
-                      <p className="ventas-cotizacion-surtido-inline" role="status">
-                        {avisoCantidadCaptura}
-                      </p>
-                    ) : null}
                     <div className="ventas-cotizacion-captura-acciones">
                       <button
                         type="button"
@@ -638,6 +638,19 @@ export default function CotizacionesScreen({
               >
                 🖨️ IMPRIMIR COTIZACIÓN
               </button>
+              <button
+                type="button"
+                className="btn-comprobante-ventas btn-whatsapp-cotizacion"
+                onClick={() => enviarWhatsAppCotizacion()}
+                disabled={lineas.length === 0 || !telCliente}
+                title={
+                  !telCliente
+                    ? 'El cliente no tiene teléfono registrado'
+                    : 'Enviar cotización por WhatsApp al cliente'
+                }
+              >
+                📲 ENVIAR POR WHATSAPP
+              </button>
               {puedeGestionar && (estatus === 'ACEPTADA' || estatus === 'FINALIZADA') && estatus !== 'CONVERTIDA' ? (
                 <button type="button" className="btn-cuentas" onClick={() => void abrirModalConvertir()}>
                   PASAR A CUENTA
@@ -654,7 +667,6 @@ export default function CotizacionesScreen({
                 </button>
               ) : null}
             </div>
-            <p className="muted small ventas-recibo-hint">{COTIZACION_PRINT_HINT}</p>
           </>
         )}
       </div>
@@ -682,10 +694,6 @@ export default function CotizacionesScreen({
                     <li key={p.id}>
                       <button type="button" className="inventario-cliente-opcion" onClick={() => seleccionarProducto(p)}>
                         <strong>{p.serie || '—'}</strong> · {p.descripcion || '—'}
-                        <span className="muted small">
-                          {' '}
-                          · {esProductoContable(p) ? `Stock: ${p.existencia ?? 0}` : etiquetaExistencia(p)}
-                        </span>
                       </button>
                     </li>
                   ))

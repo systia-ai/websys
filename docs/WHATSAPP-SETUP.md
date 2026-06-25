@@ -28,6 +28,7 @@ Deben estar en estado **Activa** (no “En revisión” ni “Rechazada”).
 | `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` | 3: detalle cliente/equipo, número orden, fecha |
 | `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` | 5: cliente, orden, monto, forma pago, fecha |
 | `WHATSAPP_TEMPLATE_LIQUIDACION_NAME` | `liquidacion_orden_s` | 5: cliente, orden, total pagado, forma pago, fecha |
+| `WHATSAPP_TEMPLATE_COTIZACION_NAME` | `cotizacion_sisteb` | 5: cliente, número cotización, detalle, total, fecha |
 | `WHATSAPP_TEMPLATE_LANG` | `es_MX` | Idioma exacto de la plantilla |
 
 ### Textos sugeridos para crear las plantillas en Meta
@@ -83,6 +84,26 @@ Gracias por su preferencia.
 
 `{{1}}` = nombre del cliente (con viñeta •). Resto: orden, monto, forma de pago, fecha.
 
+**4. `cotizacion_sisteb`** — 5 variables:
+
+```
+Hola, buen día.
+De parte de SISTEBIT le compartimos su cotización:
+
+{{1}}
+
+Número de cotización: {{2}}
+Detalle: {{3}}
+Total cotización: {{4}}
+Fecha: {{5}}
+
+Quedamos atentos a sus comentarios.
+```
+
+`{{1}}` = nombre del cliente (con viñeta •). `{{2}}` = número de cotización. `{{3}}` = conceptos (ej. `2 x ALMOADILLA CANON ($1000.00) | 1 x SERVICIO ($500.00)`). `{{4}}` = total (ej. `$1500.00 MXN`). `{{5}}` = fecha.
+
+Secreto opcional en Supabase: `WHATSAPP_TEMPLATE_COTIZACION_NAME` = `cotizacion_sisteb`.
+
 ### Opcionales
 
 | Secreto | Uso |
@@ -124,7 +145,7 @@ Error típico en Development: *“Recipient not in allowed list”* → agrega e
 Si pides ayuda, comparte ( **sin** pegar el token):
 
 1. Mensaje de error exacto que muestra la app
-2. Nombres y estado de las 3 plantillas en WhatsApp Manager
+2. Nombres y estado de las 4 plantillas en WhatsApp Manager
 3. Texto de cada plantilla (para verificar cantidad de variables)
 4. Modo de la app Meta: Development o Live
 5. `WHATSAPP_PHONE_NUMBER_ID` (no es secreto)

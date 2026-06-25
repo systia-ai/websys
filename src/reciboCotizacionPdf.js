@@ -27,6 +27,3 @@ export async function printCotizacionPdf({
     ocultarSaldo: true,
   })
 }
-
-export const COTIZACION_PRINT_HINT =
-  'Impresión: mismo formato que recibos Sistebit (Carta vertical, media hoja).'
