@@ -3505,6 +3505,87 @@ td {
   opacity: 0.95;
 }
 
+/* Monitor — modo claro: texto más legible sobre fondos blancos / claros */
+:root:not([data-theme='dark']) .monitor-ordenes-root {
+  color: #263238;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-filtros-titulo,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tile-label,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tile .monitor-ordenes-filtros-grupo-titulo,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-legend {
+  font-weight: 800;
+  color: #0d47a1;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-label-inline,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-filtros .monitor-ordenes-label-inline > span:first-child {
+  font-weight: 700;
+  color: #37474f;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-check-text {
+  font-weight: 800;
+  color: #0d47a1;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tile--chip:not(.monitor-ordenes-tile--active) .monitor-ordenes-check-text {
+  font-weight: 700;
+  color: #37474f;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-rango-modo-bar .cuentas-cliente-vista-btn:not(.cuentas-cliente-vista-btn--active) {
+  font-weight: 700;
+  color: #37474f;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-rango-modo-bar .cuentas-cliente-vista-btn--active {
+  font-weight: 800;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-solo {
+  font-weight: 800;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tile select,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tile .monitor-ordenes-busqueda-input,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-label-fecha input[type='date'],
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-fecha-chip-inputs input[type='date'],
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-fecha-desde input[type='date'] {
+  font-weight: 600;
+  color: #263238;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-conteo-resumen {
+  font-weight: 700;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-rango-aviso,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-rango-aviso--fieldset,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-rango-aviso--modos {
+  font-weight: 700;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tabla th {
+  font-weight: 800;
+  color: #0d47a1;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tabla td {
+  font-weight: 600;
+  color: #263238;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tabla .monitor-ordenes-col-cliente,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tabla .cuentas-cliente-tabla-orden,
+:root:not([data-theme='dark']) .monitor-ordenes-root .monitor-ordenes-tabla .monitor-ordenes-num {
+  font-weight: 700;
+}
+
+:root:not([data-theme='dark']) .monitor-ordenes-root .inventario-tabla-scroll-hint {
+  font-weight: 600;
+}
+
 .monitor-ordenes-label-inline {
   display: flex;
   flex-direction: column;
