@@ -1,4 +1,4 @@
-import { TIPOS_SERVICIO_CANONICOS, ymdHoyLocal } from './reparacionUtils.js'
+import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
 
 export const LS_MONITOR_FILTROS = 'sistefix_monitor_ordenes_filtros_v1'
 export const LS_MONITOR_REOPEN = 'sistefix_monitor_reopen_desde_orden'
@@ -6,17 +6,17 @@ export const LS_MONITOR_REOPEN = 'sistefix_monitor_reopen_desde_orden'
 const TECNICO_TODAS = ''
 
 export function filtrosMonitorPorDefecto() {
-  const hoy = ymdHoyLocal() ?? ''
   return {
     estatusSeleccionados: ['INGRESADO'],
     tiposServicioSeleccionados: [...TIPOS_SERVICIO_CANONICOS],
     ordenFecha: 'asc',
     tecnicoFiltro: TECNICO_TODAS,
-    fechaDesde: hoy,
-    fechaHasta: hoy,
+    usarRangoFechas: false,
+    rangoFechasElegido: false,
+    fechaDesde: '',
+    fechaHasta: '',
     filtroModoFechaIngreso: false,
     filtroModoFechaEntrega: false,
-    filtroModoFechaReparado: false,
     filtroModoVerificadas: false,
     busqueda: '',
   }
@@ -34,11 +34,29 @@ function parseFiltrosGuardados(saved) {
       : defaults.tiposServicioSeleccionados,
     ordenFecha: saved.ordenFecha === 'desc' ? 'desc' : 'asc',
     tecnicoFiltro: saved.tecnicoFiltro ?? defaults.tecnicoFiltro,
+    usarRangoFechas:
+      saved.usarRangoFechas != null
+        ? !!saved.usarRangoFechas
+        : Boolean(
+            saved.filtroModoFechaIngreso ||
+              saved.filtroModoFechaEntrega ||
+              String(saved.fechaDesde ?? '').trim() ||
+              String(saved.fechaHasta ?? '').trim(),
+          ),
+    rangoFechasElegido:
+      saved.rangoFechasElegido != null
+        ? !!saved.rangoFechasElegido
+        : Boolean(
+            saved.usarRangoFechas ||
+              saved.filtroModoFechaIngreso ||
+              saved.filtroModoFechaEntrega ||
+              String(saved.fechaDesde ?? '').trim() ||
+              String(saved.fechaHasta ?? '').trim(),
+          ),
     fechaDesde: saved.fechaDesde ?? defaults.fechaDesde,
     fechaHasta: saved.fechaHasta ?? defaults.fechaHasta,
     filtroModoFechaIngreso: !!saved.filtroModoFechaIngreso,
     filtroModoFechaEntrega: !!saved.filtroModoFechaEntrega,
-    filtroModoFechaReparado: !!saved.filtroModoFechaReparado,
     filtroModoVerificadas: !!saved.filtroModoVerificadas,
     busqueda: typeof saved.busqueda === 'string' ? saved.busqueda : defaults.busqueda,
   }

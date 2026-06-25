@@ -119,7 +119,14 @@ function compararProductosPorDescripcion(a, b) {
  * Inventarios / catálogo de productos (tabla `productos`), flujo tipo pantalla dedicada en Android:
  * lista con búsqueda, alta, edición y baja.
  */
-export default function InventariosModulo({ supabase, onHome, onError, onNotice, puedeEliminar = false }) {
+export default function InventariosModulo({
+  supabase,
+  onHome,
+  onError,
+  onNotice,
+  puedeEliminar = false,
+  esAdmin = false,
+}) {
   const { alertaPermiso, intentarEliminar, mostrarSinPermiso } = usePermisoEliminar(puedeEliminar)
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -140,6 +147,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
   const [busquedaSurtido, setBusquedaSurtido] = useState('')
   const [surtidoOpcionesAbiertas, setSurtidoOpcionesAbiertas] = useState(false)
   const [cantidadSurtido, setCantidadSurtido] = useState('')
+  const [stockActualSurtido, setStockActualSurtido] = useState('')
   const [costoCompraSurtido, setCostoCompraSurtido] = useState('')
   const [precioVentaSurtido, setPrecioVentaSurtido] = useState('')
   /** Tras guardar surtido: pregunta si surtir otro producto. */
@@ -225,6 +233,15 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
     if (!existeSeleccion) setProductoSurtidoId('')
   }, [dialogoSurtido, productosSurtidoFiltrados, productoSurtidoId])
 
+  useEffect(() => {
+    if (!productoSurtidoSel) {
+      setStockActualSurtido('')
+      return
+    }
+    const ex = productoSurtidoSel.existencia
+    setStockActualSurtido(ex != null && ex !== '' ? String(ex) : '0')
+  }, [productoSurtidoSel])
+
   function abrirNuevo() {
     setEditando(null)
     setTipoProducto('CONSUMIBLE')
@@ -246,6 +263,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
     setBusquedaSurtido('')
     setSurtidoOpcionesAbiertas(false)
     setCantidadSurtido('')
+    setStockActualSurtido('')
     setCostoCompraSurtido('')
     setPrecioVentaSurtido('')
     setDialogoSurtido(true)
@@ -350,11 +368,33 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
       onError?.('Seleccione un producto para surtir')
       return
     }
-    const entrada = toIntOrNull(cantidadSurtido)
-    if (!Number.isFinite(entrada) || entrada <= 0) {
+
+    const exDb = toIntOrNull(prod.existencia) ?? 0
+    let stockBase = exDb
+    if (esAdmin) {
+      const stockEditado = toIntOrNull(stockActualSurtido)
+      if (stockActualSurtido.trim() === '' || stockEditado == null) {
+        onError?.('Indique el stock actual del producto')
+        return
+      }
+      if (stockEditado < 0) {
+        onError?.('El stock actual no puede ser negativo')
+        return
+      }
+      stockBase = stockEditado
+    }
+
+    const entrada = toIntOrNull(cantidadSurtido) ?? 0
+    const huboAjusteStock = esAdmin && stockBase !== exDb
+    if (!esAdmin && entrada <= 0) {
       onError?.('La cantidad de surtido debe ser mayor a 0')
       return
     }
+    if (esAdmin && entrada <= 0 && !huboAjusteStock) {
+      onError?.('Ajuste el stock actual o indique cantidad comprada')
+      return
+    }
+
     const costoCompra = costoCompraSurtido.trim() ? toNum(costoCompraSurtido) : null
     if (costoCompraSurtido.trim() && (costoCompra == null || costoCompra <= 0)) {
       onError?.('Ingrese un costo de compra válido')
@@ -366,12 +406,10 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
       return
     }
 
-    const exActual = toIntOrNull(prod.existencia) ?? 0
     const cantActual = toIntOrNull(prod.cantidad) ?? 0
-    const payload = {
-      existencia: exActual + entrada,
-      cantidad: cantActual + entrada,
-    }
+    const nuevaExistencia = stockBase + (entrada > 0 ? entrada : 0)
+    const payload = { existencia: nuevaExistencia }
+    if (entrada > 0) payload.cantidad = cantActual + entrada
     if (costoCompra != null) payload.precio_compra = costoCompra
     if (precioVentaNuevo != null) payload.precio_venta = precioVentaNuevo
 
@@ -389,8 +427,18 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
       const etiqueta = [prod.serie, prod.descripcion].filter(Boolean).join(' · ') || 'producto'
       setDialogoSurtido(false)
       await cargarProductos()
-      onNotice?.(`Surtido registrado: +${entrada} a ${etiqueta}`)
-      setSurtidoExitoPregunta({ etiqueta, entrada })
+      let mensaje = ''
+      if (entrada > 0 && huboAjusteStock) {
+        mensaje = `Stock ajustado y surtido (+${entrada}): ${etiqueta} → ${nuevaExistencia} uds.`
+      } else if (entrada > 0) {
+        mensaje = `Surtido registrado: +${entrada} a ${etiqueta}`
+      } else {
+        mensaje = `Stock actualizado: ${etiqueta} → ${nuevaExistencia} uds.`
+      }
+      onNotice?.(mensaje)
+      if (entrada > 0) {
+        setSurtidoExitoPregunta({ etiqueta, entrada })
+      }
     } catch (e) {
       onError?.(`Error al registrar surtido: ${e.message}`)
     }
@@ -879,6 +927,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
                           }}
                         >
                           <strong>{p.serie || 'SIN SERIE'}</strong> · {p.descripcion || 'SIN DESCRIPCIÓN'}
+                          <span className="inventarios-surtido-opcion-stock"> · Stock: {toIntOrNull(p.existencia) ?? 0}</span>
                         </button>
                       </li>
                     )
@@ -901,21 +950,38 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
                   <strong>Producto seleccionado:</strong>{' '}
                   {productoSurtidoSel ? `${productoSurtidoSel.serie || 'SIN SERIE'} · ${productoSurtidoSel.descripcion || 'SIN DESCRIPCIÓN'}` : '—'}
                 </p>
-                <p>
-                  <strong>Existencia actual:</strong> {toIntOrNull(productoSurtidoSel?.existencia) ?? 0}
-                </p>
+                {esAdmin && productoSurtidoSel ? (
+                  <label className="inventarios-surtido-stock-edit">
+                    Stock actual (editable)
+                    <input
+                      inputMode="numeric"
+                      value={stockActualSurtido}
+                      onChange={(e) => setStockActualSurtido(e.target.value)}
+                      placeholder="0"
+                    />
+                    <span className="muted small inventarios-surtido-stock-edit-hint">
+                      Corrija el stock real antes de surtir. Solo administradores.
+                    </span>
+                  </label>
+                ) : (
+                  <p>
+                    <strong>Existencia actual:</strong> {toIntOrNull(productoSurtidoSel?.existencia) ?? 0}
+                  </p>
+                )}
                 <p>
                   <strong>Nueva existencia:</strong>{' '}
-                  {(toIntOrNull(productoSurtidoSel?.existencia) ?? 0) + (toIntOrNull(cantidadSurtido) ?? 0)}
+                  {(esAdmin && productoSurtidoSel
+                    ? (toIntOrNull(stockActualSurtido) ?? toIntOrNull(productoSurtidoSel?.existencia) ?? 0)
+                    : (toIntOrNull(productoSurtidoSel?.existencia) ?? 0)) + (toIntOrNull(cantidadSurtido) ?? 0)}
                 </p>
               </div>
               <label>
-                Cantidad comprada
+                Cantidad comprada{esAdmin ? ' (opcional si solo ajusta stock)' : ''}
                 <input
                   inputMode="numeric"
                   value={cantidadSurtido}
                   onChange={(e) => setCantidadSurtido(e.target.value)}
-                  placeholder="Ej. 12"
+                  placeholder={esAdmin ? 'Ej. 12 o dejar en blanco' : 'Ej. 12'}
                 />
               </label>
               <label>
@@ -942,7 +1008,7 @@ export default function InventariosModulo({ supabase, onHome, onError, onNotice,
                 Cancelar
               </button>
               <button type="button" onClick={() => void guardarSurtido()}>
-                Guardar surtido
+                {esAdmin ? 'Guardar cambios' : 'Guardar surtido'}
               </button>
             </div>
           </div>

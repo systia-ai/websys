@@ -1168,6 +1168,27 @@ td {
   margin: 4px 0;
 }
 
+.inventarios-surtido-stock-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.inventarios-surtido-stock-edit input {
+  font-weight: 400;
+}
+
+.inventarios-surtido-stock-edit-hint {
+  font-weight: 400;
+}
+
+.inventarios-surtido-opcion-stock {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 .inventarios-surtido-lista {
   max-height: 320px;
   min-height: 120px;
@@ -3226,6 +3247,15 @@ td {
   font-size: 0.95rem;
   background: #fff;
   font-family: inherit;
+}
+
+.monitor-ordenes-rango-modo-bar {
+  margin: 6px 0 4px;
+}
+
+.monitor-ordenes-rango-modos--off {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .monitor-ordenes-rango-inputs--off {

@@ -11,7 +11,6 @@ import {
   estatusEsEntregado,
   fechaEntregaYmd,
   fechaIngresoYmd,
-  fechaReparadoYmd,
   nombresTecnicosEnOrden,
   ordenUsaSistemaWeb,
   ORDEN_SISTEMA_DESDE_YMD,
@@ -229,7 +228,9 @@ export default function MonitorOrdenesModulo({
   const [ordenFecha, setOrdenFecha] = useState(filtrosIniciales.ordenFecha)
   /** '' = todas las órdenes (por técnico); valor = técnico exacto; TECNICO_SIN = sin técnico asignado */
   const [tecnicoFiltro, setTecnicoFiltro] = useState(filtrosIniciales.tecnicoFiltro)
-  /** Rango de fechas (arriba); lo usan «Fecha registrado» / «Fecha entrega» / «Fecha reparado». */
+  /** Rango de fechas (arriba); lo usan «Entrada de equipos» / «Salida de equipos». */
+  const [usarRangoFechas, setUsarRangoFechas] = useState(filtrosIniciales.usarRangoFechas)
+  const [rangoFechasElegido, setRangoFechasElegido] = useState(filtrosIniciales.rangoFechasElegido)
   const [fechaDesde, setFechaDesde] = useState(filtrosIniciales.fechaDesde)
   const [fechaHasta, setFechaHasta] = useState(filtrosIniciales.fechaHasta)
   /** Activo: filtra por ingreso en el rango superior (ignora estatus). */
@@ -239,10 +240,6 @@ export default function MonitorOrdenesModulo({
   /** Activo: filtra por entrega en el rango superior (ignora estatus). */
   const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(
     filtrosIniciales.filtroModoFechaEntrega,
-  )
-  /** Activo: filtra por fecha_reparado en el rango superior (ignora estatus). */
-  const [filtroModoFechaReparado, setFiltroModoFechaReparado] = useState(
-    filtrosIniciales.filtroModoFechaReparado,
   )
   /** Activo: órdenes verificadas listas para entrega (ignora estatus). */
   const [filtroModoVerificadas, setFiltroModoVerificadas] = useState(
@@ -396,11 +393,12 @@ export default function MonitorOrdenesModulo({
       tiposServicioSeleccionados: new Set(tiposServicioSeleccionados),
       ordenFecha,
       tecnicoFiltro,
+      usarRangoFechas,
+      rangoFechasElegido,
       fechaDesde,
       fechaHasta,
       filtroModoFechaIngreso,
       filtroModoFechaEntrega,
-      filtroModoFechaReparado,
       filtroModoVerificadas,
       busqueda,
     }
@@ -412,11 +410,12 @@ export default function MonitorOrdenesModulo({
     setTiposServicioSeleccionados(new Set(snap.tiposServicioSeleccionados))
     setOrdenFecha(snap.ordenFecha)
     setTecnicoFiltro(snap.tecnicoFiltro)
+    setUsarRangoFechas(!!snap.usarRangoFechas)
+    setRangoFechasElegido(!!snap.rangoFechasElegido)
     setFechaDesde(snap.fechaDesde)
     setFechaHasta(snap.fechaHasta)
     setFiltroModoFechaIngreso(snap.filtroModoFechaIngreso)
     setFiltroModoFechaEntrega(snap.filtroModoFechaEntrega)
-    setFiltroModoFechaReparado(snap.filtroModoFechaReparado)
     setFiltroModoVerificadas(snap.filtroModoVerificadas)
     setBusqueda(snap.busqueda)
   }
@@ -456,20 +455,26 @@ export default function MonitorOrdenesModulo({
     return Boolean(d && h && d > h)
   }
 
-  const rangoFechasInvalido = rangoFechasInvalidoPar(fechaDesde, fechaHasta)
+  const rangoFechaActivo = rangoFechasElegido && usarRangoFechas
+  const sinRangoFechasActivo = rangoFechasElegido && !usarRangoFechas
+  const rangoFechasInvalido = rangoFechaActivo && rangoFechasInvalidoPar(fechaDesde, fechaHasta)
   const hayRangoFechaInvalido = rangoFechasInvalido
-  const modoFechaActivo = filtroModoFechaIngreso
-    ? 'ingreso'
-    : filtroModoFechaEntrega
-      ? 'entrega'
-      : filtroModoFechaReparado
-        ? 'reparado'
+  const modoFechaActivo = !rangoFechaActivo
+    ? filtroModoVerificadas
+      ? 'verificadas'
+      : null
+    : filtroModoFechaIngreso
+      ? 'ingreso'
+      : filtroModoFechaEntrega
+        ? 'entrega'
         : filtroModoVerificadas
           ? 'verificadas'
           : null
-  const filtroRangoSuperiorActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
+  const filtroRangoSuperiorActivo =
+    rangoFechaActivo && Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
   const modoFechaSinRango = Boolean(
-    (filtroModoFechaIngreso || filtroModoFechaEntrega || filtroModoFechaReparado) &&
+    rangoFechaActivo &&
+      (filtroModoFechaIngreso || filtroModoFechaEntrega) &&
       !filtroRangoSuperiorActivo,
   )
 
@@ -484,8 +489,8 @@ export default function MonitorOrdenesModulo({
       filtradas = reparacionesMonitor.filter((r) => repCoincideAvisoMonitor(r, filtroAvisoActivo))
     } else {
       const sel = estatusSeleccionados
-      const desde = String(fechaDesde ?? '').trim()
-      const hasta = String(fechaHasta ?? '').trim()
+      const desde = rangoFechaActivo ? String(fechaDesde ?? '').trim() : ''
+      const hasta = rangoFechaActivo ? String(fechaHasta ?? '').trim() : ''
       filtradas = reparacionesMonitor.filter((r) => {
         const rid = String(r.id)
         return repCoincideFiltroMonitor(r, {
@@ -548,15 +553,6 @@ export default function MonitorOrdenesModulo({
           Number(b.rep.id ?? 0),
         )
       }
-      if (modoFechaActivo === 'reparado') {
-        return compararPorYmd(
-          fechaReparadoYmd(a.rep),
-          fechaReparadoYmd(b.rep),
-          ordenFecha,
-          Number(a.rep.id ?? 0),
-          Number(b.rep.id ?? 0),
-        )
-      }
       return compararPorTiempo(a, b, (row) => row.t, ordenFecha)
     })
     return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({
@@ -571,11 +567,12 @@ export default function MonitorOrdenesModulo({
     tiposServicioSeleccionados,
     ordenFecha,
     tecnicoFiltro,
+    usarRangoFechas,
+    rangoFechasElegido,
     fechaDesde,
     fechaHasta,
     filtroModoFechaIngreso,
     filtroModoFechaEntrega,
-    filtroModoFechaReparado,
     filtroModoVerificadas,
     modoFechaActivo,
     busqueda,
@@ -601,7 +598,6 @@ export default function MonitorOrdenesModulo({
   function seleccionarSolo(est) {
     setFiltroModoFechaIngreso(false)
     setFiltroModoFechaEntrega(false)
-    setFiltroModoFechaReparado(false)
     setFiltroModoVerificadas(false)
     setEstatusSeleccionados(new Set([String(est).trim().toUpperCase()]))
   }
@@ -609,7 +605,6 @@ export default function MonitorOrdenesModulo({
   function desactivarModosFechaEspeciales(excepto = null) {
     if (excepto !== 'ingreso') setFiltroModoFechaIngreso(false)
     if (excepto !== 'entrega') setFiltroModoFechaEntrega(false)
-    if (excepto !== 'reparado') setFiltroModoFechaReparado(false)
     if (excepto !== 'verificadas') setFiltroModoVerificadas(false)
   }
 
@@ -625,14 +620,6 @@ export default function MonitorOrdenesModulo({
     setFiltroModoFechaEntrega((prev) => {
       const next = !prev
       if (next) desactivarModosFechaEspeciales('entrega')
-      return next
-    })
-  }
-
-  function toggleModoFechaReparado() {
-    setFiltroModoFechaReparado((prev) => {
-      const next = !prev
-      if (next) desactivarModosFechaEspeciales('reparado')
       return next
     })
   }
@@ -655,14 +642,27 @@ export default function MonitorOrdenesModulo({
     setFiltroModoFechaEntrega(true)
   }
 
-  function soloModoFechaReparado() {
-    desactivarModosFechaEspeciales('reparado')
-    setFiltroModoFechaReparado(true)
-  }
-
   function soloModoVerificadas() {
     desactivarModosFechaEspeciales('verificadas')
     setFiltroModoVerificadas(true)
+  }
+
+  function activarRangoFechas() {
+    setRangoFechasElegido(true)
+    setUsarRangoFechas(true)
+    setFiltroModoVerificadas(false)
+    if (!String(fechaDesde ?? '').trim() && !String(fechaHasta ?? '').trim()) {
+      const hoy = ymdHoyLocal() ?? ''
+      setFechaDesde(hoy)
+      setFechaHasta(hoy)
+    }
+  }
+
+  function desactivarRangoFechas() {
+    setRangoFechasElegido(true)
+    setUsarRangoFechas(false)
+    setFiltroModoFechaIngreso(false)
+    setFiltroModoFechaEntrega(false)
   }
 
   function toggleTipoServicio(tipo) {
@@ -716,11 +716,12 @@ export default function MonitorOrdenesModulo({
       tiposServicioSeleccionados: [...base.tiposServicioSeleccionados],
       ordenFecha: base.ordenFecha,
       tecnicoFiltro: base.tecnicoFiltro,
+      usarRangoFechas: base.usarRangoFechas,
+      rangoFechasElegido: base.rangoFechasElegido,
       fechaDesde: base.fechaDesde,
       fechaHasta: base.fechaHasta,
       filtroModoFechaIngreso: base.filtroModoFechaIngreso,
       filtroModoFechaEntrega: base.filtroModoFechaEntrega,
-      filtroModoFechaReparado: base.filtroModoFechaReparado,
       filtroModoVerificadas: base.filtroModoVerificadas,
       busqueda: base.busqueda,
     })
@@ -804,10 +805,9 @@ export default function MonitorOrdenesModulo({
 
   const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
   const filtroTecnicoActivo = tecnicoFiltro !== TECNICO_TODAS
-  const filtroRangoActivo = Boolean(String(fechaDesde ?? '').trim() || String(fechaHasta ?? '').trim())
+  const filtroRangoActivo = rangoFechaActivo
   const filtroIngresoActivo = filtroModoFechaIngreso
   const filtroEntregaActivo = filtroModoFechaEntrega
-  const filtroReparadoActivo = filtroModoFechaReparado
   const filtroVerificadasActivo = filtroModoVerificadas
   const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
   const busquedaTextoActivaUi =
@@ -971,6 +971,30 @@ export default function MonitorOrdenesModulo({
             >
               <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
               <span className="monitor-ordenes-filtros-grupo-titulo">Rango de fechas</span>
+              <div
+                className="cuentas-cliente-vista-bar monitor-ordenes-rango-modo-bar"
+                role="group"
+                aria-label="Usar o no rango de fechas"
+              >
+                <button
+                  type="button"
+                  className={`cuentas-cliente-vista-btn${rangoFechasElegido && !usarRangoFechas ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                  onClick={desactivarRangoFechas}
+                  aria-pressed={rangoFechasElegido && !usarRangoFechas}
+                >
+                  Sin rango de fechas
+                </button>
+                <button
+                  type="button"
+                  className={`cuentas-cliente-vista-btn${rangoFechasElegido && usarRangoFechas ? ' cuentas-cliente-vista-btn--active' : ''}`}
+                  onClick={activarRangoFechas}
+                  aria-pressed={rangoFechasElegido && usarRangoFechas}
+                >
+                  Con rango de fechas
+                </button>
+              </div>
+              {rangoFechaActivo ? (
+                <>
               <div className="monitor-ordenes-rango-inputs">
                 <label className="monitor-ordenes-label-inline monitor-ordenes-label-fecha monitor-ordenes-tile-inner">
                   <span>Desde</span>
@@ -1001,15 +1025,19 @@ export default function MonitorOrdenesModulo({
                     setFechaHasta('')
                   }}
                   disabled={!fechaDesde && !fechaHasta}
-                  title="Quitar filtro de rango de fechas"
-                  aria-label="Quitar filtro de rango de fechas"
+                  title="Quitar fechas del rango"
+                  aria-label="Quitar fechas del rango"
                 >
                   Limpiar fechas
                 </button>
               </div>
-              <div className="monitor-ordenes-rango-modos" role="group" aria-label="Filtrar por tipo de fecha en el rango">
+              <div
+                className="monitor-ordenes-rango-modos"
+                role="group"
+                aria-label="Filtrar por tipo de fecha en el rango"
+              >
                 <label
-                  key="fecha-registrado"
+                  key="entrada-equipos"
                   className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroIngresoActivo)}`}
                 >
                   <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
@@ -1019,7 +1047,7 @@ export default function MonitorOrdenesModulo({
                     checked={filtroModoFechaIngreso}
                     onChange={() => toggleModoFechaIngreso()}
                   />
-                  <span className="monitor-ordenes-check-text">Fecha registrado</span>
+                  <span className="monitor-ordenes-check-text">Entrada de equipos</span>
                   <button
                     type="button"
                     className="monitor-ordenes-solo"
@@ -1027,13 +1055,13 @@ export default function MonitorOrdenesModulo({
                       e.preventDefault()
                       soloModoFechaIngreso()
                     }}
-                    title="Órdenes con fecha_ingreso en el rango (todas las que entraron ese día, sin importar el estatus actual)."
+                    title="Órdenes con fecha de ingreso en el rango (equipos que entraron ese día, sin importar el estatus actual)."
                   >
                     Solo
                   </button>
                 </label>
                 <label
-                  key="fecha-entrega"
+                  key="salida-equipos"
                   className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroEntregaActivo)}`}
                 >
                   <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
@@ -1043,7 +1071,7 @@ export default function MonitorOrdenesModulo({
                     checked={filtroModoFechaEntrega}
                     onChange={() => toggleModoFechaEntrega()}
                   />
-                  <span className="monitor-ordenes-check-text">Fecha entrega</span>
+                  <span className="monitor-ordenes-check-text">Salida de equipos</span>
                   <button
                     type="button"
                     className="monitor-ordenes-solo"
@@ -1051,31 +1079,7 @@ export default function MonitorOrdenesModulo({
                       e.preventDefault()
                       soloModoFechaEntrega()
                     }}
-                    title="Órdenes con fecha_entrega en el rango (todas las entregadas ese día, sin importar los chips de estatus)."
-                  >
-                    Solo
-                  </button>
-                </label>
-                <label
-                  key="fecha-reparado"
-                  className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroReparadoActivo)}`}
-                >
-                  <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-                  <input
-                    type="checkbox"
-                    className="monitor-ordenes-check-input"
-                    checked={filtroModoFechaReparado}
-                    onChange={() => toggleModoFechaReparado()}
-                  />
-                  <span className="monitor-ordenes-check-text">Fecha reparado</span>
-                  <button
-                    type="button"
-                    className="monitor-ordenes-solo"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      soloModoFechaReparado()
-                    }}
-                    title="Órdenes con fecha_reparado en el rango (todas las que pasaron a reparado ese día, sin importar el estatus actual)."
+                    title="Órdenes con fecha de entrega en el rango (equipos entregados ese día, sin importar los chips de estatus)."
                   >
                     Solo
                   </button>
@@ -1088,12 +1092,15 @@ export default function MonitorOrdenesModulo({
               ) : null}
               {modoFechaSinRango ? (
                 <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--modos" role="alert">
-                  Indique «Desde» y/o «Hasta» arriba para usar «Fecha registrado», «Fecha entrega» o «Fecha reparado».
+                  Indique «Desde» y/o «Hasta» arriba para usar «Entrada de equipos» o «Salida de equipos».
                 </p>
+              ) : null}
+                </>
               ) : null}
             </div>
           </div>
 
+          {sinRangoFechasActivo ? (
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
             <div className="monitor-ordenes-estatus-grid monitor-ordenes-estatus-grid--orden">
@@ -1119,13 +1126,14 @@ export default function MonitorOrdenesModulo({
                     e.preventDefault()
                     soloModoVerificadas()
                   }}
-                  title="Solo órdenes verificadas listas para entrega. El rango Desde/Hasta filtra por fecha de verificación."
+                  title="Solo órdenes verificadas listas para entrega."
                 >
                   Solo
                 </button>
               </label>
             </div>
           </fieldset>
+          ) : null}
 
           <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide">
             <legend className="monitor-ordenes-legend">Tipo de servicio</legend>

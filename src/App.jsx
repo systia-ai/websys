@@ -553,6 +553,7 @@ function App() {
         <InventariosModulo
           supabase={supabase}
           puedeEliminar={puedeEliminar}
+          esAdmin={esRolAdmin(rolUsuario)}
           onHome={goBack}
           onError={(msg) => {
             setError(msg)
