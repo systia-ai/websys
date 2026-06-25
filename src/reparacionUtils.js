@@ -1,6 +1,6 @@
 import { ESTATUS_ORDEN, TIPOS_REPARACION } from './catalogos.js'
 import { sameId } from './clienteUtils.js'
-import { separarTecnicos } from './tecnicosCatalogo.js'
+import { separarTecnicos, corregirNombreTecnico } from './tecnicosCatalogo.js'
 
 /** Claves del catálogo en mayúsculas (SERVICIO, GARANTIA EPSON, GARANTIA SISTEBIT). */
 export const TIPOS_SERVICIO_CANONICOS = TIPOS_REPARACION.map((t) => String(t).trim().toUpperCase())
@@ -823,7 +823,7 @@ export function fechaReparadoFiltroYmd(rep) {
 
 /** ¿El técnico asignado a la orden coincide con el filtro del monitor? */
 function normalizarNombreTecnico(t) {
-  return String(t ?? '').trim().toUpperCase()
+  return corregirNombreTecnico(t)
 }
 
 /** Técnicos asignados en la orden (1 o 2, formato «JUAN» o «JUAN & VERO»). */

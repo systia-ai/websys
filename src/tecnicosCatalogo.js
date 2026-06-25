@@ -14,8 +14,18 @@ import { obtenerAppConfigCrudo } from './appConfigApi.js'
 const LS_KEY = 'sistefix_local_tecnicos'
 export const DEFAULT_TECNICOS = ['ANDRES', 'ARTURO', 'VERO', 'JUAN', 'MIGUEL', 'ZUMAYA']
 
+/** Nombres mal escritos → forma correcta en catálogo y órdenes. */
+export const CORRECCIONES_NOMBRE_TECNICO = {
+  JARETNY: 'JARENY',
+}
+
 function normalizar(t) {
   return String(t ?? '').trim().toUpperCase()
+}
+
+export function corregirNombreTecnico(n) {
+  const u = normalizar(n)
+  return CORRECCIONES_NOMBRE_TECNICO[u] ?? u
 }
 
 function ordenarTecnicos(lista) {
@@ -26,7 +36,7 @@ function unificarListas(...listas) {
   const set = new Set()
   for (const lista of listas) {
     for (const t of lista ?? []) {
-      const n = normalizar(t)
+      const n = corregirNombreTecnico(t)
       if (n) set.add(n)
     }
   }
@@ -58,7 +68,7 @@ export async function leerTecnicosRemotos(supabase) {
   try {
     const config = await obtenerAppConfigCrudo(supabase)
     if (!Array.isArray(config?.tecnicos)) return []
-    return config.tecnicos.map(normalizar).filter(Boolean)
+    return config.tecnicos.map((t) => corregirNombreTecnico(t)).filter(Boolean)
   } catch {
     return []
   }
@@ -87,23 +97,32 @@ export async function sincronizarTecnicosAlServidor(supabase, lista) {
 }
 
 export async function agregarTecnico(nombre, supabase = null) {
-  const n = normalizar(nombre)
+  const n = corregirNombreTecnico(nombre)
   if (!n) return leerTecnicos()
   const lista = leerTecnicos()
   if (lista.includes(n)) return lista
   return sincronizarTecnicosAlServidor(supabase, [...lista, n])
 }
 
+export async function renombrarTecnico(nombreAnterior, nombreNuevo, supabase = null) {
+  const ant = corregirNombreTecnico(nombreAnterior)
+  const neu = corregirNombreTecnico(nombreNuevo)
+  if (!ant || !neu || ant === neu) return leerTecnicos()
+  const lista = leerTecnicos().filter((t) => t !== ant)
+  if (!lista.includes(neu)) lista.push(neu)
+  return sincronizarTecnicosAlServidor(supabase, unificarListas(lista))
+}
+
 export async function eliminarTecnico(nombre, supabase = null) {
-  const n = normalizar(nombre)
+  const n = corregirNombreTecnico(nombre)
   const lista = leerTecnicos().filter((t) => t !== n)
   return sincronizarTecnicosAlServidor(supabase, lista)
 }
 
 /** Combina hasta 2 técnicos en una cadena con " & ". */
 export function combinarTecnicos(a, b) {
-  const x = normalizar(a)
-  const y = normalizar(b)
+  const x = corregirNombreTecnico(a)
+  const y = corregirNombreTecnico(b)
   if (x && y && x !== y) return `${x} & ${y}`
   return x || y || ''
 }
@@ -112,6 +131,6 @@ export function combinarTecnicos(a, b) {
 export function separarTecnicos(s) {
   const raw = String(s ?? '').trim()
   if (!raw) return ['', '']
-  const partes = raw.split(/\s*&\s*/).map(normalizar).filter(Boolean)
+  const partes = raw.split(/\s*&\s*/).map(corregirNombreTecnico).filter(Boolean)
   return [partes[0] ?? '', partes[1] ?? '']
 }
