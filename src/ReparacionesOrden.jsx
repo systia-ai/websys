@@ -1061,6 +1061,10 @@ export default function ReparacionesOrden({
         }, null),
       }
 
+      // Mayúsculas al guardar (la UI usa CSS text-transform para no romper el cursor).
+      if (row.descripcion_equipo) row.descripcion_equipo = String(row.descripcion_equipo).toUpperCase()
+      if (row.problemas_reportados) row.problemas_reportados = String(row.problemas_reportados).toUpperCase()
+
       existenteId = await buscarOrdenRecienteMismaSesion(cid, eid, problemasReportados, tipoReparacion)
       if (existenteId) {
         newId = existenteId
@@ -1495,14 +1499,17 @@ export default function ReparacionesOrden({
     const patch = {
       ...patchEstatusFechas,
       tecnico: combinarTecnicos(tecnico1, tecnico2),
-      descripcion_equipo: descripcionEquipo || null,
-      problemas_reportados: problemasReportados || null,
-      descripcion_solucion: descripcionSolucion ? descripcionSolucion.toUpperCase() : null,
+      descripcion_equipo: descripcionEquipo ? String(descripcionEquipo).toUpperCase() : null,
+      problemas_reportados: problemasReportados ? String(problemasReportados).toUpperCase() : null,
+      descripcion_solucion: descripcionSolucion ? String(descripcionSolucion).toUpperCase() : null,
       bitacora: bitacoraGuardar,
       tipo_reparacion: tipoReparacion || null,
       folio_epson: valorFolioEpsonGuardar(),
       niveles_tinta: niveles,
     }
+    if (patch.descripcion_equipo) setDescripcionEquipo(patch.descripcion_equipo)
+    if (patch.problemas_reportados) setProblemasReportados(patch.problemas_reportados)
+    if (patch.descripcion_solucion) setDescripcionSolucion(patch.descripcion_solucion)
     if (patch.fecha_entrega) {
       fechaEntregaRef.current = patch.fecha_entrega
       setFechaEntregaOrden(patch.fecha_entrega)
@@ -2287,8 +2294,9 @@ export default function ReparacionesOrden({
           <textarea
             rows={3}
             value={descripcionEquipo}
-            onChange={(e) => setDescripcionEquipo(e.target.value.toUpperCase())}
+            onChange={(e) => setDescripcionEquipo(e.target.value)}
             placeholder="Descripcion del equipo"
+            style={{ textTransform: 'uppercase' }}
           />
         </div>
 
@@ -2342,8 +2350,9 @@ export default function ReparacionesOrden({
           <textarea
             rows={3}
             value={problemasReportados}
-            onChange={(e) => setProblemasReportados(e.target.value.toUpperCase())}
+            onChange={(e) => setProblemasReportados(e.target.value)}
             placeholder="Problemas reportados"
+            style={{ textTransform: 'uppercase' }}
           />
         </div>
 
