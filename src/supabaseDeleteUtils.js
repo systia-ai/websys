@@ -58,6 +58,7 @@ async function eliminarReparacionSupabaseCascada(supabase, rid) {
     await deleteSupabaseOpcional(supabase, 'cuentas', (q) => q.eq('repara_id', rid))
   }
   await deleteSupabaseOpcional(supabase, 'reparamov', (q) => q.eq('repara_id', rid))
+  await deleteSupabaseOpcional(supabase, 'reparacion_fotos', (q) => q.eq('repara_id', rid))
   await deleteSupabaseVerificado(supabase, 'reparaciones', (q) => q.eq('id', rid))
 }
 

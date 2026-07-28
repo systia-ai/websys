@@ -8,6 +8,11 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import ModalAlerta from './ModalAlerta.jsx'
 import { cargarTecnicosUnificados, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import ReparacionFotosPanel, { revocarPendientesFotos } from './ReparacionFotosPanel.jsx'
+import {
+  limpiarStorageFotosReparacion,
+  subirFotosReparacionLote,
+} from './reparacionFotosApi.js'
 import {
   abrirWhatsAppAnticipo,
   abrirWhatsAppLiquidacion,
@@ -243,6 +248,9 @@ export default function ReparacionesOrden({
   const [bitacora, setBitacora] = useState('')
   const [bitacoraNueva, setBitacoraNueva] = useState('')
   const [guardandoBitacora, setGuardandoBitacora] = useState(false)
+  const [fotosPendientes, setFotosPendientes] = useState([])
+  const fotosPendientesRef = useRef([])
+  fotosPendientesRef.current = fotosPendientes
   const [verificadoEntrega, setVerificadoEntrega] = useState(false)
   const [fechaVerificacionEntrega, setFechaVerificacionEntrega] = useState(null)
   const [marcandoVerificacion, setMarcandoVerificacion] = useState(false)
@@ -733,6 +741,13 @@ export default function ReparacionesOrden({
     [],
   )
 
+  useEffect(
+    () => () => {
+      revocarPendientesFotos(fotosPendientesRef.current)
+    },
+    [],
+  )
+
   function mostrarExitoWhatsApp(tipo) {
     setWaEnviados((prev) => ({ ...prev, [tipo]: true }))
     setWaExitoVisible(true)
@@ -1098,6 +1113,35 @@ export default function ReparacionesOrden({
       setFechaIngresoOrden(ymdFechaEntregaParaGuardar(null))
       estatusPersistidoRef.current = estatus
       registrarOrdenCreadaEnSesion(newId)
+
+      const archivosPendientes = fotosPendientes.map((p) => p.file).filter(Boolean)
+      if (archivosPendientes.length > 0) {
+        try {
+          const { fotos: subidas, errores } = await subirFotosReparacionLote(
+            supabase,
+            newId,
+            archivosPendientes,
+          )
+          revocarPendientesFotos(fotosPendientes)
+          setFotosPendientes([])
+          if (errores.length > 0) {
+            onError?.(
+              errores.length === 1
+                ? `Orden creada, pero no se subió ${errores[0].nombre}: ${errores[0].error}`
+                : `Orden creada, pero fallaron ${errores.length} foto(s)`,
+            )
+          } else if (subidas.length > 0) {
+            onNotice?.(
+              subidas.length === 1
+                ? 'Orden registrada con 1 foto'
+                : `Orden registrada con ${subidas.length} fotos`,
+            )
+          }
+        } catch (eFoto) {
+          onError?.(`Orden creada, pero no se pudieron subir las fotos: ${eFoto.message}`)
+        }
+      }
+
       const msgDuplicadoEvitado = existenteId
         ? `Ya existía la orden #${newId} con los mismos datos (se evitó un duplicado).`
         : `Se registró la orden de servicio con ID: ${newId}.`
@@ -1668,6 +1712,11 @@ export default function ReparacionesOrden({
     }
     setEliminandoOrden(true)
     try {
+      try {
+        await limpiarStorageFotosReparacion(supabase, id)
+      } catch (eFoto) {
+        console.warn('No se pudieron limpiar fotos de storage:', eFoto?.message ?? eFoto)
+      }
       await eliminarReparacionCompleta(supabase, id, {
         cuentas: LS_CUENTAS,
         pagos: LS_PAGOS,
@@ -2544,6 +2593,16 @@ export default function ReparacionesOrden({
             />
           </div>
         )}
+
+        <ReparacionFotosPanel
+          supabase={supabase}
+          reparaId={idReparacion ?? (esOrdenExistente ? Number(repIdStr) : null)}
+          pendientes={fotosPendientes}
+          onPendientesChange={setFotosPendientes}
+          onNotice={onNotice}
+          onError={onError}
+          disabled={guardandoOrden || eliminandoOrden}
+        />
 
         {(esOrdenExistente || idReparacion != null) && (
           <div className="rep-block rep-block--bitacora">
