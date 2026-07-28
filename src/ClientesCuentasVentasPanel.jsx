@@ -110,6 +110,7 @@ export default function ClientesCuentasVentasPanel({
         pagadaActiva,
         tipoPago: tipoPagoVisible(cuenta, pagosC),
         ordenRef,
+        folioFactura: String(cuenta.folio_factura ?? cuenta.folioFactura ?? '').trim() || null,
       }
     })
   }, [cuentas, pagosPorCuenta])
@@ -199,6 +200,7 @@ export default function ClientesCuentasVentasPanel({
                     <th>Total</th>
                     <th>Saldo</th>
                     <th>Estatus</th>
+                    <th>Factura</th>
                     <th>Tipo pago</th>
                     <th aria-label="Abrir cuenta">Abrir</th>
                     {puedeEliminar ? <th aria-label="Eliminar cuenta">Eliminar</th> : null}
@@ -238,6 +240,13 @@ export default function ClientesCuentasVentasPanel({
                         >
                           {f.pagadaActiva ? 'Pagada (activa)' : f.estatus}
                         </span>
+                      </td>
+                      <td>
+                        {f.folioFactura ? (
+                          <span className="cuenta-folio-factura-badge">{f.folioFactura}</span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td>{f.tipoPago}</td>
                       <td className="cuentas-cliente-tabla-acciones">
@@ -288,6 +297,11 @@ export default function ClientesCuentasVentasPanel({
                       {f.pagadaActiva ? 'Pagada (activa)' : f.estatus}
                     </span>
                     <strong>💳 Cuenta #{f.idCuenta}</strong>
+                    {f.folioFactura ? (
+                      <span className="cuenta-folio-factura-badge cuenta-folio-factura-badge--tarjeta">
+                        Factura {f.folioFactura}
+                      </span>
+                    ) : null}
                     {f.ordenRef ? (
                       <span className="rep-activa-dato muted small">
                         <span className="rep-activa-etiqueta">Orden:</span> {f.ordenRef}

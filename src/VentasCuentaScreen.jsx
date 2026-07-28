@@ -16,6 +16,13 @@ import {
 } from './productosRecientesVentas.js'
 import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
+  activarFacturaEnCuenta,
+  cuentaMarcadaParaFactura,
+  desactivarFacturaEnCuenta,
+  folioFacturaDeCuenta,
+  patchFolioFacturaManual,
+} from './cuentaFacturaUtils.js'
+import {
   actualizarCuentaSupabase,
   aYmdLocalDesdeRaw,
   entregarOrdenVinculadaSiCuentaLiquidada,
@@ -344,12 +351,22 @@ export default function VentasCuentaScreen({
   const [modalImprimirRecibo, setModalImprimirRecibo] = useState(false)
   const [modoRecibo, setModoRecibo] = useState('cuenta')
   const [fechaReciboPagos, setFechaReciboPagos] = useState(() => ymdHoyLocal())
+  const [guardandoFactura, setGuardandoFactura] = useState(false)
+  const [folioFacturaInput, setFolioFacturaInput] = useState('')
+  const folioFacturaInputRef = useRef(null)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
 
   const cuentaId = cuentaInfo?.id ?? cuentaInicial?.id ?? null
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
   const cuentaEstatus = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '')
+  const folioFacturaActual = folioFacturaDeCuenta(cuentaInfo) || folioFacturaDeCuenta(cuentaInicial)
+  const llevaFacturaActual = cuentaMarcadaParaFactura(cuentaInfo ?? cuentaInicial)
+
+  useEffect(() => {
+    setFolioFacturaInput(folioFacturaActual ?? '')
+  }, [cuentaId, folioFacturaActual])
+
   const totalCargos = useMemo(() => {
     const fallback = Number(cuentaInfo?.total ?? cuentaInicial?.total ?? 0)
     return totalVentaSyncDesdeLineas(lineas, fallback)
@@ -1253,6 +1270,69 @@ export default function VentasCuentaScreen({
     }
   }
 
+  async function persistirPatchFactura(patch, { aviso } = {}) {
+    if (!esCuentaExistente || !cuentaId) return false
+    if (supabase) {
+      await actualizarCuentaSupabase(supabase, cuentaId, patch)
+      const refreshed = await recargarCuentaInfoDesdeServidor(cuentaId)
+      if (refreshed) setCuentaInfo(refreshed)
+      else setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patch }))
+    } else {
+      const list = readLs(LS_CUENTAS, [])
+      writeLs(
+        LS_CUENTAS,
+        list.map((c) => (sameId(c.id, cuentaId) ? { ...c, ...patch } : c)),
+      )
+      setCuentaInfo((prev) => ({ ...(prev ?? { id: cuentaId }), ...patch }))
+    }
+    if (aviso) onNotice?.(aviso)
+    return true
+  }
+
+  async function toggleFacturaCuenta(activar) {
+    if (!esCuentaExistente || !cuentaId || guardandoFactura) return
+    setGuardandoFactura(true)
+    try {
+      const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
+      if (activar) {
+        const patch = activarFacturaEnCuenta(base, folioFacturaInput)
+        await persistirPatchFactura(patch, {
+          aviso: patch.folio_factura
+            ? `Cuenta marcada para factura · Folio ${patch.folio_factura}`
+            : 'Cuenta marcada para factura. Escriba el folio fiscal.',
+        })
+        setTimeout(() => folioFacturaInputRef.current?.focus(), 50)
+      } else {
+        const patch = desactivarFacturaEnCuenta(base)
+        await persistirPatchFactura(patch, { aviso: 'Factura desmarcada' })
+      }
+    } catch (e) {
+      onError?.(`No se pudo actualizar la factura: ${e.message}`)
+    } finally {
+      setGuardandoFactura(false)
+    }
+  }
+
+  async function guardarFolioFacturaManual() {
+    if (!esCuentaExistente || !cuentaId || guardandoFactura) return
+    setGuardandoFactura(true)
+    try {
+      const patch = patchFolioFacturaManual(folioFacturaInput, { llevaFactura: true })
+      await persistirPatchFactura(patch, {
+        aviso: `Folio fiscal guardado: ${patch.folio_factura}`,
+      })
+    } catch (e) {
+      const msg = String(e?.message ?? e)
+      if (/unique|duplicate|folio_factura/i.test(msg)) {
+        onError?.('Ese folio fiscal ya está registrado en otra cuenta.')
+      } else {
+        onError?.(msg.includes('Escriba') ? msg : `No se pudo guardar el folio: ${msg}`)
+      }
+    } finally {
+      setGuardandoFactura(false)
+    }
+  }
+
   function abrirModalNotificarCliente() {
     setErrorNotificacion('')
     setMensajeNotificacionEditado(
@@ -1388,6 +1468,7 @@ export default function VentasCuentaScreen({
         total: totalPdf,
         saldo: saldoPdf,
         estatus: cuentaEstatus || '—',
+        folioFactura: folioFacturaActual || null,
         lineas: lineasPdf,
         tituloDocumento: esPagosFecha ? 'COMPROBANTE DE PAGO' : 'COMPROBANTE',
         subtitulo: esPagosFecha ? `Pagos del ${fechaTxt}` : null,
@@ -1604,6 +1685,72 @@ export default function VentasCuentaScreen({
           <span>Estatus de la Cuenta</span>
           <input value={cuentaEstatus || '—'} readOnly className="readonly-field" />
         </label>
+
+        {esCuentaExistente ? (
+          <div className="ventas-factura-block">
+            <label
+              className={`ventas-factura-card${llevaFacturaActual ? ' activo' : ''}${guardandoFactura ? ' disabled' : ''}`}
+              title="Marque si esta cuenta lleva factura"
+            >
+              <input
+                type="checkbox"
+                className="ventas-factura-input"
+                checked={llevaFacturaActual}
+                disabled={guardandoFactura}
+                onChange={(e) => void toggleFacturaCuenta(e.target.checked)}
+              />
+              <span className="ventas-factura-check" aria-hidden="true">
+                ✓
+              </span>
+              <span className="ventas-factura-texto">
+                <span className="ventas-factura-titulo">Lleva factura</span>
+                <span className="ventas-factura-sub">
+                  {guardandoFactura
+                    ? 'Guardando…'
+                    : llevaFacturaActual
+                      ? folioFacturaActual
+                        ? `Folio: ${folioFacturaActual}`
+                        : 'Escriba el folio fiscal de la factura'
+                      : 'Marque para capturar el folio fiscal'}
+                </span>
+              </span>
+            </label>
+            {llevaFacturaActual ? (
+              <div className="ventas-factura-folio-form">
+                <label className="ventas-factura-folio-label" htmlFor="ventas-folio-factura">
+                  Folio fiscal
+                </label>
+                <div className="ventas-factura-folio-row">
+                  <input
+                    ref={folioFacturaInputRef}
+                    id="ventas-folio-factura"
+                    type="text"
+                    className="ventas-factura-folio-input"
+                    value={folioFacturaInput}
+                    disabled={guardandoFactura}
+                    placeholder="Ej. A-1234 o UUID del CFDI"
+                    autoComplete="off"
+                    onChange={(e) => setFolioFacturaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void guardarFolioFacturaManual()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary ventas-factura-folio-guardar"
+                    disabled={guardandoFactura || !String(folioFacturaInput ?? '').trim()}
+                    onClick={() => void guardarFolioFacturaManual()}
+                  >
+                    {guardandoFactura ? 'Guardando…' : 'Guardar folio'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {esGarantiaSinCobro ? (
           <p className="ventas-garantia-sin-cobro-aviso" role="status">
@@ -2051,7 +2198,9 @@ export default function VentasCuentaScreen({
                           </td>
                           <td className="ventas-selector-productos-col-desc">{p.descripcion || '—'}</td>
                           <td className="ventas-selector-productos-col-stock">{etiquetaExistencia(p)}</td>
-                          <td className="inventarios-lista-col-precio">${Number(p.precio_venta ?? 0).toFixed(2)}</td>
+                          <td className="inventarios-lista-col-precio inventarios-lista-col-precio--venta">
+                            ${Number(p.precio_venta ?? 0).toFixed(2)}
+                          </td>
                           <td className="cuentas-cliente-tabla-acciones">
                             <button
                               type="button"
@@ -2080,7 +2229,9 @@ export default function VentasCuentaScreen({
                         <strong>{p.serie}</strong>
                         <span className="muted small">{p.descripcion}</span>
                         <span className="muted small">Existencia: {etiquetaExistencia(p)}</span>
-                        <span className="muted small">${Number(p.precio_venta ?? 0).toFixed(2)}</span>
+                        <span className="inventario-card-precio inventario-card-precio--venta">
+                          Venta ${Number(p.precio_venta ?? 0).toFixed(2)}
+                        </span>
                       </button>
                     </li>
                   ))}

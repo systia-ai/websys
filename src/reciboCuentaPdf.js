@@ -100,6 +100,10 @@ function drawFilaClienteOrdenEquipo(pdf, p, x, y, totalW) {
   if (equipoStr) {
     blocks.push({ label: 'Equipo', value: equipoStr, theme: TEMA.descripcion, min: 22, max: 58, campo: false })
   }
+  const folioFactura = String(p.folioFactura ?? p.folio_factura ?? '').trim()
+  if (folioFactura) {
+    blocks.push({ label: 'Folio factura', value: folioFactura, theme: TEMA.orden, min: 22, max: 32, campo: false })
+  }
 
   const gapsTotal = GAP_CAMPOS_RECIBO * (blocks.length - 1)
   let widths = blocks.map((b) => {

@@ -83,6 +83,7 @@ export default function CuentasClientePanel({
           cuenta.repara_id != null && cuenta.repara_id !== '' && String(cuenta.repara_id) !== String(cuenta.id)
             ? String(cuenta.repara_id)
             : null,
+        folioFactura: String(cuenta.folio_factura ?? cuenta.folioFactura ?? '').trim() || null,
       }
     })
   }, [cuentas, pagosPorCuenta])
@@ -164,6 +165,7 @@ export default function CuentasClientePanel({
                     <th>Total</th>
                     <th>Saldo</th>
                     <th>Estatus</th>
+                    <th>Factura</th>
                     <th>Tipo pago</th>
                     <th aria-label="Abrir cuenta">Abrir</th>
                   </tr>
@@ -199,6 +201,13 @@ export default function CuentasClientePanel({
                       <td>
                         <span className="cuentas-cliente-estatus-pill">{f.estatus}</span>
                       </td>
+                      <td>
+                        {f.folioFactura ? (
+                          <span className="cuenta-folio-factura-badge">{f.folioFactura}</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td>{f.tipoPago}</td>
                       <td className="cuentas-cliente-tabla-acciones">
                         <button
@@ -228,6 +237,11 @@ export default function CuentasClientePanel({
                     onClick={() => onSelectCuenta?.(f.cuenta)}
                   >
                     <strong className="cuenta-tarjeta-titulo">Cuenta #{f.idCuenta}</strong>
+                    {f.folioFactura ? (
+                      <span className="cuenta-folio-factura-badge cuenta-folio-factura-badge--tarjeta">
+                        Factura {f.folioFactura}
+                      </span>
+                    ) : null}
                     {f.ordenRef ? (
                       <span className="cuenta-tarjeta-linea muted small">Orden de servicio: {f.ordenRef}</span>
                     ) : null}
@@ -246,6 +260,7 @@ export default function CuentasClientePanel({
                       </span>
                     </span>
                     {lineaTarjeta('Estatus', f.estatus)}
+                    {f.folioFactura ? lineaTarjeta('Folio factura', f.folioFactura) : null}
                     {lineaTarjeta('Tipo de pago', f.tipoPago)}
                   </button>
                 </li>

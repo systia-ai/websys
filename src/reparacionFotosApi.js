@@ -1,17 +1,7 @@
-/** Fotos del equipo ligadas a órdenes de servicio (bucket `orden-fotos`). */
+/** Adjuntos de órdenes de servicio (bucket `orden-fotos`: imágenes, PDF, etc.). */
 
 export const BUCKET_ORDEN_FOTOS = 'orden-fotos'
-export const LS_REP_FOTOS = 'sistefix_local_reparacion_fotos'
-
-const TIPOS_IMAGEN = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-  'image/heif',
-  'image/gif',
-])
+export const LS_REP_FOTOS = 'sistebit_local_reparacion_fotos'
 
 function readLs(key, fb) {
   try {
@@ -29,18 +19,17 @@ function nextLocalId() {
   return Date.now() + Math.floor(Math.random() * 1000)
 }
 
-function esImagenAceptada(file) {
-  if (!file) return false
-  if (file.type && TIPOS_IMAGEN.has(file.type)) return true
-  // Algunos móviles no reportan MIME; aceptar por extensión.
-  const n = String(file.name ?? '').toLowerCase()
-  return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(n)
+export function esMimeImagen(mime, nombre = '') {
+  const m = String(mime ?? '').toLowerCase()
+  if (m.startsWith('image/')) return true
+  return /\.(jpe?g|png|webp|gif|heic|heif|bmp|svg)$/i.test(String(nombre))
 }
 
-export function validarArchivoFotoOrden(file) {
+export function validarArchivoAdjuntoOrden(file) {
   if (!file) throw new Error('No se seleccionó archivo')
-  if (!esImagenAceptada(file)) {
-    throw new Error('Solo se permiten imágenes (JPG, PNG, WEBP, HEIC, GIF)')
+  // Cualquier tipo (png, jpg, pdf, doc, etc.); solo exigir que exista el archivo.
+  if (file.size != null && Number(file.size) < 0) {
+    throw new Error('Archivo inválido')
   }
 }
 
@@ -48,11 +37,25 @@ function extensionArchivo(file) {
   const n = String(file?.name ?? '')
   const m = n.match(/\.([a-z0-9]+)$/i)
   if (m) return m[1].toLowerCase()
-  if (file?.type === 'image/png') return 'png'
-  if (file?.type === 'image/webp') return 'webp'
-  if (file?.type === 'image/gif') return 'gif'
-  if (file?.type === 'image/heic' || file?.type === 'image/heif') return 'heic'
-  return 'jpg'
+  const t = String(file?.type ?? '').toLowerCase()
+  if (t === 'image/png') return 'png'
+  if (t === 'image/webp') return 'webp'
+  if (t === 'image/gif') return 'gif'
+  if (t === 'application/pdf') return 'pdf'
+  if (t === 'image/jpeg' || t === 'image/jpg') return 'jpg'
+  if (t.includes('word')) return 'docx'
+  if (t.includes('sheet') || t.includes('excel')) return 'xlsx'
+  return 'bin'
+}
+
+function contentTypeArchivo(file, ext) {
+  if (file?.type) return file.type
+  if (ext === 'pdf') return 'application/pdf'
+  if (ext === 'png') return 'image/png'
+  if (ext === 'webp') return 'image/webp'
+  if (ext === 'gif') return 'image/gif'
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+  return 'application/octet-stream'
 }
 
 function uuidPath() {
@@ -62,26 +65,31 @@ function uuidPath() {
 
 export function urlPublicaFotoOrden(supabase, storagePath) {
   if (!storagePath) return null
-  if (String(storagePath).startsWith('data:')) return storagePath
+  if (String(storagePath).startsWith('data:') || String(storagePath).startsWith('blob:')) {
+    return storagePath
+  }
   if (!supabase?.storage) return null
   const { data } = supabase.storage.from(BUCKET_ORDEN_FOTOS).getPublicUrl(storagePath)
   return data?.publicUrl ? `${data.publicUrl}?v=${encodeURIComponent(storagePath)}` : null
 }
 
 function mapFilaFoto(row, supabase) {
+  const mime = row.mime ?? ''
+  const nombre = row.nombre_archivo ?? ''
   return {
     id: row.id,
     reparaId: row.repara_id,
     storagePath: row.storage_path,
-    nombreArchivo: row.nombre_archivo ?? '',
-    mime: row.mime ?? '',
+    nombreArchivo: nombre,
+    mime,
     bytes: row.bytes ?? null,
     createdAt: row.created_at ?? null,
+    esImagen: esMimeImagen(mime, nombre),
     url: urlPublicaFotoOrden(supabase, row.storage_path) ?? row.storage_path,
   }
 }
 
-/** Lista fotos guardadas de una orden. */
+/** Lista adjuntos guardados de una orden. */
 export async function listarFotosReparacion(supabase, reparaId) {
   const rid = Number(reparaId)
   if (!Number.isFinite(rid) || rid <= 0) return []
@@ -112,9 +120,27 @@ function fileToDataUrl(file) {
   })
 }
 
-/** Sube una foto y registra metadatos. */
+function mensajeErrorStorage(error) {
+  const msg = String(error?.message ?? error ?? '')
+  const low = msg.toLowerCase()
+  if (low.includes('bucket') || low.includes('not found') || low.includes('does not exist')) {
+    return 'Falta configurar el almacenamiento de adjuntos en Supabase (migración orden-fotos).'
+  }
+  if (low.includes('mime') || low.includes('not allowed') || low.includes('invalid')) {
+    return `Tipo de archivo no permitido en el servidor: ${msg}`
+  }
+  if (low.includes('row-level security') || low.includes('rls') || low.includes('permission')) {
+    return 'Sin permiso para subir archivos. Revise sesión o políticas RLS.'
+  }
+  if (low.includes('reparacion_fotos') || low.includes('relation') || low.includes('schema cache')) {
+    return 'Falta la tabla reparacion_fotos en Supabase. Aplique la migración de adjuntos.'
+  }
+  return msg || 'Error al subir archivo'
+}
+
+/** Sube un adjunto y registra metadatos. */
 export async function subirFotoReparacion(supabase, reparaId, file) {
-  validarArchivoFotoOrden(file)
+  validarArchivoAdjuntoOrden(file)
   const rid = Number(reparaId)
   if (!Number.isFinite(rid) || rid <= 0) throw new Error('ID de orden inválido')
 
@@ -124,8 +150,8 @@ export async function subirFotoReparacion(supabase, reparaId, file) {
       id: nextLocalId(),
       repara_id: rid,
       storage_path: dataUrl,
-      nombre_archivo: file.name || 'foto.jpg',
-      mime: file.type || 'image/jpeg',
+      nombre_archivo: file.name || 'archivo',
+      mime: file.type || 'application/octet-stream',
       bytes: file.size ?? null,
       created_at: new Date().toISOString(),
     }
@@ -135,14 +161,14 @@ export async function subirFotoReparacion(supabase, reparaId, file) {
 
   const ext = extensionArchivo(file)
   const storagePath = `${rid}/${uuidPath()}.${ext}`
-  const contentType = file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`
+  const contentType = contentTypeArchivo(file, ext)
 
   const { error: upErr } = await supabase.storage.from(BUCKET_ORDEN_FOTOS).upload(storagePath, file, {
     upsert: false,
     contentType,
     cacheControl: '3600',
   })
-  if (upErr) throw upErr
+  if (upErr) throw new Error(mensajeErrorStorage(upErr))
 
   let createdBy = null
   try {
@@ -155,7 +181,7 @@ export async function subirFotoReparacion(supabase, reparaId, file) {
   const meta = {
     repara_id: rid,
     storage_path: storagePath,
-    nombre_archivo: file.name || `foto.${ext}`,
+    nombre_archivo: file.name || `archivo.${ext}`,
     mime: contentType,
     bytes: file.size ?? null,
     created_by: createdBy,
@@ -164,12 +190,12 @@ export async function subirFotoReparacion(supabase, reparaId, file) {
   const { data, error } = await supabase.from('reparacion_fotos').insert(meta).select('*').single()
   if (error) {
     await supabase.storage.from(BUCKET_ORDEN_FOTOS).remove([storagePath])
-    throw error
+    throw new Error(mensajeErrorStorage(error))
   }
   return mapFilaFoto(data, supabase)
 }
 
-/** Sube varias fotos; continúa con el resto si alguna falla. */
+/** Sube varios adjuntos; continúa con el resto si alguno falla. */
 export async function subirFotosReparacionLote(supabase, reparaId, files) {
   const resultados = []
   const errores = []
@@ -183,9 +209,9 @@ export async function subirFotosReparacionLote(supabase, reparaId, files) {
   return { fotos: resultados, errores }
 }
 
-/** Elimina foto (storage + fila). */
+/** Elimina adjunto (storage + fila). */
 export async function eliminarFotoReparacion(supabase, foto) {
-  if (!foto?.id) throw new Error('Foto inválida')
+  if (!foto?.id) throw new Error('Archivo inválido')
 
   if (!supabase) {
     writeLs(
@@ -197,9 +223,9 @@ export async function eliminarFotoReparacion(supabase, foto) {
 
   const path = foto.storagePath
   const { error } = await supabase.from('reparacion_fotos').delete().eq('id', foto.id)
-  if (error) throw error
+  if (error) throw new Error(mensajeErrorStorage(error))
 
-  if (path && !String(path).startsWith('data:')) {
+  if (path && !String(path).startsWith('data:') && !String(path).startsWith('blob:')) {
     await supabase.storage.from(BUCKET_ORDEN_FOTOS).remove([path])
   }
 }
@@ -222,4 +248,9 @@ export async function limpiarStorageFotosReparacion(supabase, reparaId) {
   if (paths.length > 0) {
     await supabase.storage.from(BUCKET_ORDEN_FOTOS).remove(paths)
   }
+}
+
+/** @deprecated usar validarArchivoAdjuntoOrden */
+export function validarArchivoFotoOrden(file) {
+  return validarArchivoAdjuntoOrden(file)
 }

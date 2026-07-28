@@ -1822,6 +1822,16 @@ export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
       payload = rest
       continue
     }
+    if (payload.lleva_factura != null && esErrorColumnaDesconocida(error, 'lleva_factura')) {
+      const { lleva_factura: _lf, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if (payload.folio_factura != null && esErrorColumnaDesconocida(error, 'folio_factura')) {
+      const { folio_factura: _ff, ...rest } = payload
+      payload = rest
+      continue
+    }
     throw error
   }
   throw new Error('No se pudo actualizar la cuenta tras varios intentos.')

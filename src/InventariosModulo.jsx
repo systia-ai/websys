@@ -105,6 +105,30 @@ function toIntOrNull(v) {
   return Number.isFinite(n) ? n : null
 }
 
+/** Lee precio de producto desde campos conocidos (BD / variantes). */
+function leerPrecioProducto(p, ...claves) {
+  if (!p || typeof p !== 'object') return null
+  for (const k of claves) {
+    if (p[k] == null || p[k] === '') continue
+    const n = Number(String(p[k]).trim().replace(/[$\s]/g, '').replace(',', '.'))
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function formatDineroInventario(n) {
+  if (n == null || !Number.isFinite(n)) return '—'
+  return `$${n.toFixed(2)}`
+}
+
+function precioCompraProducto(p) {
+  return leerPrecioProducto(p, 'precio_compra', 'precioCompra', 'preciocompra', 'costo')
+}
+
+function precioVentaProducto(p) {
+  return leerPrecioProducto(p, 'precio_venta', 'precioVenta', 'precioventa', 'precio')
+}
+
 /** Orden A→Z solo por descripción (la serie no influye). */
 function compararProductosPorDescripcion(a, b) {
   const da = String(a?.descripcion ?? '').trim()
@@ -280,8 +304,12 @@ export default function InventariosModulo({
     setSerie(String(p.serie ?? '').toUpperCase())
     setDescripcion(String(p.descripcion ?? '').toUpperCase())
     setExistencia(p.existencia != null && p.existencia !== '' ? String(p.existencia) : '')
-    setPrecioCompra(p.precio_compra != null && p.precio_compra !== '' ? String(p.precio_compra) : '')
-    setPrecioVenta(p.precio_venta != null && p.precio_venta !== '' ? String(p.precio_venta) : '')
+    setPrecioCompra(
+      precioCompraProducto(p) != null ? String(precioCompraProducto(p)) : '',
+    )
+    setPrecioVenta(
+      precioVentaProducto(p) != null ? String(precioVentaProducto(p)) : '',
+    )
     setContable(esProductoContable(p))
     setDialogo(true)
   }
@@ -666,8 +694,8 @@ export default function InventariosModulo({
                   <th>Serie</th>
                   <th>Descripción</th>
                   <th>Stock</th>
-                  <th>P. compra</th>
                   <th>P. venta</th>
+                  <th>P. compra</th>
                   <th className="inventarios-lista-col-eliminar" aria-label="Eliminar">
                     🗑️
                   </th>
@@ -716,8 +744,12 @@ export default function InventariosModulo({
                           <span className="inventarios-badge-servicio-tabla">Servicio</span>
                         )}
                       </td>
-                      <td className="inventarios-lista-col-precio">${Number(p.precio_compra ?? 0).toFixed(2)}</td>
-                      <td className="inventarios-lista-col-precio">${Number(p.precio_venta ?? 0).toFixed(2)}</td>
+                      <td className="inventarios-lista-col-precio inventarios-lista-col-precio--venta">
+                        {formatDineroInventario(precioVentaProducto(p))}
+                      </td>
+                      <td className="inventarios-lista-col-precio inventarios-lista-col-precio--compra">
+                        {formatDineroInventario(precioCompraProducto(p))}
+                      </td>
                       <td className="cuentas-cliente-tabla-acciones inventarios-lista-tabla-acciones inventarios-lista-col-eliminar">
                         <button
                           type="button"
@@ -753,8 +785,13 @@ export default function InventariosModulo({
                       <span className="inventario-badge-servicio">Servicio · sin inventario</span>
                     )}
                   </span>
-                  <span className="muted small">
-                    Compra ${Number(p.precio_compra ?? 0).toFixed(2)} · Venta ${Number(p.precio_venta ?? 0).toFixed(2)}
+                  <span className="inventario-card-precios">
+                    <span className="inventario-card-precio inventario-card-precio--venta">
+                      Venta {formatDineroInventario(precioVentaProducto(p))}
+                    </span>
+                    <span className="inventario-card-precio inventario-card-precio--compra">
+                      Compra {formatDineroInventario(precioCompraProducto(p))}
+                    </span>
                   </span>
                   </span>
                 </button>
