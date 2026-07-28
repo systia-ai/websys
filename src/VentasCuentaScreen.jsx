@@ -47,7 +47,7 @@ import {
   vincularCuentaAOrdenSupabase,
   ymdHoyLocal,
 } from './reparacionUtils.js'
-import { buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
+import { anexarNotasAlMensajeNotificacion, buildMensajeNotificacionCuentaCliente } from './cuentaNotificacionMensaje.js'
 import { buildWhatsAppUrl } from './whatsappUtils.js'
 import { printReciboCuentaPdf, RECIBO_PRINT_HINT } from './reciboCuentaPdf.js'
 import ModalAlerta from './ModalAlerta.jsx'
@@ -337,6 +337,7 @@ export default function VentasCuentaScreen({
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [modalNotificarCliente, setModalNotificarCliente] = useState(false)
   const [mensajeNotificacionEditado, setMensajeNotificacionEditado] = useState('')
+  const [notasNotificacion, setNotasNotificacion] = useState('')
   const [confirmandoEnvioNotificacion, setConfirmandoEnvioNotificacion] = useState(false)
   const [errorNotificacion, setErrorNotificacion] = useState('')
   const [modalExitoNotificacion, setModalExitoNotificacion] = useState(false)
@@ -1333,8 +1334,13 @@ export default function VentasCuentaScreen({
     }
   }
 
+  function mensajeNotificacionFinal() {
+    return anexarNotasAlMensajeNotificacion(mensajeNotificacionEditado, notasNotificacion)
+  }
+
   function abrirModalNotificarCliente() {
     setErrorNotificacion('')
+    setNotasNotificacion('')
     setMensajeNotificacionEditado(
       buildMensajeNotificacionCuentaCliente({
         nombreCliente: cliente.nombre,
@@ -1346,7 +1352,7 @@ export default function VentasCuentaScreen({
   }
 
   async function copiarMensajeNotificacion() {
-    const texto = mensajeNotificacionEditado.trim()
+    const texto = mensajeNotificacionFinal().trim()
     if (!texto) {
       onError?.('El mensaje está vacío')
       return
@@ -1360,7 +1366,7 @@ export default function VentasCuentaScreen({
   }
 
   function enviarNotificacionWhatsApp() {
-    const texto = mensajeNotificacionEditado.trim()
+    const texto = mensajeNotificacionFinal().trim()
     if (!texto) {
       onError?.('El mensaje está vacío')
       return
@@ -2437,7 +2443,7 @@ export default function VentasCuentaScreen({
           </>
         }
       >
-        <p className="muted small">Puede editar el mensaje antes de copiarlo o enviarlo al cliente:</p>
+        <p className="muted small">Puede editar el mensaje y agregar notas antes de copiarlo o enviarlo por WhatsApp:</p>
         {errorNotificacion ? (
           <p className="error ventas-notificacion-error" role="alert">
             {errorNotificacion}
@@ -2452,13 +2458,35 @@ export default function VentasCuentaScreen({
             Orden vinculada: <strong>#{ordenVinculadaId}</strong>
           </p>
         )}
-        <textarea
-          className="cuenta-notificacion-mensaje"
-          rows={8}
-          value={mensajeNotificacionEditado}
-          onChange={(e) => setMensajeNotificacionEditado(e.target.value)}
-          aria-label="Mensaje para el cliente"
-        />
+        <label className="cuenta-notificacion-campo" htmlFor="cuenta-notificacion-mensaje">
+          <span className="cuenta-notificacion-campo-label">Mensaje</span>
+          <textarea
+            id="cuenta-notificacion-mensaje"
+            className="cuenta-notificacion-mensaje"
+            rows={7}
+            value={mensajeNotificacionEditado}
+            onChange={(e) => setMensajeNotificacionEditado(e.target.value)}
+            aria-label="Mensaje para el cliente"
+          />
+        </label>
+        <label className="cuenta-notificacion-campo" htmlFor="cuenta-notificacion-notas">
+          <span className="cuenta-notificacion-campo-label">Notas adicionales (opcional)</span>
+          <textarea
+            id="cuenta-notificacion-notas"
+            className="cuenta-notificacion-notas"
+            rows={3}
+            value={notasNotificacion}
+            onChange={(e) => setNotasNotificacion(e.target.value)}
+            placeholder="Ej. Traer cable de poder, horario de 10 a 6, pregunto en efectivo…"
+            aria-label="Notas adicionales para el mensaje"
+          />
+        </label>
+        {notasNotificacion.trim() ? (
+          <div className="cuenta-notificacion-preview" role="status">
+            <span className="cuenta-notificacion-preview-label">Vista previa con notas</span>
+            <p className="cuenta-notificacion-preview-texto">{mensajeNotificacionFinal()}</p>
+          </div>
+        ) : null}
       </ModalAlerta>
 
       <ModalAlerta

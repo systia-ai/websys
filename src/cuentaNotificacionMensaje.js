@@ -61,7 +61,7 @@ function saludoNotificacionCliente(nombre, empresa = EMPRESA_NOTIFICACION) {
 /**
  * Redacta mensaje de cobro / entrega para el cliente según líneas de la cuenta.
  *
- * @param {{ nombreCliente?: string, lineas?: object[], saldoPendiente?: number, negocio?: string }} p
+ * @param {{ nombreCliente?: string, lineas?: object[], saldoPendiente?: number, negocio?: string, notas?: string }} p
  */
 export function buildMensajeNotificacionCuentaCliente(p) {
   const nombre = String(p?.nombreCliente ?? '').trim() || 'cliente'
@@ -89,15 +89,27 @@ export function buildMensajeNotificacionCuentaCliente(p) {
     } else {
       partes.push('No hay cargos pendientes registrados en esta cuenta.')
     }
-    return partes.join(' ')
+  } else {
+    partes.push(buildDesgloseCargos(cargos, anticipo, otrosPagos))
+    partes.push(`total a pagar ${fmtMonto(saldo)}`)
   }
 
-  partes.push(buildDesgloseCargos(cargos, anticipo, otrosPagos))
-  partes.push(`total a pagar ${fmtMonto(saldo)}`)
-
-  if (partes.length <= 2) {
-    return `${partes[0]} ${partes[1]}.`
+  let mensaje
+  if (cargos.length === 0 || partes.length <= 2) {
+    mensaje = `${partes[0]} ${partes.slice(1).join(' ')}.`
+  } else {
+    mensaje = `${partes[0]} ${partes.slice(1).join(', ')}.`
   }
 
-  return `${partes[0]} ${partes.slice(1).join(', ')}.`
+  return anexarNotasAlMensajeNotificacion(mensaje, p?.notas)
+}
+
+/** Une el mensaje base con notas adicionales del operador. */
+export function anexarNotasAlMensajeNotificacion(mensajeBase, notasRaw) {
+  const base = String(mensajeBase ?? '').trim()
+  const notas = String(notasRaw ?? '').trim()
+  if (!notas) return base
+  if (!base) return notas
+  const sep = /[.!?…]$/.test(base) ? ' ' : '. '
+  return `${base}${sep}Notas: ${notas}`
 }

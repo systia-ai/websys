@@ -9516,6 +9516,72 @@ input.full {
   background: #fff;
 }
 
+.cuenta-notificacion-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.cuenta-notificacion-campo-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #546e7a;
+}
+
+.cuenta-notificacion-campo .cuenta-notificacion-mensaje,
+.cuenta-notificacion-notas {
+  margin-top: 0;
+}
+
+.cuenta-notificacion-notas {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ffb300;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  resize: vertical;
+  background: #fff8e1;
+  color: #37474f;
+}
+
+.cuenta-notificacion-notas:focus {
+  outline: 2px solid #ff8f00;
+  outline-offset: 1px;
+}
+
+.cuenta-notificacion-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed #90caf9;
+  background: #e3f2fd;
+}
+
+.cuenta-notificacion-preview-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1565c0;
+  margin-bottom: 6px;
+}
+
+.cuenta-notificacion-preview-texto {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #37474f;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .btn-notificar-wa {
   border: 0;
   padding: 10px 16px;
@@ -12645,6 +12711,29 @@ input.full {
   background: var(--app-color-input-bg) !important;
   color: #ffffff !important;
   border-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .cuenta-notificacion-campo-label {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .cuenta-notificacion-notas {
+  background: #3d3014 !important;
+  border-color: #ffb74d !important;
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .cuenta-notificacion-preview {
+  background: #0d2a3f !important;
+  border-color: #42a5f5 !important;
+}
+
+:root[data-theme='dark'] .cuenta-notificacion-preview-label {
+  color: #90caf9 !important;
+}
+
+:root[data-theme='dark'] .cuenta-notificacion-preview-texto {
+  color: #e2e8f0 !important;
 }
 
 /* Superficies claras → oscuras (tarjetas, listas, paneles) */
