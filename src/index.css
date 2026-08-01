@@ -10585,6 +10585,39 @@ input.full {
   cursor: wait;
 }
 
+.auth-login-forgot {
+  margin-top: 4px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.auth-login-forgot:hover:not(:disabled) {
+  color: #fff;
+}
+
+.auth-login-forgot:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.auth-login-ok {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(46, 125, 50, 0.28);
+  color: #c8e6c9;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .auth-login-hint {
   margin: 20px 0 0;
   line-height: 1.45;

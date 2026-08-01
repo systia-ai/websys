@@ -34,6 +34,8 @@ No compartas la contraseña en el código ni en GitHub.
 
 La app usa **HashRouter** (`#/…`); las redirecciones de magic link/OAuth deben incluir la ruta base del sitio.
 
+Para **Olvidé mi contraseña**, el enlace del correo usa la misma Site URL / Redirect URLs. Si el correo no llega, revise spam y que el proveedor Email esté activo en Authentication.
+
 ## 4. Variables de entorno
 
 Local (`.env`):
