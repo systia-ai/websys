@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   if (!to || to.length < 10) {
     return json(400, {
       error:
-        'Destino no válido. Use teléfono MX de 10 dígitos (4622090526) o con lada 1 (14622090526). Opcional: WHATSAPP_TEST_TO en secretos si falta teléfono del cliente.',
+        'Destino no válido. Use teléfono MX de 10 dígitos (ej. 4621234567) o con lada 1 (14621234567). En producción el mensaje va al celular del cliente de la orden.',
     })
   }
 

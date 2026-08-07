@@ -2,7 +2,14 @@
 
 Guía para conectar la app con Meta WhatsApp Business. El token **nunca** va en el frontend: solo en **Supabase → Edge Functions → Secrets**.
 
-**App Meta a usar:** **Sistebit CAS Epson** (`1701676374523471`) — ver `docs/WHATSAPP-SISTEBIT-PASOS.md` para IDs y pasos detallados.
+**App Meta:** la publicada en **Live** con el número de producción.  
+IDs actuales (Phone number ID, WABA, número +52): ver `docs/WHATSAPP-SISTEBIT-PASOS.md`.
+
+| Dato producción | Valor |
+|-----------------|--------|
+| Phone number ID | `1090000467533678` |
+| WABA | `1701523064207755` |
+| Número remitente | `+52 14621907249` |
 
 ## Cómo funciona la app
 

@@ -1,4 +1,4 @@
-/**
+  /**
  * Catálogo de técnicos para asignar en órdenes.
  * - Lista base en código (DEFAULT_TECNICOS)
  * - Copia local por navegador (localStorage)
