@@ -9,7 +9,7 @@ IDs y secretos: ver `docs/WHATSAPP-SISTEBIT-PASOS.md`.
 |-------------|--------|
 | Phone number ID | `1061313353733967` |
 | WABA | `2044195813178508` |
-| Destino (`WHATSAPP_TEST_TO`) | `524622090526` (+52 462 209 0526, SISTEBIT) |
+| Destino (`WHATSAPP_TEST_TO`) | `524622647020` (+52 462 209 0526, SISTEBIT) |
 
 ## Cómo funciona la app
 
