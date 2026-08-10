@@ -9,11 +9,11 @@ Configuración actual: **número de prueba / CAS Epson**, y **todos** los mensaj
 | App Meta | **Sistebit CAS Epson** (`1701676374523471`) |
 | WhatsApp Business Account ID (WABA) | `2044195813178508` |
 | **Phone number ID** (Supabase) | **`1061313353733967`** |
-| Destino de todas las pruebas | **`524622090526`** (+52 462 209 0526) |
+| Destino de todas las pruebas | **`524622647020`** (+52 462 264 7020) |
 | Supabase project | `gvxffxyygvtpmqlsrsmn` |
 
 > El **Phone number ID** va en `WHATSAPP_PHONE_NUMBER_ID`.  
-> `WHATSAPP_TEST_TO` hace que **cualquier** envío (orden, anticipo, liquidación, cotización) llegue solo a **462 209 0526** (SISTEBIT).
+> `WHATSAPP_TEST_TO` hace que **cualquier** envío (orden, anticipo, liquidación, cotización) llegue solo a **462 264 7020**.
 
 ## Secretos en Supabase (Edge Functions)
 
@@ -23,7 +23,7 @@ Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 |---------|----------------|
 | `WHATSAPP_ACCESS_TOKEN` | Token de la app **Sistebit CAS Epson** (System User o API Setup) |
 | `WHATSAPP_PHONE_NUMBER_ID` | `1061313353733967` |
-| `WHATSAPP_TEST_TO` | `524622090526` |
+| `WHATSAPP_TEST_TO` | `524622647020` |
 | `WHATSAPP_TEMPLATE_LANG` | `es_MX` |
 | `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` |
 | `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` |
@@ -43,7 +43,7 @@ npm run deploy:function:whatsapp
 
 1. Abre cualquier orden con teléfono de cliente (da igual cuál: **no se usa** mientras exista `WHATSAPP_TEST_TO`).
 2. **Enviar por WhatsApp** → **Enviar orden cliente**.
-3. El mensaje debe llegar a **462 209 0526** (SISTEBIT).
+3. El mensaje debe llegar a **462 264 7020**.
 
 Si la API falla, la app abre WhatsApp Web (`wa.me`) como respaldo.
 
@@ -66,7 +66,7 @@ Cuando las plantillas estén en la WABA de producción:
 |-------|--------|----------|
 | `no permissions` / token inválido | Token de otra app | Generar token en **Sistebit CAS Epson** y actualizar `WHATSAPP_ACCESS_TOKEN` |
 | `Template not found` / `#132001` | Plantilla no Activa en esta WABA | Crear/aprobar plantillas en es_MX en WABA `2044195813178508` |
-| Mensaje al cliente, no a 462… | Falta `WHATSAPP_TEST_TO` | Poner `524622090526` en secretos |
+| Mensaje al cliente, no a 462… | Falta `WHATSAPP_TEST_TO` | Poner `524622647020` en secretos |
 
 ## Seguridad
 
