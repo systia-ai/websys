@@ -1,27 +1,29 @@
-# WhatsApp — SISTEBIT (producción)
+# WhatsApp — SISTEBIT (modo prueba)
 
-Número y cuenta de WhatsApp Business **en producción** (app Meta publicada / Live).
+Configuración actual: **número de prueba / CAS Epson**, y **todos** los mensajes van al celular de SISTEBIT (no al cliente de la orden).
 
-## IDs de producción
+## IDs de prueba
 
 | Dato | Valor |
 |------|--------|
-| WhatsApp Business Account ID (WABA) | `1701523064207755` |
-| **Phone number ID** (Supabase) | **`1090000467533678`** |
-| Número registrado (remitente) | **`+52 14621907249`** |
+| App Meta | **Sistebit CAS Epson** (`1701676374523471`) |
+| WhatsApp Business Account ID (WABA) | `2044195813178508` |
+| **Phone number ID** (Supabase) | **`1061313353733967`** |
+| Destino de todas las pruebas | **`524622090526`** (+52 462 209 0526) |
 | Supabase project | `gvxffxyygvtpmqlsrsmn` |
 
-> El **Phone number ID** (`1090000467533678`) es el que va en secretos.  
-> El **+52 14621907249** es el número que ve el cliente como remitente; **no** se pone en `WHATSAPP_PHONE_NUMBER_ID`.
+> El **Phone number ID** va en `WHATSAPP_PHONE_NUMBER_ID`.  
+> `WHATSAPP_TEST_TO` hace que **cualquier** envío (orden, anticipo, liquidación, cotización) llegue solo a **462 209 0526** (SISTEBIT).
 
 ## Secretos en Supabase (Edge Functions)
 
 Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 
-| Secreto | Valor producción |
-|---------|------------------|
-| `WHATSAPP_ACCESS_TOKEN` | Token **permanente** del System User (esta app + esta WABA) |
-| `WHATSAPP_PHONE_NUMBER_ID` | `1090000467533678` |
+| Secreto | Valor (prueba) |
+|---------|----------------|
+| `WHATSAPP_ACCESS_TOKEN` | Token de la app **Sistebit CAS Epson** (System User o API Setup) |
+| `WHATSAPP_PHONE_NUMBER_ID` | `1061313353733967` |
+| `WHATSAPP_TEST_TO` | `524622090526` |
 | `WHATSAPP_TEMPLATE_LANG` | `es_MX` |
 | `WHATSAPP_TEMPLATE_NAME` | `orden_servicio_sisteb` |
 | `WHATSAPP_TEMPLATE_ANTICIPO_NAME` | `anticipo_recibido_sisteb` |
@@ -29,13 +31,7 @@ Dashboard → **Project Settings** → **Edge Functions** → **Secrets**
 | `WHATSAPP_TEMPLATE_COTIZACION_NAME` | `cotizacion_sisteb` |
 | `WHATSAPP_API_VERSION` | `v25.0` |
 
-### Producción: NO usar `WHATSAPP_TEST_TO`
-
-| Secreto | Acción |
-|---------|--------|
-| `WHATSAPP_TEST_TO` | **Eliminar** del proyecto. Si existe, **todos** los mensajes van a ese número y no al cliente de la orden. |
-
-Desplegar funciones después de cambiar secretos:
+Desplegar funciones después de cambiar secretos (si cambias código):
 
 ```bash
 npm run deploy:function:whatsapp
@@ -43,64 +39,24 @@ npm run deploy:function:whatsapp
 
 ---
 
-## Paso 1 — Token permanente (Meta)
+## Cómo probar
 
-El token del botón «Generar identificador» en API Setup **caduca en ~24 h**. Para producción:
+1. Abre cualquier orden con teléfono de cliente (da igual cuál: **no se usa** mientras exista `WHATSAPP_TEST_TO`).
+2. **Enviar por WhatsApp** → **Enviar orden cliente**.
+3. El mensaje debe llegar a **462 209 0526** (SISTEBIT).
 
-1. [business.facebook.com/settings/system-users](https://business.facebook.com/settings/system-users)
-2. Usuario del negocio (ej. Systia)
-3. **Asignar activos:**
-   - App Meta (la publicada / Live)
-   - Cuenta WhatsApp (WABA) `1701523064207755`
-   - Permisos: mensajería WhatsApp
-4. **Generar identificador** → la misma app Live
-5. Permisos: `whatsapp_business_messaging`, `whatsapp_business_management`
-6. Copiar token → Supabase → `WHATSAPP_ACCESS_TOKEN`
-
-**Importante:** el token debe ser de la app/WABA de producción. Si es de otra app, Meta responde «no permissions».
+Si la API falla, la app abre WhatsApp Web (`wa.me`) como respaldo.
 
 ---
 
-## Paso 2 — API Setup (verificar número)
+## Volver a producción (más adelante)
 
-1. Meta Developers → tu app Live → **WhatsApp** → **API Setup**
-2. Confirmar **Phone number ID** = `1090000467533678`
-3. Confirmar el número de envío = `+52 14621907249`
-4. Opcional: probar `hello_world` a un celular
+Cuando las plantillas estén en la WABA de producción:
 
----
-
-## Paso 3 — Plantillas en WhatsApp Manager
-
-Crear/verificar las 4 plantillas en **es_MX**, categoría **Utilidad**, estado **Activa**:
-
-Textos exactos en `docs/WHATSAPP-SETUP.md`.
-
-| Nombre plantilla | Variables cuerpo |
-|------------------|------------------|
-| `orden_servicio_sisteb` | 3 |
-| `anticipo_recibido_sisteb` | 5 |
-| `liquidacion_orden_s` | 5 |
-| `cotizacion_sisteb` | 5 |
-
----
-
-## Paso 4 — App en modo Live
-
-1. Meta Developers → panel de la app → **Live**
-2. Completar lo que Meta pida (privacidad, icono, etc.)
-
-En **Development** solo llega a números agregados como testers.
-
----
-
-## Paso 5 — Probar en SISTEBIT
-
-1. Orden con cliente que tenga celular (10 dígitos MX)
-2. **Enviar por WhatsApp** → **Enviar orden cliente**
-3. Debe llegar al **celular del cliente**, saliendo desde `+52 14621907249`
-
-Si falla la API, la app abre WhatsApp manual (`wa.me`) como respaldo.
+1. `WHATSAPP_PHONE_NUMBER_ID` = `1090000467533678`
+2. **Eliminar** `WHATSAPP_TEST_TO`
+3. Token de la app/WABA Live de producción (`1701523064207755`)
+4. Remitente real: `+52 14621907249`
 
 ---
 
@@ -108,20 +64,10 @@ Si falla la API, la app abre WhatsApp manual (`wa.me`) como respaldo.
 
 | Error | Causa | Solución |
 |-------|--------|----------|
-| `no permissions` / token inválido | Token de otra app o WABA | Regenerar token para esta app + WABA `1701523064207755` |
-| `Recipient not in allowed list` | App en Development | Agregar tester o pasar a **Live** |
-| `Template not found` / `#132001` | Plantilla no existe o no está Activa | Crear/aprobar plantillas en es_MX |
-| Mensaje va a un solo celular, no al cliente | `WHATSAPP_TEST_TO` configurado | **Eliminar** ese secreto en Supabase |
-| Phone number ID incorrecto | Secretos viejos (IDs de prueba) | Usar `1090000467533678` |
+| `no permissions` / token inválido | Token de otra app | Generar token en **Sistebit CAS Epson** y actualizar `WHATSAPP_ACCESS_TOKEN` |
+| `Template not found` / `#132001` | Plantilla no Activa en esta WABA | Crear/aprobar plantillas en es_MX en WABA `2044195813178508` |
+| Mensaje al cliente, no a 462… | Falta `WHATSAPP_TEST_TO` | Poner `524622090526` en secretos |
 
 ## Seguridad
 
-No pegues tokens en chat ni en el repo. Solo en Supabase Secrets. Si se filtró: revocar en Meta → generar nuevo.
-
-## IDs antiguos (no usar)
-
-Quedaron de pruebas / otra WABA; **no** configurarlos en producción:
-
-- Phone ID `1061313353733967`
-- WABA `2044195813178508`
-- Phone ID de prueba `1083008164899211`
+No pegues tokens en chat ni en el repo. Solo en Supabase Secrets.
