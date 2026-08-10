@@ -2,14 +2,15 @@
 
 Guía para conectar la app con Meta WhatsApp Business. El token **nunca** va en el frontend: solo en **Supabase → Edge Functions → Secrets**.
 
-**Modo actual: prueba.** Todos los envíos van a un solo número (pruebas).  
+**Modo actual: producción.** Los mensajes salen desde el número de SISTEBIT y van al **cliente** de la orden.  
 IDs y secretos: ver `docs/WHATSAPP-SISTEBIT-PASOS.md`.
 
-| Dato prueba | Valor |
-|-------------|--------|
-| Phone number ID | `1061313353733967` |
-| WABA | `2044195813178508` |
-| Destino (`WHATSAPP_TEST_TO`) | `524622647020` (+52 462 264 7020) |
+| Dato producción | Valor |
+|-----------------|--------|
+| Phone number ID | `1090000467533678` |
+| WABA | `1701523064207755` |
+| Número remitente | `+52 1 4621907249` (462 190 7249) |
+| Destino | Teléfono del cliente (sin `WHATSAPP_TEST_TO`) |
 
 ## Cómo funciona la app
 
