@@ -12,7 +12,7 @@
 import { obtenerAppConfigCrudo } from './appConfigApi.js'
 
 const LS_KEY = 'sistefix_local_tecnicos'
-export const DEFAULT_TECNICOS = ['ANDRES', 'ARTURO', 'VERO', 'JUAN', 'MIGUEL', 'ZUMAYA']
+export const DEFAULT_TECNICOS = ['ANDRES', 'ARTURO', 'VERO', 'JUAN', 'MIGUEL', 'ALONDRA']
 
 /** Nombres mal escritos → forma correcta en catálogo y órdenes. */
 export const CORRECCIONES_NOMBRE_TECNICO = {
