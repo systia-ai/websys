@@ -311,6 +311,7 @@ export default function VentasCuentaScreen({
   /** Orden y equipo ligados a la cuenta (para comprobante PDF). */
   const [reciboOrdenEquipo, setReciboOrdenEquipo] = useState(null)
   const [tipoReparacionOrden, setTipoReparacionOrden] = useState(null)
+  const [notaInformativaOrden, setNotaInformativaOrden] = useState('')
   const [lineas, setLineas] = useState([])
   const [mostrarCamposProducto, setMostrarCamposProducto] = useState(false)
   const [modalPago, setModalPago] = useState(false)
@@ -510,12 +511,21 @@ export default function VentasCuentaScreen({
               supabase.from('reparamov').select('*').eq('repara_id', rid),
               supabase
                 .from('reparaciones')
-                .select('id, costo_reparacion, descripcion_equipo, equipo_id, tipo_reparacion')
+                .select('id, costo_reparacion, descripcion_equipo, equipo_id, tipo_reparacion, nota_informativa')
                 .eq('id', rid)
                 .maybeSingle(),
             ])
             if (!r2.error) reps = r2.data ?? []
-            if (!rRep.error) repOrden = rRep.data
+            if (!rRep.error) {
+              repOrden = rRep.data
+            } else if (/nota_informativa/i.test(String(rRep.error?.message ?? ''))) {
+              const rRep2 = await supabase
+                .from('reparaciones')
+                .select('id, costo_reparacion, descripcion_equipo, equipo_id, tipo_reparacion')
+                .eq('id', rid)
+                .maybeSingle()
+              if (!rRep2.error) repOrden = rRep2.data
+            }
             const eid = repOrden?.equipo_id
             if (eid != null && eid !== '') {
               const rEq = await supabase
@@ -545,6 +555,7 @@ export default function VentasCuentaScreen({
             : null,
         )
         setTipoReparacionOrden(repOrden?.tipo_reparacion ?? null)
+        setNotaInformativaOrden(String(repOrden?.nota_informativa ?? '').trim())
 
         let pagos = []
         if (cid != null) {
@@ -651,6 +662,7 @@ export default function VentasCuentaScreen({
     } else {
       setCuentaInfo(null)
       setReparaIdCuenta(normalizarReparacionId(rb))
+      setNotaInformativaOrden('')
       setLineas([])
       setLoading(false)
     }
@@ -1338,9 +1350,10 @@ export default function VentasCuentaScreen({
     return anexarNotasAlMensajeNotificacion(mensajeNotificacionEditado, notasNotificacion)
   }
 
-  function abrirModalNotificarCliente() {
+  async function abrirModalNotificarCliente() {
     setErrorNotificacion('')
-    setNotasNotificacion('')
+    const pegadaInicial = String(notaInformativaOrden ?? '').trim()
+    setNotasNotificacion(pegadaInicial)
     setMensajeNotificacionEditado(
       buildMensajeNotificacionCuentaCliente({
         nombreCliente: cliente.nombre,
@@ -1349,6 +1362,28 @@ export default function VentasCuentaScreen({
       }),
     )
     setModalNotificarCliente(true)
+
+    const rid = ordenVinculadaId
+    if (rid == null) return
+    try {
+      let fresca = pegadaInicial
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('reparaciones')
+          .select('nota_informativa')
+          .eq('id', rid)
+          .maybeSingle()
+        if (error) return
+        fresca = String(data?.nota_informativa ?? '').trim()
+      } else {
+        const rep = readLs(LS_REP, []).find((r) => sameId(r.id, rid))
+        fresca = String(rep?.nota_informativa ?? '').trim()
+      }
+      setNotaInformativaOrden(fresca)
+      setNotasNotificacion((actual) => (actual.trim() === pegadaInicial ? fresca : actual))
+    } catch {
+      /* Conservar la nota ya pegada desde la orden cargada. */
+    }
   }
 
   async function copiarMensajeNotificacion() {
@@ -1781,7 +1816,7 @@ export default function VentasCuentaScreen({
             <button
               type="button"
               className="btn-notificar-cliente"
-              onClick={() => abrirModalNotificarCliente()}
+              onClick={() => void abrirModalNotificarCliente()}
             >
               📱 NOTIFICAR AL CLIENTE
             </button>

@@ -245,6 +245,7 @@ export default function ReparacionesOrden({
   const [nivelMlight, setNivelMlight] = useState('')
   const [nivelClight, setNivelClight] = useState('')
   const [descripcionSolucion, setDescripcionSolucion] = useState('')
+  const [notaInformativa, setNotaInformativa] = useState('')
   const [bitacora, setBitacora] = useState('')
   const [bitacoraNueva, setBitacoraNueva] = useState('')
   const [guardandoBitacora, setGuardandoBitacora] = useState(false)
@@ -605,6 +606,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setNotaInformativa(data.nota_informativa ?? '')
         setBitacora(data.bitacora ?? '')
         aplicarVerificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
@@ -653,6 +655,7 @@ export default function ReparacionesOrden({
         setDescripcionEquipo(data.descripcion_equipo ?? '')
         setProblemasReportados(data.problemas_reportados ?? '')
         setDescripcionSolucion(data.descripcion_solucion ?? '')
+        setNotaInformativa(data.nota_informativa ?? '')
         setBitacora(data.bitacora ?? '')
         aplicarVerificacionDesdeReparacion(data)
         aplicarFechasDesdeReparacion(data)
@@ -1048,6 +1051,7 @@ export default function ReparacionesOrden({
         problemas_reportados: problemasReportados || null,
         niveles_tinta: niveles,
         descripcion_solucion: null,
+        nota_informativa: null,
         pago: null,
         costo_reparacion: null,
         fecha_creacion: now,
@@ -1502,6 +1506,7 @@ export default function ReparacionesOrden({
       descripcion_equipo: descripcionEquipo ? String(descripcionEquipo).toUpperCase() : null,
       problemas_reportados: problemasReportados ? String(problemasReportados).toUpperCase() : null,
       descripcion_solucion: descripcionSolucion ? String(descripcionSolucion).toUpperCase() : null,
+      nota_informativa: notaInformativa ? String(notaInformativa).toUpperCase() : null,
       bitacora: bitacoraGuardar,
       tipo_reparacion: tipoReparacion || null,
       folio_epson: valorFolioEpsonGuardar(),
@@ -1510,6 +1515,7 @@ export default function ReparacionesOrden({
     if (patch.descripcion_equipo) setDescripcionEquipo(patch.descripcion_equipo)
     if (patch.problemas_reportados) setProblemasReportados(patch.problemas_reportados)
     if (patch.descripcion_solucion) setDescripcionSolucion(patch.descripcion_solucion)
+    if (patch.nota_informativa) setNotaInformativa(patch.nota_informativa)
     if (patch.fecha_entrega) {
       fechaEntregaRef.current = patch.fecha_entrega
       setFechaEntregaOrden(patch.fecha_entrega)
@@ -1684,6 +1690,11 @@ export default function ReparacionesOrden({
           {descripcionSolucion ? (
             <p>
               <strong>Descripción de solución:</strong> {descripcionSolucion}
+            </p>
+          ) : null}
+          {notaInformativa ? (
+            <p>
+              <strong>Nota informativa:</strong> {notaInformativa}
             </p>
           ) : null}
           <p>
@@ -2591,16 +2602,28 @@ export default function ReparacionesOrden({
           </div>
         </div>
         {(esOrdenExistente || idReparacion != null) && (
-          <div className="rep-block highlight">
-            <label>Descripcion de la solucion</label>
-            <textarea
-              rows={3}
-              value={descripcionSolucion}
-              onChange={(e) => setDescripcionSolucion(e.target.value)}
-              placeholder="Descripcion de la solucion"
-              style={{ textTransform: 'uppercase' }}
-            />
-          </div>
+          <>
+            <div className="rep-block highlight">
+              <label>Descripcion de la solucion</label>
+              <textarea
+                rows={3}
+                value={descripcionSolucion}
+                onChange={(e) => setDescripcionSolucion(e.target.value)}
+                placeholder="Descripcion de la solucion"
+                style={{ textTransform: 'uppercase' }}
+              />
+            </div>
+            <div className="rep-block highlight">
+              <label>Nota Informativa</label>
+              <textarea
+                rows={3}
+                value={notaInformativa}
+                onChange={(e) => setNotaInformativa(e.target.value)}
+                placeholder="Nota Informativa"
+                style={{ textTransform: 'uppercase' }}
+              />
+            </div>
+          </>
         )}
 
         <ReparacionFotosPanel

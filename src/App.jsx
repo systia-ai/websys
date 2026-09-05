@@ -34,7 +34,7 @@ import HomeUserMenu from './HomeUserMenu.jsx'
 const modules = [
   { key: 'clientes', title: 'Clientes', table: 'clientes', fields: ['nombre', 'telefono', 'domicilio', 'correo'] },
   { key: 'servicios', title: 'Servicios (Equipos)', table: 'equipos', fields: ['serie', 'tipo_equipo', 'descripcion', 'tipo_reparacion', 'cliente_id'] },
-  { key: 'reparaciones', title: 'Orden de servicio', table: 'reparaciones', fields: ['equipo_id', 'cliente_id', 'tecnico', 'estatus', 'descripcion_equipo', 'problemas_reportados', 'niveles_tinta', 'descripcion_solucion', 'bitacora', 'verificado_entrega', 'fecha_verificacion_entrega', 'pago', 'costo_reparacion', 'tipo_reparacion', 'folio_epson'] },
+  { key: 'reparaciones', title: 'Orden de servicio', table: 'reparaciones', fields: ['equipo_id', 'cliente_id', 'tecnico', 'estatus', 'descripcion_equipo', 'problemas_reportados', 'niveles_tinta', 'descripcion_solucion', 'nota_informativa', 'bitacora', 'verificado_entrega', 'fecha_verificacion_entrega', 'pago', 'costo_reparacion', 'tipo_reparacion', 'folio_epson'] },
 ]
 
 /** Tarjetas del inicio: módulos CRUD + pantallas dedicadas. */
