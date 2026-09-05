@@ -305,6 +305,10 @@ function reducirPayloadReparacionTrasError(error, payload) {
     const { bitacora: _b, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
   }
+  if ('nota_informativa' in payload && esErrorColumnaDesconocida(error, 'nota_informativa')) {
+    const { nota_informativa: _n, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
   if ('verificado_entrega' in payload && esErrorColumnaDesconocida(error, 'verificado_entrega')) {
     const { verificado_entrega: _v, fecha_verificacion_entrega: _f, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
@@ -1288,6 +1292,7 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
   const queriaVerificacion =
     'verificado_entrega' in patch || 'fecha_verificacion_entrega' in patch
   const queriaBitacora = 'bitacora' in patch
+  const queriaNotaInformativa = 'nota_informativa' in patch
   for (let intento = 0; intento < 6; intento += 1) {
     const { data, error } = await supabase
       .from('reparaciones')
@@ -1310,6 +1315,11 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
       if (queriaBitacora && !('bitacora' in payload)) {
         throw new Error(
           'No se pudo guardar la bitácora: falta la columna bitacora en Supabase. Ejecute la migración 20260603140000_reparaciones_bitacora.sql.',
+        )
+      }
+      if (queriaNotaInformativa && !('nota_informativa' in payload)) {
+        throw new Error(
+          'No se pudo guardar la nota informativa: falta la columna nota_informativa en Supabase. Ejecute la migración 20260831120000_reparaciones_nota_informativa.sql.',
         )
       }
       return data[0]
@@ -2012,6 +2022,11 @@ export async function insertarReparacionSupabase(supabase, row) {
     }
     if ('bitacora' in payload && esErrorColumnaDesconocida(first.error, 'bitacora')) {
       const { bitacora: _b, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('nota_informativa' in payload && esErrorColumnaDesconocida(first.error, 'nota_informativa')) {
+      const { nota_informativa: _n, ...rest } = payload
       payload = rest
       continue
     }
