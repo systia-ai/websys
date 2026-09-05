@@ -5,7 +5,7 @@ import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { sameId } from './clienteUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { listarProductosStockBajo, mensajeStockBajoProducto } from './inventarioStock.js'
-import { esProductoContable } from './productoUtils.js'
+import { esProductoContable, normalizarTipoProducto, tipoProductoDe } from './productoUtils.js'
 
 const LS_PRODUCTOS = 'sistefix_local_productos'
 const LS_VISTA_INVENTARIO = 'sistefix_inventario_vista'
@@ -23,8 +23,8 @@ function prefijoSeriePorTipo(tipoProducto) {
 }
 
 function inferirTipoProducto(p) {
-  const tipoDb = String(p?.tipo_producto ?? p?.tipo ?? '').trim().toUpperCase()
-  if (TIPOS_PRODUCTO.some((t) => t.id === tipoDb)) return tipoDb
+  const tipoCanon = tipoProductoDe(p) || normalizarTipoProducto(p?.tipo_producto ?? p?.tipo)
+  if (TIPOS_PRODUCTO.some((t) => t.id === tipoCanon)) return tipoCanon
   const serieUpper = String(p?.serie ?? '').trim().toUpperCase()
   if (serieUpper.startsWith('S-')) return 'SERVICIO'
   if (serieUpper.startsWith('R-')) return 'REFACCION'
@@ -299,8 +299,9 @@ export default function InventariosModulo({
   }
 
   function abrirEditar(p) {
+    const tipo = inferirTipoProducto(p)
     setEditando(p)
-    setTipoProducto(inferirTipoProducto(p))
+    setTipoProducto(tipo)
     setSerie(String(p.serie ?? '').toUpperCase())
     setDescripcion(String(p.descripcion ?? '').toUpperCase())
     setExistencia(p.existencia != null && p.existencia !== '' ? String(p.existencia) : '')
@@ -310,7 +311,7 @@ export default function InventariosModulo({
     setPrecioVenta(
       precioVentaProducto(p) != null ? String(precioVentaProducto(p)) : '',
     )
-    setContable(esProductoContable(p))
+    setContable(esProductoContable({ ...p, tipo_producto: tipo }))
     setDialogo(true)
   }
 
