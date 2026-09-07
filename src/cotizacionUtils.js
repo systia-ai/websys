@@ -409,14 +409,13 @@ export async function convertirCotizacionACuenta({
     const costo = Number(l.precioUnitario ?? 0)
     if (cant <= 0 || costo <= 0) continue
     const desc = String(l.descripcion ?? '')
-      .replace(/^\[COTIZACIÓN\]\s*/i, '')
+      .replace(/^\[(COTIZACIÓN|VENTA)\]\s*/i, '')
       .trim()
-    const descVenta = desc.startsWith('[VENTA]') ? desc : `[VENTA] ${desc}`
     const row = {
       cuenta_id: cuentaId,
       producto_id: l.producto_id ?? null,
       cantidad: cant,
-      descripcion: descVenta,
+      descripcion: desc,
       costo,
     }
     totalCotizacion += cant * costo
@@ -427,7 +426,7 @@ export async function convertirCotizacionACuenta({
           supabase,
           cuentaId,
           productoId: l.producto_id,
-          descripcion: descVenta,
+          descripcion: desc,
           cantidad: cant,
           precio: costo,
           nextLocalId: () => nextLocalCuentamovIdFn(readLs(LS_CUENTAMOV, [])),
