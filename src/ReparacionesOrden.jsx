@@ -1190,7 +1190,8 @@ export default function ReparacionesOrden({
       fechaVerificacionEntrega,
       estatusAnterior: actual,
     })
-    aplicarCambioEstatusLocal(v, patchEstatus)
+    const estatusGuardado = patchEstatus.estatus ?? v
+    aplicarCambioEstatusLocal(estatusGuardado, patchEstatus)
 
     const id = resolveReparacionId(idReparacion, numeroOrden, repIdStr)
     if (!id) return
@@ -1214,10 +1215,10 @@ export default function ReparacionesOrden({
         if (guardada) {
           aplicarFechasDesdeReparacion(guardada)
           aplicarVerificacionDesdeReparacion(guardada)
-          estatusRef.current = guardada.estatus ?? v
-          setEstatus(guardada.estatus ?? v)
+          estatusRef.current = guardada.estatus ?? estatusGuardado
+          setEstatus(guardada.estatus ?? estatusGuardado)
         }
-        if (estatusEsEntregado(v)) {
+        if (estatusEsEntregado(estatusGuardado)) {
           await cargarCuentaYEntregaAux(id)
           try {
             await liquidarCuentaPagadaAlEntregarOrden(supabase, id)
@@ -1232,10 +1233,10 @@ export default function ReparacionesOrden({
           all.map((r) => (r.id === id ? { ...r, ...patchEstatus } : r)),
         )
       }
-      estatusPersistidoRef.current = v
-      estatusRef.current = v
+      estatusPersistidoRef.current = estatusGuardado
+      estatusRef.current = estatusGuardado
       estatusDirtyRef.current = false
-      onNotice?.(`Estatus actualizado a ${v}.`)
+      onNotice?.(`Estatus actualizado a ${estatusGuardado}.`)
     } catch (e) {
       onError?.(`No se pudo guardar el estatus: ${e.message}`)
     } finally {
@@ -1574,9 +1575,10 @@ export default function ReparacionesOrden({
       }
 
       estatusDirtyRef.current = false
-      estatusPersistidoRef.current = estatusGuardar
-      estatusRef.current = estatusGuardar
-      setEstatus(estatusGuardar)
+      const estatusFinal = patch.estatus ?? estatusGuardar
+      estatusPersistidoRef.current = estatusFinal
+      estatusRef.current = estatusFinal
+      setEstatus(estatusFinal)
       if (patch.fecha_ingreso) {
         fechaIngresoRef.current = patch.fecha_ingreso
         setFechaIngresoOrden(patch.fecha_ingreso)
@@ -2528,7 +2530,7 @@ export default function ReparacionesOrden({
                   {estatusEsSinReparacion(estatus) ? (
                     <>
                       La orden está en <strong>SIN REPARACION</strong>. Confirme que el equipo puede
-                      entregarse así; al verificar, quedará listo para marcar ENTREGADO.
+                      entregarse así; al verificar, quedará listo para marcar ENTREGADO SIN REPARACION.
                     </>
                   ) : (
                     <>

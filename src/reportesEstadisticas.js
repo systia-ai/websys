@@ -328,6 +328,7 @@ export function labelEstatusGrafica(label) {
     'SIN REPARACION': 'Sin reparación',
     ENTREGADO: 'Entregado',
     ENTREGADA: 'Entregado',
+    'ENTREGADO SIN REPARACION': 'Ent. sin rep.',
   }
   if (cortos[u]) return cortos[u]
   const t = String(label ?? '').trim()

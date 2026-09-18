@@ -8,10 +8,15 @@ import {
   buildPatchCambioEstatusOrden,
   ymdIngresoPreservar,
   fechaIngresoYmd,
+  fechaIngresoFiltroYmd,
   fechaReparadoYmd,
   ymdHoyLocal,
   transicionEstatusRequiereConfirmacion,
   mensajeConfirmacionTransicionEstatus,
+  estatusSiguientesPermitidos,
+  validarTransicionEstatus,
+  patchReparacionEntregada,
+  estatusCanonicoFiltro,
 } from '../src/reparacionUtils.js'
 
 const HOY = ymdHoyLocal()
@@ -172,6 +177,76 @@ test('mensajeConfirmacionTransicionEstatus', () => {
     mensajeConfirmacionTransicionEstatus('REPARADO', 'EN REVISION').includes('En revisión'),
     true,
     'mensaje a revision',
+  )
+})
+
+test('SIN REPARACION → ENTREGADO: registra ENTREGADO SIN REPARACION', () => {
+  const rep = {
+    estatus: 'SIN REPARACION',
+    fecha_sin_reparacion: '2026-06-20',
+    verificado_entrega: true,
+    fecha_verificacion_entrega: '2026-06-21T10:00:00Z',
+    fecha_creacion: '2026-06-17',
+  }
+  const patch = buildPatchCambioEstatusOrden('ENTREGADO', rep, {
+    estatusAnterior: 'SIN REPARACION',
+    verificadoEntrega: true,
+    fechaVerificacionEntrega: '2026-06-21T10:00:00Z',
+  })
+  assertEqual(patch.estatus, 'ENTREGADO SIN REPARACION', 'estatus registrado')
+  assertEqual(patch.fecha_reparado, undefined, 'no inventa fecha_reparado')
+  assertEqual(Boolean(patch.fecha_entrega), true, 'sí registra fecha_entrega')
+})
+
+test('patchReparacionEntregada desde SIN REPARACION', () => {
+  const patch = patchReparacionEntregada(
+    { estatus: 'SIN REPARACION', fecha_sin_reparacion: '2026-06-20' },
+    { verificadoEntrega: true },
+  )
+  assertEqual(patch.estatus, 'ENTREGADO SIN REPARACION', 'estatus al liquidar/entregar')
+})
+
+test('estatusSiguientesPermitidos desde SIN REPARACION incluye ENTREGADO SIN REPARACION', () => {
+  const ops = estatusSiguientesPermitidos('SIN REPARACION')
+  assertEqual(ops.includes('ENTREGADO SIN REPARACION'), true, 'opción de entrega')
+  assertEqual(ops.includes('ENTREGADO'), false, 'no ofrece ENTREGADO genérico')
+})
+
+test('validarTransicionEstatus permite ENTREGADO y ENTREGADO SIN REPARACION desde SIN REPARACION', () => {
+  assertEqual(validarTransicionEstatus('SIN REPARACION', 'ENTREGADO').ok, true, 'ENTREGADO')
+  assertEqual(
+    validarTransicionEstatus('SIN REPARACION', 'ENTREGADO SIN REPARACION').ok,
+    true,
+    'ENTREGADO SIN REPARACION',
+  )
+})
+
+test('estatusCanonicoFiltro agrupa ENTREGADO SIN REPARACION con ENTREGADO', () => {
+  assertEqual(estatusCanonicoFiltro('ENTREGADO SIN REPARACION'), 'ENTREGADO', 'filtro')
+  assertEqual(estatusCanonicoFiltro('ENTREGADA'), 'ENTREGADO', 'ENTREGADA')
+})
+
+test('fechaIngresoFiltroYmd usa columna fecha_ingreso, no fecha_creacion', () => {
+  assertEqual(
+    fechaIngresoFiltroYmd({
+      fecha_ingreso: '2026-09-14',
+      fecha_creacion: '2026-09-15T05:00:00Z',
+    }),
+    '2026-09-14',
+    'columna fecha_ingreso',
+  )
+  assertEqual(
+    fechaIngresoFiltroYmd({
+      fecha_ingreso: '2026-09-14T00:00:00.000Z',
+      fecha_creacion: '2026-09-15T05:00:00Z',
+    }),
+    '2026-09-14',
+    'date serializada con medianoche UTC no se recorre un día',
+  )
+  assertEqual(
+    fechaIngresoFiltroYmd({ fecha_creacion: '2026-09-15T05:00:00Z' }),
+    null,
+    'sin columna no inventa ingreso',
   )
 })
 

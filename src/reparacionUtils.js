@@ -95,6 +95,42 @@ export function estatusEsSinReparacion(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'SIN REPARACION'
 }
 
+export const ESTATUS_ENTREGADO_SIN_REPARACION = 'ENTREGADO SIN REPARACION'
+
+export function estatusEsEntregadoSinReparacion(estatus) {
+  return normalizarEstatusOrden(estatus) === ESTATUS_ENTREGADO_SIN_REPARACION
+}
+
+/**
+ * Al entregar un equipo que estaba SIN REPARACION, se registra ENTREGADO SIN REPARACION.
+ * Cualquier otro ENTREGADO/A se guarda como ENTREGADO.
+ */
+export function estatusEntregaARegistrar(estatusAnterior, estatusNuevo) {
+  const nuevo = normalizarEstatusOrden(estatusNuevo)
+  if (estatusEsEntregadoSinReparacion(nuevo)) return ESTATUS_ENTREGADO_SIN_REPARACION
+  if (!estatusEsEntregado(nuevo)) return nuevo
+  const ant = normalizarEstatusOrden(estatusAnterior)
+  if (estatusEsSinReparacion(ant) || estatusEsEntregadoSinReparacion(ant)) {
+    return ESTATUS_ENTREGADO_SIN_REPARACION
+  }
+  return 'ENTREGADO'
+}
+
+/** Alinea variantes de entrega (ENTREGADA, ENTREGADO SIN REPARACION) con el chip ENTREGADO. */
+export function estatusCanonicoFiltro(estatus) {
+  const st = normalizarEstatusOrden(estatus)
+  if (estatusEsEntregado(st)) return 'ENTREGADO'
+  return st
+}
+
+/** Monitor: ENTREGADO SIN REPARACION es un chip aparte; ENTREGADA se agrupa con ENTREGADO. */
+export function estatusParaFiltroMonitor(estatus) {
+  const st = normalizarEstatusOrden(estatus)
+  if (st === ESTATUS_ENTREGADO_SIN_REPARACION) return ESTATUS_ENTREGADO_SIN_REPARACION
+  if (estatusEsEntregado(st)) return 'ENTREGADO'
+  return st
+}
+
 /** REPARADO o SIN REPARACION: puede verificarse antes de ENTREGADO. */
 export function estatusListoParaVerificacionEntrega(estatus) {
   return estatusEsReparado(estatus) || estatusEsSinReparacion(estatus)
@@ -126,14 +162,14 @@ export function estatusSiguienteEnFlujo(estatus) {
 /** Estatus a los que se puede cambiar desde el actual (un paso; incluye retroceso en el flujo). */
 export function estatusSiguientesPermitidos(estatusActual) {
   const actual = normalizarEstatusOrden(estatusActual)
-  if (actual === 'ENTREGADO') return []
+  if (estatusEsEntregado(actual)) return []
 
   const opciones = new Set()
 
   if (ESTATUS_LATERALES_DESDE_REVISION.includes(actual)) {
     opciones.add('EN REVISION')
     opciones.add('REPARADO')
-    if (actual === 'SIN REPARACION') opciones.add('ENTREGADO')
+    if (estatusEsSinReparacion(actual)) opciones.add(ESTATUS_ENTREGADO_SIN_REPARACION)
     return [...opciones]
   }
 
@@ -156,13 +192,13 @@ function mensajeTransicionEstatusInvalida(desde, hacia, siguiente) {
   if (d === 'INGRESADO' && h === 'REPARADO') {
     return 'No puede cambiar el estatus de Ingresado a Reparado. Primero debe estar en Revisión para poder estar en Reparado.'
   }
-  if (d === 'INGRESADO' && h === 'ENTREGADO') {
+  if (d === 'INGRESADO' && estatusEsEntregado(h)) {
     return 'No puede cambiar el estatus de Ingresado a Entregado. Debe pasar por En revisión y Reparado, en ese orden.'
   }
   if (d === 'INGRESADO' && (h === 'EN ESPERA POR REFACCION' || h === 'SIN REPARACION')) {
     return 'No puede saltar a ese estatus desde Ingresado. El siguiente paso es En revisión.'
   }
-  if (d === 'EN REVISION' && h === 'ENTREGADO') {
+  if (d === 'EN REVISION' && estatusEsEntregado(h)) {
     return 'No puede cambiar el estatus de En revisión a Entregado. Primero debe estar en Reparado o Sin reparación.'
   }
   if (d === 'REPARADO' && h === 'INGRESADO') {
@@ -195,6 +231,9 @@ export function validarTransicionEstatus(estatusActual, estatusNuevo) {
   const permitidos = estatusSiguientesPermitidos(actual)
   if (permitidos.includes(nuevo)) {
     return { ok: true, estatusSiguiente: estatusSiguienteEnFlujo(nuevo) }
+  }
+  if (estatusEsSinReparacion(actual) && estatusEsEntregado(nuevo)) {
+    return { ok: true, estatusSiguiente: null }
   }
 
   return {
@@ -707,9 +746,17 @@ export function fechaIngresoYmd(rep) {
   return aYmdLocalDesdeRaw(raw)
 }
 
-/** Columna / filtro de ingreso en monitor y reportes (misma regla que fechaIngresoYmd). */
+/**
+ * Columna `fecha_ingreso` (date de BD) para el filtro «Equipos que entraron».
+ * No usa fecha_creacion: el monitor debe coincidir con la fecha de ingreso guardada.
+ */
 export function fechaIngresoFiltroYmd(rep) {
-  return fechaIngresoYmd(rep)
+  const raw = rep?.fecha_ingreso ?? rep?.fechaIngreso
+  if (raw == null || raw === '') return null
+  const s = String(raw).trim()
+  const head = s.substring(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head
+  return aYmdLocalDesdeRaw(raw)
 }
 
 /** Fecha de ingreso a guardar o mostrar: siempre la de creación de la orden. */
@@ -964,11 +1011,18 @@ export function patchCompletarFechasHitosFaltantes(rep) {
     patch.fecha_revision = creacionYmd
   }
 
-  if (!fechaSinReparacionYmd(rep) && estatusEsSinReparacion(st) && creacionYmd) {
+  if (
+    !fechaSinReparacionYmd(rep) &&
+    (estatusEsSinReparacion(st) || estatusEsEntregadoSinReparacion(st)) &&
+    creacionYmd
+  ) {
     patch.fecha_sin_reparacion = creacionYmd
   }
 
-  const requiereReparado = estatusEsReparado(st) || estatusEsEntregado(st) || verificado
+  const requiereReparado =
+    !estatusEsSinReparacion(st) &&
+    !estatusEsEntregadoSinReparacion(st) &&
+    (estatusEsReparado(st) || estatusEsEntregado(st) || verificado)
 
   if (!fechaReparadoYmd(rep) && requiereReparado) {
     if (fechaVerYmd) patch.fecha_reparado = fechaVerYmd
@@ -1023,7 +1077,12 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnt
   )
   asignarHito(estatusEsEnRevision, fechaRevisionYmd, 'fecha_revision', hoy)
   asignarHito(estatusEsReparado, fechaReparadoYmd, 'fecha_reparado', hoy)
-  asignarHito(estatusEsSinReparacion, fechaSinReparacionYmd, 'fecha_sin_reparacion', hoy)
+  asignarHito(
+    (s) => estatusEsSinReparacion(s) || estatusEsEntregadoSinReparacion(s),
+    fechaSinReparacionYmd,
+    'fecha_sin_reparacion',
+    hoy,
+  )
   if (estatusEsEntregado(stNuevo) && !fechaEntregaFiltroYmd(repActual)) {
     patch.fecha_entrega = ymdFechaEntregaParaGuardar(
       repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
@@ -1046,11 +1105,11 @@ export function buildPatchCambioEstatusOrden(
   repActual = {},
   { verificadoEntrega = false, fechaVerificacionEntrega = null, estatusAnterior = null } = {},
 ) {
-  const st = normalizarEstatusOrden(estatusNuevo)
   const ant =
     estatusAnterior != null && String(estatusAnterior).trim() !== ''
       ? normalizarEstatusOrden(estatusAnterior)
       : repActual?.estatus
+  const st = estatusEntregaARegistrar(ant, estatusNuevo)
   const now = new Date().toISOString()
   const patch = {
     estatus: st,
@@ -1195,6 +1254,9 @@ export function repEnRangoFechasMonitor(
   if (modo === 'reparado') return ymdEnRangoMonitor(fechaReparadoFiltroYmd(rep), d, h)
   if (modo === 'sin_reparacion') return ymdEnRangoMonitor(fechaSinReparacionFiltroYmd(rep), d, h)
   if (modo === 'revision') return ymdEnRangoMonitor(fechaRevisionFiltroYmd(rep), d, h)
+  if (modo === 'hito' || modo === 'estatus') {
+    return ymdEnRangoMonitor(fechaHitoEstatusMonitor(rep), d, h)
+  }
   const ymd = fechaHitoEstatusMonitor(rep)
   return ymdEnRangoMonitor(ymd, d, h)
 }
@@ -1202,14 +1264,16 @@ export function repEnRangoFechasMonitor(
 /**
  * ¿La orden cumple el filtro del monitor?
  * - Chips de estatus: solo órdenes cuyo estatus actual está seleccionado.
- * - `modoFecha` 'ingreso' (Fecha registrado): rango sobre fecha_ingreso; ignora chips de estatus
+ * - `modoFecha` 'ingreso' (Equipos que entraron): rango sobre columna fecha_ingreso; ignora chips de estatus
  *   (cuántas órdenes entraron ese día, aunque ya estén reparadas o entregadas).
  * - `modoFecha` 'reparado' (Fecha reparado): rango sobre fecha_reparado; ignora chips de estatus
  *   (cuántas pasaron a reparado ese día, aunque ya estén entregadas).
- * - `modoFecha` 'entrega' (Fecha entrega): rango sobre fecha_entrega; ignora chips de estatus
- *   (cuántas se entregaron ese día, sin importar otros filtros de estatus).
+ * - `modoFecha` 'entrega' (Equipos que salieron): rango sobre fecha_entrega; los chips
+ *   Entregado / Entregado sin reparación acotan el tipo de salida.
  * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
- * - Sin chip de fecha especial: solo filtra por chips de estatus (el rango Desde/Hasta no aplica).
+ * - Sin chip de fecha especial: filtra por chips de estatus; si hay rango Desde/Hasta,
+ *   cada orden debe tener el hito de su estatus (ingreso, revisión, reparado, entrega, etc.)
+ *   dentro de ese rango.
  * - Solo órdenes dadas de alta desde el 1° may 2026; fechas de hito anteriores se omiten.
  */
 export function repCoincideFiltroMonitor(
@@ -1221,7 +1285,7 @@ export function repCoincideFiltroMonitor(
     modoFecha = null,
     cuentaVinculada = null,
     ymdDesdePagos = null,
-    estatusParaFiltroFn = (r) => String(r?.estatus ?? '').trim().toUpperCase(),
+    estatusParaFiltroFn = (r) => estatusCanonicoFiltro(r?.estatus),
   },
 ) {
   if (!ordenUsaSistemaWeb(rep)) return false
@@ -1230,11 +1294,22 @@ export function repCoincideFiltroMonitor(
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
 
-  if (modoFecha === 'ingreso' || modoFecha === 'entrega' || modoFecha === 'reparado') {
+  if (modoFecha === 'ingreso' || modoFecha === 'reparado') {
     if (!hayRango) return false
     if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) {
       return false
     }
+    return true
+  }
+
+  if (modoFecha === 'entrega') {
+    if (!hayRango) return false
+    if (!repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, modoFecha)) {
+      return false
+    }
+    const selSalida = estatusSeleccionados
+    const stSalida = estatusParaFiltroFn(rep)
+    if (selSalida.size === 0 || !selSalida.has(stSalida)) return false
     return true
   }
 
@@ -1248,6 +1323,9 @@ export function repCoincideFiltroMonitor(
   const sel = estatusSeleccionados
   const st = estatusParaFiltroFn(rep)
   if (sel.size === 0 || !sel.has(st)) return false
+  if (hayRango && !repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'hito')) {
+    return false
+  }
   return true
 }
 

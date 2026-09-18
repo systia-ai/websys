@@ -157,7 +157,12 @@ export function dashIfEmpty(v) {
 
 export function temaEstatus(estatus) {
   const st = String(estatus ?? '').trim().toUpperCase()
-  if (st === 'ENTREGADO' || st === 'ENTREGADA' || st === 'LIQUIDADA') {
+  if (
+    st === 'ENTREGADO' ||
+    st === 'ENTREGADA' ||
+    st === 'ENTREGADO SIN REPARACION' ||
+    st === 'LIQUIDADA'
+  ) {
     return { fill: [232, 245, 233], border: [56, 142, 60], label: [27, 94, 32] }
   }
   if (st === 'INGRESADO' || st === 'ACTIVA PAGADA') {

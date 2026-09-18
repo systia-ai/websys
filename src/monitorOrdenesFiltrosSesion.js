@@ -1,20 +1,26 @@
-import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
+import { TIPOS_SERVICIO_CANONICOS, ymdHoyLocal } from './reparacionUtils.js'
 
 export const LS_MONITOR_FILTROS = 'sistefix_monitor_ordenes_filtros_v1'
 export const LS_MONITOR_REOPEN = 'sistefix_monitor_reopen_desde_orden'
 
 const TECNICO_TODAS = ''
 
+function fechasRangoPorDefecto() {
+  const hoy = ymdHoyLocal() ?? ''
+  return { fechaDesde: hoy, fechaHasta: hoy }
+}
+
 export function filtrosMonitorPorDefecto() {
+  const fechas = fechasRangoPorDefecto()
   return {
     estatusSeleccionados: ['INGRESADO'],
     tiposServicioSeleccionados: [...TIPOS_SERVICIO_CANONICOS],
     ordenFecha: 'asc',
     tecnicoFiltro: TECNICO_TODAS,
-    usarRangoFechas: false,
+    usarRangoFechas: true,
     rangoFechasElegido: true,
-    fechaDesde: '',
-    fechaHasta: '',
+    fechaDesde: fechas.fechaDesde,
+    fechaHasta: fechas.fechaHasta,
     filtroModoFechaIngreso: false,
     filtroModoFechaEntrega: false,
     filtroModoVerificadas: false,
@@ -22,9 +28,26 @@ export function filtrosMonitorPorDefecto() {
   }
 }
 
+function fechasRangoDesdeGuardado(saved, defaults) {
+  const fechaDesde = saved?.fechaDesde ?? ''
+  const fechaHasta = saved?.fechaHasta ?? ''
+  const hayFechas = Boolean(String(fechaDesde).trim() || String(fechaHasta).trim())
+  if (hayFechas) {
+    return {
+      fechaDesde: saved.fechaDesde ?? defaults.fechaDesde,
+      fechaHasta: saved.fechaHasta ?? defaults.fechaHasta,
+    }
+  }
+  if (saved && saved.usarRangoFechas) {
+    return { fechaDesde: '', fechaHasta: '' }
+  }
+  return { fechaDesde: defaults.fechaDesde, fechaHasta: defaults.fechaHasta }
+}
+
 function parseFiltrosGuardados(saved) {
   const defaults = filtrosMonitorPorDefecto()
   if (!saved || typeof saved !== 'object') return defaults
+  const fechas = fechasRangoDesdeGuardado(saved, defaults)
   return {
     estatusSeleccionados: Array.isArray(saved.estatusSeleccionados)
       ? saved.estatusSeleccionados
@@ -34,27 +57,10 @@ function parseFiltrosGuardados(saved) {
       : defaults.tiposServicioSeleccionados,
     ordenFecha: saved.ordenFecha === 'desc' ? 'desc' : 'asc',
     tecnicoFiltro: saved.tecnicoFiltro ?? defaults.tecnicoFiltro,
-    usarRangoFechas:
-      saved.usarRangoFechas != null
-        ? !!saved.usarRangoFechas
-        : Boolean(
-            saved.filtroModoFechaIngreso ||
-              saved.filtroModoFechaEntrega ||
-              String(saved.fechaDesde ?? '').trim() ||
-              String(saved.fechaHasta ?? '').trim(),
-          ),
-    rangoFechasElegido:
-      saved.rangoFechasElegido != null
-        ? !!saved.rangoFechasElegido
-        : Boolean(
-            saved.usarRangoFechas ||
-              saved.filtroModoFechaIngreso ||
-              saved.filtroModoFechaEntrega ||
-              String(saved.fechaDesde ?? '').trim() ||
-              String(saved.fechaHasta ?? '').trim(),
-          ),
-    fechaDesde: saved.fechaDesde ?? defaults.fechaDesde,
-    fechaHasta: saved.fechaHasta ?? defaults.fechaHasta,
+    usarRangoFechas: true,
+    rangoFechasElegido: true,
+    fechaDesde: fechas.fechaDesde,
+    fechaHasta: fechas.fechaHasta,
     filtroModoFechaIngreso: !!saved.filtroModoFechaIngreso,
     filtroModoFechaEntrega: !!saved.filtroModoFechaEntrega,
     filtroModoVerificadas: !!saved.filtroModoVerificadas,

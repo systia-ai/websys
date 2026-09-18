@@ -10,15 +10,14 @@ import {
   tipoServicioDeRep,
   tecnicoRepCoincideFiltro,
   TIPOS_SERVICIO_CANONICOS,
+  estatusParaFiltroMonitor,
 } from '../src/reparacionUtils.js'
 
 const clientes = [{ id: 1, nombre: 'Juan Pérez' }]
 const equipoPorId = new Map()
 
 function estatusParaFiltro(rep) {
-  const st = String(rep?.estatus ?? '').trim().toUpperCase()
-  if (st === 'ENTREGADA') return 'ENTREGADO'
-  return st
+  return estatusParaFiltroMonitor(rep?.estatus)
 }
 
 function todosTiposServicioSeleccionados(sel) {
@@ -185,6 +184,42 @@ test('Estatus INGRESADO + EN REVISION', () =>
     }),
     [101, 102, 106],
     'Estatus INGRESADO + EN REVISION',
+  ),
+)
+
+test('Rango + estatus INGRESADO usa fecha_ingreso del hito', () =>
+  assertEqual(
+    filtrarMonitor(reps, {
+      estatusSeleccionados: new Set(['INGRESADO']),
+      fechaDesde: '2026-06-20',
+      fechaFin: '2026-06-20',
+    }),
+    [101],
+    'INGRESADO el 20 jun (excluye 106 del 22)',
+  ),
+)
+
+test('Rango + estatus ENTREGADO usa fecha_entrega', () =>
+  assertEqual(
+    filtrarMonitor(reps, {
+      estatusSeleccionados: new Set(['ENTREGADO']),
+      fechaDesde: '2026-06-22',
+      fechaFin: '2026-06-22',
+    }),
+    [103, 499],
+    'ENTREGADO con fecha_entrega el 22 jun',
+  ),
+)
+
+test('Rango + estatus REPARADO usa fecha_reparado', () =>
+  assertEqual(
+    filtrarMonitor(reps, {
+      estatusSeleccionados: new Set(['REPARADO']),
+      fechaDesde: '2026-06-21',
+      fechaFin: '2026-06-21',
+    }),
+    [104],
+    'REPARADO el 21 jun (excluye 105 del 22)',
   ),
 )
 
@@ -484,13 +519,40 @@ test('Buscador #499 con numeral', () =>
 test('Modo entrega en rango 22 jun', () =>
   assertEqual(
     filtrarMonitor(reps, {
-      estatusSeleccionados: new Set(['INGRESADO']),
+      estatusSeleccionados: new Set(['ENTREGADO', 'ENTREGADO SIN REPARACION']),
       fechaDesde: '2026-06-22',
       fechaFin: '2026-06-22',
       modoFecha: 'entrega',
     }),
     [103, 499],
     'Fecha entrega 22 jun (ENTREGADO con fecha_entrega)',
+  ),
+)
+
+test('Equipos que salieron + solo Entregado sin reparación', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        ...reps,
+        {
+          id: 777,
+          estatus: 'ENTREGADO SIN REPARACION',
+          fecha_ingreso: '2026-06-18',
+          fecha_entrega: '2026-06-22',
+          fecha_creacion: '2026-06-18',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      {
+        estatusSeleccionados: new Set(['ENTREGADO SIN REPARACION']),
+        fechaDesde: '2026-06-22',
+        fechaFin: '2026-06-22',
+        modoFecha: 'entrega',
+      },
+    ),
+    [777],
+    'Salida en rango solo ENTREGADO SIN REPARACION',
   ),
 )
 
@@ -503,6 +565,83 @@ test('repEnRangoFechasMonitor ingreso', () => {
   console.log('✓ repEnRangoFechasMonitor ingreso')
   return true
 })
+
+test('Chip ENTREGADO no incluye ENTREGADO SIN REPARACION', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        ...reps,
+        {
+          id: 777,
+          estatus: 'ENTREGADO SIN REPARACION',
+          fecha_ingreso: '2026-06-18',
+          fecha_entrega: '2026-06-22',
+          fecha_creacion: '2026-06-18',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      { estatusSeleccionados: new Set(['ENTREGADO']) },
+    ),
+    [103, 499],
+    'Chip ENTREGADO no incluye ENTREGADO SIN REPARACION',
+  ),
+)
+
+test('Chip ENTREGADO SIN REPARACION solo esos equipos', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        ...reps,
+        {
+          id: 777,
+          estatus: 'ENTREGADO SIN REPARACION',
+          fecha_ingreso: '2026-06-18',
+          fecha_entrega: '2026-06-22',
+          fecha_creacion: '2026-06-18',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      { estatusSeleccionados: new Set(['ENTREGADO SIN REPARACION']) },
+    ),
+    [777],
+    'Chip ENTREGADO SIN REPARACION solo equipos entregados sin reparar',
+  ),
+)
+
+test('Equipos que entraron usa fecha_ingreso, no fecha_creacion', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        {
+          id: 801,
+          estatus: 'REPARADO',
+          fecha_ingreso: '2026-09-14',
+          fecha_creacion: '2026-09-15T05:00:00Z',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+        {
+          id: 802,
+          estatus: 'INGRESADO',
+          fecha_ingreso: '2026-09-15',
+          fecha_creacion: '2026-09-14T18:00:00Z',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      {
+        estatusSeleccionados: new Set(['INGRESADO']),
+        fechaDesde: '2026-09-14',
+        fechaFin: '2026-09-14',
+        modoFecha: 'ingreso',
+      },
+    ),
+    [801],
+    'Solo la orden con fecha_ingreso 14 sep',
+  ),
+)
 
 console.log('')
 console.log(`Resultado: ${passed} ok, ${failed} fallos`)

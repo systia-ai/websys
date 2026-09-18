@@ -2,6 +2,7 @@ import { ESTATUS_ORDEN } from './catalogos.js'
 import {
   aYmdLocalDesdeRaw,
   esOrdenDuplicada,
+  estatusCanonicoFiltro,
   estatusEsEntregado,
   repCoincideFiltroMonitor,
   repEnRangoFechasMonitor,
@@ -19,9 +20,7 @@ export const ESTATUS_ORDEN_REPORTES = [
 ]
 
 export function estatusParaFiltroReporte(rep) {
-  const st = String(rep?.estatus ?? '').trim().toUpperCase()
-  if (st === 'ENTREGADA') return 'ENTREGADO'
-  return st
+  return estatusCanonicoFiltro(rep?.estatus)
 }
 
 export function crearSetEstatusTodos() {
