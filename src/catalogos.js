@@ -27,6 +27,7 @@ export const ESTATUS_ORDEN = [
   'REPARADO',
   'SIN REPARACION',
   'ENTREGADO',
+  'BAJA',
 ]
 
 export const NIVELES_TINTA_PCT = ['25%', '50%', '75%', '100%']

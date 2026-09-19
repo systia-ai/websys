@@ -6581,6 +6581,12 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
   color: #2e7d32;
 }
 
+.rep-orden-badge--baja {
+  background: #eceff1;
+  color: #455a64;
+  border: 1px solid #90a4ae;
+}
+
 .rep-orden-badge--verificada {
   background: #c8e6c9;
   color: #1b5e20;
@@ -13315,6 +13321,12 @@ input.full {
 :root[data-theme='dark'] .rep-orden-badge--entregada {
   background: #14532d !important;
   color: #86efac !important;
+}
+
+:root[data-theme='dark'] .rep-orden-badge--baja {
+  background: #374151 !important;
+  color: #e5e7eb !important;
+  border-color: #6b7280 !important;
 }
 
 :root[data-theme='dark'] .rep-orden-badge--pagada {

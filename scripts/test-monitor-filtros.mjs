@@ -643,6 +643,76 @@ test('Equipos que entraron usa fecha_ingreso, no fecha_creacion', () =>
   ),
 )
 
+test('Chip BAJA solo equipos dados de baja', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        {
+          id: 901,
+          estatus: 'BAJA',
+          fecha_ingreso: '2026-06-20',
+          fecha_creacion: '2026-06-20',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+        {
+          id: 902,
+          estatus: 'INGRESADO',
+          fecha_ingreso: '2026-06-20',
+          fecha_creacion: '2026-06-20',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+        {
+          id: 903,
+          estatus: 'ENTREGADO',
+          fecha_ingreso: '2026-06-20',
+          fecha_creacion: '2026-06-20',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      { estatusSeleccionados: new Set(['BAJA']) },
+    ),
+    [901],
+    'Chip BAJA solo equipos abandonados',
+  ),
+)
+
+test('Chip BAJA + rango usa fecha_baja, no fecha_ingreso', () =>
+  assertEqual(
+    filtrarMonitor(
+      [
+        {
+          id: 911,
+          estatus: 'BAJA',
+          fecha_ingreso: '2026-06-01',
+          fecha_creacion: '2026-06-01',
+          fecha_baja: '2026-09-18',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+        {
+          id: 912,
+          estatus: 'BAJA',
+          fecha_ingreso: '2026-09-18',
+          fecha_creacion: '2026-09-18',
+          fecha_baja: '2026-06-01',
+          tipo_reparacion: 'SERVICIO',
+          cliente_id: 1,
+        },
+      ],
+      {
+        estatusSeleccionados: new Set(['BAJA']),
+        fechaDesde: '2026-09-18',
+        fechaFin: '2026-09-18',
+      },
+    ),
+    [911],
+    'Rango del 18 sep filtra por fecha_baja',
+  ),
+)
+
 console.log('')
 console.log(`Resultado: ${passed} ok, ${failed} fallos`)
 process.exit(failed > 0 ? 1 : 0)

@@ -168,6 +168,9 @@ export function temaEstatus(estatus) {
   if (st === 'INGRESADO' || st === 'ACTIVA PAGADA') {
     return { fill: [227, 242, 253], border: [25, 118, 210], label: [21, 101, 192] }
   }
+  if (st === 'BAJA') {
+    return { fill: [245, 245, 245], border: [97, 97, 97], label: [66, 66, 66] }
+  }
   return { fill: [236, 239, 241], border: [120, 144, 156], label: [69, 90, 100] }
 }
 

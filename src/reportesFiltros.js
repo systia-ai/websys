@@ -17,6 +17,7 @@ export const ESTATUS_ORDEN_REPORTES = [
   'EN REVISION',
   'SIN REPARACION',
   'REPARADO',
+  'BAJA',
 ]
 
 export function estatusParaFiltroReporte(rep) {

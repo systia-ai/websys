@@ -95,6 +95,13 @@ export function estatusEsSinReparacion(estatus) {
   return String(estatus ?? '').trim().toUpperCase() === 'SIN REPARACION'
 }
 
+export const ESTATUS_BAJA = 'BAJA'
+
+/** Equipo abandonado / dado de baja (ya no sigue el flujo de taller). */
+export function estatusEsBaja(estatus) {
+  return normalizarEstatusOrden(estatus) === ESTATUS_BAJA
+}
+
 export const ESTATUS_ENTREGADO_SIN_REPARACION = 'ENTREGADO SIN REPARACION'
 
 export function estatusEsEntregadoSinReparacion(estatus) {
@@ -164,12 +171,15 @@ export function estatusSiguientesPermitidos(estatusActual) {
   const actual = normalizarEstatusOrden(estatusActual)
   if (estatusEsEntregado(actual)) return []
 
+  if (estatusEsBaja(actual)) return ['EN REVISION']
+
   const opciones = new Set()
 
   if (ESTATUS_LATERALES_DESDE_REVISION.includes(actual)) {
     opciones.add('EN REVISION')
     opciones.add('REPARADO')
     if (estatusEsSinReparacion(actual)) opciones.add(ESTATUS_ENTREGADO_SIN_REPARACION)
+    opciones.add(ESTATUS_BAJA)
     return [...opciones]
   }
 
@@ -182,6 +192,8 @@ export function estatusSiguientesPermitidos(estatusActual) {
 
   const idx = FLUJO_ESTATUS_ORDEN.indexOf(actual)
   if (idx > 0) opciones.add(FLUJO_ESTATUS_ORDEN[idx - 1])
+
+  opciones.add(ESTATUS_BAJA)
 
   return [...opciones]
 }
@@ -249,13 +261,15 @@ export function validarTransicionEstatusAlGuardar(estatusPersistido, estatusNuev
   return validarTransicionEstatus(estatusPersistido, estatusNuevo)
 }
 
-/** Transición En revisión ↔ Reparado: requiere confirmación explícita del usuario. */
+/** Transiciones que requieren confirmación explícita del usuario. */
 export function transicionEstatusRequiereConfirmacion(estatusActual, estatusNuevo) {
   const actual = normalizarEstatusOrden(estatusActual)
   const nuevo = normalizarEstatusOrden(estatusNuevo)
   return (
     (estatusEsEnRevision(actual) && estatusEsReparado(nuevo)) ||
-    (estatusEsReparado(actual) && estatusEsEnRevision(nuevo))
+    (estatusEsReparado(actual) && estatusEsEnRevision(nuevo)) ||
+    (!estatusEsBaja(actual) && estatusEsBaja(nuevo)) ||
+    (estatusEsBaja(actual) && estatusEsEnRevision(nuevo))
   )
 }
 
@@ -267,6 +281,12 @@ export function mensajeConfirmacionTransicionEstatus(estatusActual, estatusNuevo
   }
   if (estatusEsReparado(actual) && estatusEsEnRevision(nuevo)) {
     return '¿Está seguro que desea regresar el estatus a En revisión? Se eliminará la fecha de reparado registrada.'
+  }
+  if (!estatusEsBaja(actual) && estatusEsBaja(nuevo)) {
+    return '¿Está seguro que desea marcar esta orden como BAJA? Use este estatus para equipos abandonados que no serán entregados.'
+  }
+  if (estatusEsBaja(actual) && estatusEsEnRevision(nuevo)) {
+    return '¿Está seguro que desea reactivar esta orden y regresarla a En revisión?'
   }
   return ''
 }
@@ -301,7 +321,11 @@ export function bloqueaEntregaSinVerificacion(estatusActual, verificado) {
 
 /** Verificada y pendiente de entrega al cliente (misma lógica que filtro del monitor). */
 export function repEsVerificadaListaEntrega(rep) {
-  return estaVerificadoEntrega(rep) && !estatusEsEntregado(rep?.estatus)
+  return (
+    estaVerificadoEntrega(rep) &&
+    !estatusEsEntregado(rep?.estatus) &&
+    !estatusEsBaja(rep?.estatus)
+  )
 }
 
 export function patchVerificadoEntrega(verificado = true) {
@@ -340,6 +364,10 @@ function reducirPayloadReparacionTrasError(error, payload) {
     const { fecha_sin_reparacion: _f, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
   }
+  if ('fecha_baja' in payload && esErrorColumnaDesconocida(error, 'fecha_baja')) {
+    const { fecha_baja: _f, ...rest } = payload
+    if (Object.keys(rest).length > 0) return rest
+  }
   if ('bitacora' in payload && esErrorColumnaDesconocida(error, 'bitacora')) {
     const { bitacora: _b, ...rest } = payload
     if (Object.keys(rest).length > 0) return rest
@@ -367,6 +395,7 @@ const MENSAJE_MIGRACION_VERIFICADO =
   'No se pudo guardar la verificación: en Supabase faltan las columnas verificado_entrega y fecha_verificacion_entrega. En el SQL Editor ejecute supabase/migrations/20260603160000_reparaciones_verificado_entrega.sql, pulse Run y recargue esta página (F5).'
 
 const SELECT_VERIFICACION_CANDIDATOS = [
+  'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_baja, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus, fecha_ingreso, fecha_revision, fecha_reparado, fecha_entrega',
   'id, verificado_entrega, fecha_verificacion_entrega, estatus',
@@ -389,6 +418,7 @@ function filaVerificacionDesdePayload(reparaId, payload, fechaFallback, dataParc
     fecha_revision: dataParcial?.fecha_revision ?? payload.fecha_revision ?? null,
     fecha_reparado: dataParcial?.fecha_reparado ?? payload.fecha_reparado ?? null,
     fecha_sin_reparacion: dataParcial?.fecha_sin_reparacion ?? payload.fecha_sin_reparacion ?? null,
+    fecha_baja: dataParcial?.fecha_baja ?? payload.fecha_baja ?? null,
     fecha_entrega: dataParcial?.fecha_entrega ?? payload.fecha_entrega ?? null,
   }
 }
@@ -860,6 +890,16 @@ export function fechaSinReparacionFiltroYmd(rep) {
   return fechaSinReparacionYmd(rep)
 }
 
+/** Fecha en que la orden pasó a BAJA (solo columna `fecha_baja`). */
+export function fechaBajaYmd(rep) {
+  return aYmdLocalDesdeRaw(rep?.fecha_baja ?? rep?.fechaBaja)
+}
+
+/** Alias explícito para filtros (misma columna que fechaBajaYmd). */
+export function fechaBajaFiltroYmd(rep) {
+  return fechaBajaYmd(rep)
+}
+
 /** Fecha en que la orden pasó a REPARADO (solo columna `fecha_reparado`). */
 export function fechaReparadoYmd(rep) {
   return aYmdLocalDesdeRaw(rep?.fecha_reparado ?? rep?.fechaReparado)
@@ -1037,7 +1077,7 @@ export function patchCompletarFechasHitosFaltantes(rep) {
 }
 
 /**
- * Graba fecha_ingreso / fecha_revision / fecha_reparado / fecha_sin_reparacion / fecha_entrega
+ * Graba fecha_ingreso / fecha_revision / fecha_reparado / fecha_sin_reparacion / fecha_baja / fecha_entrega
  * al cambiar de estatus. Si hubo cambio de estatus, asigna la fecha del hito que corresponde;
  * si no cambió, solo completa columnas vacías.
  */
@@ -1058,6 +1098,16 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnt
   // Al entrar a REPARADO desde otro estatus, registrar la fecha de hoy (sustituye una anterior).
   if (estatusEsReparado(stNuevo) && !estatusEsReparado(stAnt)) {
     patch.fecha_reparado = hoy
+  }
+
+  // Al salir de BAJA, borrar fecha_baja para registrar la nueva al volver.
+  if (estatusEsBaja(stAnt) && !estatusEsBaja(stNuevo)) {
+    patch.fecha_baja = null
+  }
+
+  // Al entrar a BAJA desde otro estatus, registrar la fecha de hoy.
+  if (estatusEsBaja(stNuevo) && !estatusEsBaja(stAnt)) {
+    patch.fecha_baja = hoy
   }
 
   const creacion = ymdCreacionOrden(repActual)
@@ -1083,6 +1133,7 @@ export function patchFechasHitosEstatus(estatusNuevo, repActual = {}, estatusAnt
     'fecha_sin_reparacion',
     hoy,
   )
+  asignarHito(estatusEsBaja, fechaBajaYmd, 'fecha_baja', hoy)
   if (estatusEsEntregado(stNuevo) && !fechaEntregaFiltroYmd(repActual)) {
     patch.fecha_entrega = ymdFechaEntregaParaGuardar(
       repActual.fecha_entrega ?? repActual.fechaEntrega ?? null,
@@ -1175,6 +1226,8 @@ export function fechasHitosOrdenLegibles(rep, { cuentaVinculada = null, ymdDesde
   if (repa) hitos.push({ clave: 'reparado', etiqueta: 'Reparado', texto: fmt(repa) })
   const sinRep = fechaSinReparacionYmd(rep)
   if (sinRep) hitos.push({ clave: 'sin_reparacion', etiqueta: 'Sin reparación', texto: fmt(sinRep) })
+  const baja = fechaBajaYmd(rep)
+  if (baja) hitos.push({ clave: 'baja', etiqueta: 'Baja', texto: fmt(baja) })
   const ent = fechaEntregaYmd(rep, cuentaVinculada, ymdDesdePagos)
   if (ent) hitos.push({ clave: 'entrega', etiqueta: 'Entrega', texto: fmt(ent) })
   return hitos
@@ -1216,13 +1269,14 @@ function ymdEnRango(ymd, desde, hasta) {
 
 /**
  * Fecha del hito para filtro por rango en el monitor.
- * Solo columnas de BD: fecha_ingreso, fecha_revision, fecha_reparado, fecha_entrega.
+ * Solo columnas de BD: fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_baja, fecha_entrega.
  */
 export function fechaHitoEstatusMonitor(rep) {
   const st = normalizarEstatusOrden(rep?.estatus)
   if (estatusEsEntregado(st)) return fechaEntregaFiltroYmd(rep)
   if (estatusEsReparado(st)) return fechaReparadoFiltroYmd(rep)
   if (estatusEsSinReparacion(st)) return fechaSinReparacionFiltroYmd(rep)
+  if (estatusEsBaja(st)) return fechaBajaFiltroYmd(rep)
   if (estatusEsEnRevision(st)) return fechaRevisionFiltroYmd(rep)
   if (estatusEsIngresado(st)) return fechaIngresoFiltroYmd(rep)
   return fechaRevisionFiltroYmd(rep)
@@ -1253,6 +1307,7 @@ export function repEnRangoFechasMonitor(
   if (modo === 'entrega') return ymdEnRangoMonitor(fechaEntregaFiltroYmd(rep), d, h)
   if (modo === 'reparado') return ymdEnRangoMonitor(fechaReparadoFiltroYmd(rep), d, h)
   if (modo === 'sin_reparacion') return ymdEnRangoMonitor(fechaSinReparacionFiltroYmd(rep), d, h)
+  if (modo === 'baja') return ymdEnRangoMonitor(fechaBajaFiltroYmd(rep), d, h)
   if (modo === 'revision') return ymdEnRangoMonitor(fechaRevisionFiltroYmd(rep), d, h)
   if (modo === 'hito' || modo === 'estatus') {
     return ymdEnRangoMonitor(fechaHitoEstatusMonitor(rep), d, h)
@@ -1272,7 +1327,7 @@ export function repEnRangoFechasMonitor(
  *   Entregado / Entregado sin reparación acotan el tipo de salida.
  * - `modoFecha` 'verificadas': verificadas pendientes de entrega.
  * - Sin chip de fecha especial: filtra por chips de estatus; si hay rango Desde/Hasta,
- *   cada orden debe tener el hito de su estatus (ingreso, revisión, reparado, entrega, etc.)
+ *   cada orden debe tener el hito de su estatus (ingreso, revisión, reparado, baja, entrega, etc.)
  *   dentro de ese rango.
  * - Solo órdenes dadas de alta desde el 1° may 2026; fechas de hito anteriores se omiten.
  */
@@ -1340,7 +1395,7 @@ export function patchReparacionEntregada(repActual = {}, opts = {}) {
 }
 
 const SELECT_REPARACION_FECHAS_HITOS =
-  'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, estatus, verificado_entrega, fecha_verificacion_entrega, fecha_creacion, created_at, updated_at'
+  'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_baja, estatus, verificado_entrega, fecha_verificacion_entrega, fecha_creacion, created_at, updated_at'
 
 function esErrorColumnaDesconocida(error, nombreColumna) {
   const msg = String(error?.message ?? error ?? '').toLowerCase()
@@ -1409,7 +1464,7 @@ export async function actualizarReparacionSupabase(supabase, reparaId, patch) {
 
 /** Patch ENTREGADO si la orden aún no está entregada (p. ej. al liquidar cuenta). */
 export function patchOrdenEntregadaSiAplica(repRow = {}, opts = {}) {
-  if (!repRow?.id || estatusEsEntregado(repRow.estatus)) return null
+  if (!repRow?.id || estatusEsEntregado(repRow.estatus) || estatusEsBaja(repRow.estatus)) return null
   return patchReparacionEntregada(repRow, { estatusAnterior: repRow.estatus, ...opts })
 }
 
@@ -1435,7 +1490,7 @@ export async function entregarOrdenVinculadaSiCuentaLiquidada(supabase, cuentaId
     .eq('id', rid)
     .maybeSingle()
   if (eRep) throw eRep
-  if (!rep || estatusEsEntregado(rep.estatus)) return null
+  if (!rep || estatusEsEntregado(rep.estatus) || estatusEsBaja(rep.estatus)) return null
   return marcarReparacionEntregadaSupabase(supabase, rid)
 }
 
@@ -2038,7 +2093,14 @@ export async function eliminarReparacionCompleta(supabase, reparaId, ls = null) 
 
 /** Reparación aún en taller (no entregada). */
 export function isReparacionActiva(rep) {
-  return !estatusEsEntregado(rep?.estatus)
+  return !estatusEsEntregado(rep?.estatus) && !estatusEsBaja(rep?.estatus)
+}
+
+/** Clase del badge de estatus en listados (activa / entregada / baja). */
+export function claseBadgeEstatusOrden(estatus) {
+  if (estatusEsBaja(estatus)) return 'rep-orden-badge--baja'
+  if (estatusEsEntregado(estatus)) return 'rep-orden-badge--entregada'
+  return 'rep-orden-badge--activa'
 }
 
 /** Orden marcada manualmente como duplicada accidental. */
@@ -2095,6 +2157,11 @@ export async function insertarReparacionSupabase(supabase, row) {
     }
     if ('fecha_sin_reparacion' in payload && esErrorColumnaDesconocida(first.error, 'fecha_sin_reparacion')) {
       const { fecha_sin_reparacion: _f, ...rest } = payload
+      payload = rest
+      continue
+    }
+    if ('fecha_baja' in payload && esErrorColumnaDesconocida(first.error, 'fecha_baja')) {
+      const { fecha_baja: _f, ...rest } = payload
       payload = rest
       continue
     }

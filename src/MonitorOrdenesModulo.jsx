@@ -9,9 +9,13 @@ import {
   contarNotificacionesClienteBitacora,
   estaVerificadoEntrega,
   estatusParaFiltroMonitor,
+  ESTATUS_BAJA,
   ESTATUS_ENTREGADO_SIN_REPARACION,
   estatusEsEntregado,
+  estatusEsBaja,
+  claseBadgeEstatusOrden,
   fechaEntregaYmd,
+  fechaBajaYmd,
   fechaIngresoFiltroYmd,
   fechaIngresoYmd,
   nombresTecnicosEnOrden,
@@ -146,6 +150,7 @@ function etiquetaEstatusMonitor(est) {
   if (st === 'INGRESADO') return 'Ingresado (estatus)'
   if (st === 'ENTREGADO') return 'Entregado (estatus)'
   if (st === ESTATUS_ENTREGADO_SIN_REPARACION) return 'Entregado sin reparación'
+  if (st === ESTATUS_BAJA) return 'Baja'
   return est
 }
 
@@ -160,6 +165,7 @@ const ESTATUS_ORDEN_MONITOR = [
   'REPARADO',
   'EN ESPERA POR REFACCION',
   'SIN REPARACION',
+  ESTATUS_BAJA,
   'EN REVISION',
 ]
 
@@ -170,6 +176,7 @@ const ESTATUS_MONITOR_SECUNDARIOS = [
   'REPARADO',
   'EN ESPERA POR REFACCION',
   'SIN REPARACION',
+  ESTATUS_BAJA,
 ]
 
 const ESTATUS_MONITOR_ANCLADOS_FIN = ['EN REVISION']
@@ -195,6 +202,7 @@ function etiquetaEstatusResumen(est) {
   if (st === 'INGRESADO') return 'Ingresado'
   if (st === 'ENTREGADO') return 'Entregado'
   if (st === ESTATUS_ENTREGADO_SIN_REPARACION) return 'Entregado sin reparación'
+  if (st === ESTATUS_BAJA) return 'Baja'
   return String(est).trim()
 }
 
@@ -615,12 +623,14 @@ export default function MonitorOrdenesModulo({
       const ymdPago = entregaDesdePagosPorRepara.get(rid) ?? null
       const ymdIng = fechaIngresoFiltroYmd(r) ?? fechaIngresoYmd(r)
       const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
+      const ymdBaja = fechaBajaYmd(r)
       const t = fechaIngresoTime(r)
       return {
         rep: r,
         t,
         ymd: ymdIng,
         ymdEntrega: ymdEnt,
+        ymdBaja,
         dias: diasEnTaller(r),
         cuenta,
         ymdPago,
@@ -647,10 +657,11 @@ export default function MonitorOrdenesModulo({
       }
       return compararPorTiempo(a, b, (row) => row.t, ordenFecha)
     })
-    return conTiempo.map(({ rep, ymd, ymdEntrega, dias }) => ({
+    return conTiempo.map(({ rep, ymd, ymdEntrega, ymdBaja, dias }) => ({
       rep,
       ymd,
       ymdEntrega,
+      ymdBaja,
       dias,
     }))
   }, [
@@ -952,14 +963,12 @@ export default function MonitorOrdenesModulo({
   }
 
   function badgeEstatus(rep) {
-    const ent = estatusEsEntregado(rep?.estatus)
     const verificada = estaVerificadoEntrega(rep)
     const numNotificaciones = contarNotificacionesClienteBitacora(rep?.bitacora)
     const st = String(rep?.estatus ?? '—').trim()
-    const mainVariant = ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'
     return (
       <span className="monitor-ordenes-estatus-celda">
-        <span className={`rep-orden-badge rep-orden-badge--tabla${mainVariant}`}>{st}</span>
+        <span className={`rep-orden-badge rep-orden-badge--tabla ${claseBadgeEstatusOrden(st)}`}>{st}</span>
         {verificada ? (
           <span className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--verificada">
             VERIFICADA
@@ -1008,7 +1017,9 @@ export default function MonitorOrdenesModulo({
           title={
             st === ESTATUS_ENTREGADO_SIN_REPARACION
               ? 'Solo equipos entregados sin reparación'
-              : 'Solo este'
+              : st === ESTATUS_BAJA
+                ? 'Solo equipos dados de baja'
+                : 'Solo este'
           }
         >
           Solo
@@ -1373,7 +1384,7 @@ export default function MonitorOrdenesModulo({
                     <thead>
                       <tr>
                         <th>Fecha ingreso</th>
-                        <th>Fecha entrega</th>
+                        <th>Fecha entrega / baja</th>
                         <th>Días</th>
                         <th>No. orden</th>
                         <th>Cliente</th>
@@ -1387,10 +1398,12 @@ export default function MonitorOrdenesModulo({
                       </tr>
                     </thead>
                     <tbody>
-                      {filasOrdenadas.map(({ rep, ymd, ymdEntrega, dias }) => {
+                      {filasOrdenadas.map(({ rep, ymd, ymdEntrega, ymdBaja, dias }) => {
                         const { tipo, desc } = datosEquipo(rep)
                         const tech = String(rep.tecnico ?? '').trim()
                         const ent = estatusEsEntregado(rep?.estatus)
+                        const baja = estatusEsBaja(rep?.estatus)
+                        const ymdSalida = ent ? ymdEntrega : baja ? ymdBaja : null
                         const verificada = estaVerificadoEntrega(rep)
                         return (
                           <tr
@@ -1415,9 +1428,9 @@ export default function MonitorOrdenesModulo({
                               {formatearFechaMostrar(ymd)}
                             </td>
                             <td
-                              className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${ent && ymdEntrega ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}
+                              className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${ymdSalida ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}
                             >
-                              {ent && ymdEntrega ? formatearFechaMostrar(ymdEntrega) : '—'}
+                              {ymdSalida ? formatearFechaMostrar(ymdSalida) : '—'}
                             </td>
                             <td
                               className={`monitor-ordenes-dias${ent ? ' monitor-ordenes-dias--entregado' : ''}`}

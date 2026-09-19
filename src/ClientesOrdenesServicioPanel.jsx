@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { isReparacionActiva } from './reparacionUtils.js'
+import { isReparacionActiva, estatusEsBaja, claseBadgeEstatusOrden } from './reparacionUtils.js'
 import { aYmdLocalDesdeRaw, fechaEntregaYmd, fechaIngresoYmd } from './reparacionUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 
@@ -65,6 +65,7 @@ export default function ClientesOrdenesServicioPanel({
   const filas = useMemo(() => {
     return reparaciones.map((rep) => {
       const activa = isReparacionActiva(rep)
+      const baja = estatusEsBaja(rep?.estatus)
       const eq = equipoFor(rep)
       const cuenta = cuentaFor(rep)
       const ymdPago = cuenta?.id != null ? pagosPorCuentaId[String(cuenta.id)] ?? null : null
@@ -74,6 +75,7 @@ export default function ClientesOrdenesServicioPanel({
       return {
         rep,
         activa,
+        baja,
         ordenId: rep.id ?? '—',
         serie,
         fechaIngreso: formatearYmd(ymdIng),
@@ -177,7 +179,7 @@ export default function ClientesOrdenesServicioPanel({
                   {filas.map((f) => (
                     <tr
                       key={f.rep.id}
-                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.activa ? '' : ' clientes-ordenes-fila--entregada'}`}
+                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.baja ? '' : f.activa ? '' : ' clientes-ordenes-fila--entregada'}`}
                       role="button"
                       tabIndex={0}
                       title={`Abrir orden #${f.ordenId}`}
@@ -199,9 +201,9 @@ export default function ClientesOrdenesServicioPanel({
                       </td>
                       <td>
                         <span
-                          className={`rep-orden-badge rep-orden-badge--tabla${f.activa ? ' rep-orden-badge--activa' : ' rep-orden-badge--entregada'}`}
+                          className={`rep-orden-badge rep-orden-badge--tabla ${claseBadgeEstatusOrden(f.rep?.estatus)}`}
                         >
-                          {f.activa ? 'En taller' : 'Entregada'}
+                          {f.baja ? 'Baja' : f.activa ? 'En taller' : 'Entregada'}
                         </span>
                       </td>
                       <td>{f.tipo || '—'}</td>
@@ -229,13 +231,11 @@ export default function ClientesOrdenesServicioPanel({
                 <li key={f.rep.id}>
                   <button
                     type="button"
-                    className={`rep-activa-card cuentas-cliente-tile${f.activa ? '' : ' rep-orden-entregada'}`}
+                    className={`rep-activa-card cuentas-cliente-tile${f.baja ? '' : f.activa ? '' : ' rep-orden-entregada'}`}
                     onClick={() => onSelectRep?.(f.rep)}
                   >
-                    <span
-                      className={`rep-orden-badge${f.activa ? ' rep-orden-badge--activa' : ' rep-orden-badge--entregada'}`}
-                    >
-                      {f.activa ? 'En taller' : 'Entregada'}
+                    <span className={`rep-orden-badge ${claseBadgeEstatusOrden(f.rep?.estatus)}`}>
+                      {f.baja ? 'Baja' : f.activa ? 'En taller' : 'Entregada'}
                     </span>
                     <strong>🔧 Orden #{f.ordenId}</strong>
                     <span className="rep-activa-dato">

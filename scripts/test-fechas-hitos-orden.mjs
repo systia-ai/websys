@@ -17,6 +17,8 @@ import {
   validarTransicionEstatus,
   patchReparacionEntregada,
   estatusCanonicoFiltro,
+  fechaBajaYmd,
+  fechaHitoEstatusMonitor,
 } from '../src/reparacionUtils.js'
 
 const HOY = ymdHoyLocal()
@@ -218,6 +220,66 @@ test('validarTransicionEstatus permite ENTREGADO y ENTREGADO SIN REPARACION desd
     validarTransicionEstatus('SIN REPARACION', 'ENTREGADO SIN REPARACION').ok,
     true,
     'ENTREGADO SIN REPARACION',
+  )
+})
+
+test('estatusSiguientesPermitidos incluye BAJA desde estatus de taller, no desde ENTREGADO', () => {
+  assertEqual(estatusSiguientesPermitidos('INGRESADO').includes('BAJA'), true, 'desde INGRESADO')
+  assertEqual(estatusSiguientesPermitidos('REPARADO').includes('BAJA'), true, 'desde REPARADO')
+  assertEqual(estatusSiguientesPermitidos('SIN REPARACION').includes('BAJA'), true, 'desde SIN REPARACION')
+  assertEqual(estatusSiguientesPermitidos('ENTREGADO').includes('BAJA'), false, 'no desde ENTREGADO')
+  const desdeBaja = estatusSiguientesPermitidos('BAJA')
+  assertEqual(desdeBaja.includes('EN REVISION'), true, 'desde BAJA a EN REVISION')
+  assertEqual(desdeBaja.length, 1, 'solo EN REVISION desde BAJA')
+})
+
+test('validarTransicionEstatus permite BAJA y reactivar a EN REVISION', () => {
+  assertEqual(validarTransicionEstatus('INGRESADO', 'BAJA').ok, true, 'INGRESADO → BAJA')
+  assertEqual(validarTransicionEstatus('REPARADO', 'BAJA').ok, true, 'REPARADO → BAJA')
+  assertEqual(validarTransicionEstatus('BAJA', 'EN REVISION').ok, true, 'BAJA → EN REVISION')
+  assertEqual(validarTransicionEstatus('ENTREGADO', 'BAJA').ok, false, 'no ENTREGADO → BAJA')
+  assertEqual(validarTransicionEstatus('BAJA', 'ENTREGADO').ok, false, 'no BAJA → ENTREGADO')
+})
+
+test('transicion a BAJA requiere confirmación', () => {
+  assertEqual(transicionEstatusRequiereConfirmacion('INGRESADO', 'BAJA'), true, 'confirmar BAJA')
+  assertEqual(transicionEstatusRequiereConfirmacion('BAJA', 'EN REVISION'), true, 'confirmar reactivar')
+})
+
+test('INGRESADO → BAJA registra fecha_baja de hoy', () => {
+  const rep = {
+    estatus: 'INGRESADO',
+    fecha_creacion: '2026-06-17T12:00:00Z',
+    fecha_ingreso: '2026-06-17',
+  }
+  const patch = buildPatchCambioEstatusOrden('BAJA', rep, { estatusAnterior: 'INGRESADO' })
+  assertEqual(patch.estatus, 'BAJA', 'estatus')
+  assertEqual(patch.fecha_baja, HOY, 'fecha_baja hoy')
+  assertEqual(fechaHitoEstatusMonitor({ ...rep, ...patch }), HOY, 'hito monitor es fecha_baja')
+})
+
+test('BAJA → EN REVISION borra fecha_baja', () => {
+  const rep = {
+    estatus: 'BAJA',
+    fecha_creacion: '2026-06-17T12:00:00Z',
+    fecha_ingreso: '2026-06-17',
+    fecha_baja: '2026-09-10',
+  }
+  const patch = buildPatchCambioEstatusOrden('EN REVISION', rep, { estatusAnterior: 'BAJA' })
+  assertEqual(patch.estatus, 'EN REVISION', 'estatus')
+  assertEqual(patch.fecha_baja, null, 'limpia fecha_baja')
+  assertEqual(fechaBajaYmd({ ...rep, ...patch }), null, 'sin fecha_baja en merged')
+})
+
+test('fechaHitoEstatusMonitor de BAJA usa fecha_baja, no ingreso', () => {
+  assertEqual(
+    fechaHitoEstatusMonitor({
+      estatus: 'BAJA',
+      fecha_ingreso: '2026-06-01',
+      fecha_baja: '2026-09-18',
+    }),
+    '2026-09-18',
+    'hito baja',
   )
 })
 

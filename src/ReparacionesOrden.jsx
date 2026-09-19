@@ -30,6 +30,7 @@ import {
   aYmdLocalDesdeRaw,
   esOrdenDuplicada,
   estatusEsEntregado,
+  estatusEsBaja,
   estatusPermiteVerificacionEntrega,
   estatusEsSinReparacion,
   estatusListoParaVerificacionEntrega,
@@ -305,6 +306,7 @@ export default function ReparacionesOrden({
   const [fechaRevisionOrden, setFechaRevisionOrden] = useState(null)
   const [fechaReparadoOrden, setFechaReparadoOrden] = useState(null)
   const [fechaSinReparacionOrden, setFechaSinReparacionOrden] = useState(null)
+  const [fechaBajaOrden, setFechaBajaOrden] = useState(null)
   const [fechaEntregaOrden, setFechaEntregaOrden] = useState(null)
   const [cuentaOrden, setCuentaOrden] = useState(null)
   /** Cuentas del mismo cliente sin repara_id (requieren vinculación manual). */
@@ -319,12 +321,14 @@ export default function ReparacionesOrden({
   const fechaRevisionRef = useRef(null)
   const fechaReparadoRef = useRef(null)
   const fechaSinReparacionRef = useRef(null)
+  const fechaBajaRef = useRef(null)
   const fechaEntregaRef = useRef(null)
   fechaCreacionRef.current = fechaCreacionOrden
   fechaIngresoRef.current = fechaIngresoOrden
   fechaRevisionRef.current = fechaRevisionOrden
   fechaReparadoRef.current = fechaReparadoOrden
   fechaSinReparacionRef.current = fechaSinReparacionOrden
+  fechaBajaRef.current = fechaBajaOrden
   fechaEntregaRef.current = fechaEntregaOrden
 
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
@@ -376,6 +380,7 @@ export default function ReparacionesOrden({
       fecha_revision: fechaRevisionOrden,
       fecha_reparado: fechaReparadoOrden,
       fecha_sin_reparacion: fechaSinReparacionOrden,
+      fecha_baja: fechaBajaOrden,
       fecha_entrega: fechaEntregaOrden,
     }
     return fechasHitosOrdenConVerificacion(rep, {
@@ -391,6 +396,7 @@ export default function ReparacionesOrden({
     fechaRevisionOrden,
     fechaReparadoOrden,
     fechaSinReparacionOrden,
+    fechaBajaOrden,
     fechaEntregaOrden,
     cuentaOrden,
     ymdEntregaDesdePagos,
@@ -406,6 +412,7 @@ export default function ReparacionesOrden({
     const sinReparacion = aYmdLocalDesdeRaw(
       data.fecha_sin_reparacion ?? data.fechaSinReparacion ?? null,
     )
+    const baja = aYmdLocalDesdeRaw(data.fecha_baja ?? data.fechaBaja ?? null)
     const entrega = aYmdLocalDesdeRaw(
       data.fecha_entrega ?? data.fechaEntrega ?? data.fecha_entregada ?? null,
     )
@@ -414,12 +421,14 @@ export default function ReparacionesOrden({
     fechaRevisionRef.current = revision
     fechaReparadoRef.current = reparado
     fechaSinReparacionRef.current = sinReparacion
+    fechaBajaRef.current = baja
     fechaEntregaRef.current = entrega
     setFechaCreacionOrden(creacion)
     setFechaIngresoOrden(ingreso)
     setFechaRevisionOrden(revision)
     setFechaReparadoOrden(reparado)
     setFechaSinReparacionOrden(sinReparacion)
+    setFechaBajaOrden(baja)
     setFechaEntregaOrden(entrega)
   }, [])
 
@@ -432,6 +441,7 @@ export default function ReparacionesOrden({
       fecha_revision: fechaRevisionRef.current,
       fecha_reparado: fechaReparadoRef.current,
       fecha_sin_reparacion: fechaSinReparacionRef.current,
+      fecha_baja: fechaBajaRef.current,
       fecha_entrega: fechaEntregaRef.current,
       verificado_entrega: verificadoEntrega,
       fecha_verificacion_entrega: fechaVerificacionEntrega,
@@ -459,6 +469,10 @@ export default function ReparacionesOrden({
     if (patchF.fecha_sin_reparacion != null) {
       fechaSinReparacionRef.current = patchF.fecha_sin_reparacion
       setFechaSinReparacionOrden(patchF.fecha_sin_reparacion)
+    }
+    if ('fecha_baja' in patchF) {
+      fechaBajaRef.current = patchF.fecha_baja
+      setFechaBajaOrden(patchF.fecha_baja)
     }
     if (estatusEsEntregado(estatusVal)) {
       const ent = patchF.fecha_entrega ?? ymdFechaEntregaParaGuardar(fechaEntregaRef.current)
@@ -1207,7 +1221,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eSel } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_creacion, created_at, estatus, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_baja, fecha_creacion, created_at, estatus, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -1315,6 +1329,7 @@ export default function ReparacionesOrden({
           fecha_revision: fechaRevisionOrden,
           fecha_reparado: fechaReparadoOrden,
           fecha_sin_reparacion: fechaSinReparacionOrden,
+          fecha_baja: fechaBajaOrden,
           verificado_entrega: false,
           fecha_verificacion_entrega: null,
           fecha_entrega: fechaEntregaOrden,
@@ -1341,6 +1356,7 @@ export default function ReparacionesOrden({
           fecha_revision: fechaRevisionOrden,
           fecha_reparado: fechaReparadoOrden,
           fecha_sin_reparacion: fechaSinReparacionOrden,
+          fecha_baja: fechaBajaOrden,
           verificado_entrega: false,
           fecha_entrega: fechaEntregaOrden,
         }
@@ -1481,6 +1497,7 @@ export default function ReparacionesOrden({
       fecha_revision: fechaRevisionRef.current,
       fecha_reparado: fechaReparadoRef.current,
       fecha_sin_reparacion: fechaSinReparacionRef.current,
+      fecha_baja: fechaBajaRef.current,
     }
     let bitacoraGuardar = bitacora.trim() ? bitacora : null
     if (bitacoraNueva.trim()) {
@@ -1530,7 +1547,7 @@ export default function ReparacionesOrden({
         const { data: guardada, error: eVer } = await supabase
           .from('reparaciones')
           .select(
-            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_creacion, created_at, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
+            'fecha_entrega, fecha_ingreso, fecha_revision, fecha_reparado, fecha_sin_reparacion, fecha_baja, fecha_creacion, created_at, estatus, updated_at, verificado_entrega, fecha_verificacion_entrega',
           )
           .eq('id', id)
           .maybeSingle()
@@ -1594,6 +1611,10 @@ export default function ReparacionesOrden({
       if (patch.fecha_sin_reparacion) {
         fechaSinReparacionRef.current = patch.fecha_sin_reparacion
         setFechaSinReparacionOrden(patch.fecha_sin_reparacion)
+      }
+      if ('fecha_baja' in patch) {
+        fechaBajaRef.current = patch.fecha_baja
+        setFechaBajaOrden(patch.fecha_baja)
       }
       await cargarCuentaYEntregaAux(id)
       if (estatusEsEntregado(estatusGuardar)) {
@@ -2493,7 +2514,7 @@ export default function ReparacionesOrden({
           </div>
         </div>
 
-        {(esOrdenExistente || idReparacion != null) && !estatusEsEntregado(estatus) ? (
+        {(esOrdenExistente || idReparacion != null) && !estatusEsEntregado(estatus) && !estatusEsBaja(estatus) ? (
           <div
             className={`rep-verificacion-entrega${verificadoEntrega ? ' rep-verificacion-entrega--ok' : ''}`}
             role="status"

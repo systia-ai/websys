@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { claseBadgeEstatusOrden } from './reparacionUtils.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -84,10 +85,6 @@ function formatearFechaRep(rep) {
   }
   if (s.length >= 16) return s.substring(0, 16).replace('T', ' ')
   return s.substring(0, 10)
-}
-
-function esEntregada(est) {
-  return /ENTREGAD/i.test(String(est ?? ''))
 }
 
 function buildSessionFromDetalleFixed(row) {
@@ -342,7 +339,6 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
                   <tbody>
                     {resultados.map((row) => {
                       const { rep, nombreCliente, serieEquipo, tipoEquipo } = row
-                      const ent = esEntregada(rep.estatus)
                       const st = String(rep.estatus ?? '—').trim()
                       return (
                         <tr
@@ -363,7 +359,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
                           <td className="cuentas-cliente-tabla-fecha">{formatearFechaRep(rep)}</td>
                           <td>
                             <span
-                              className={`rep-orden-badge rep-orden-badge--tabla${ent ? ' rep-orden-badge--entregada' : ' rep-orden-badge--activa'}`}
+                              className={`rep-orden-badge rep-orden-badge--tabla ${claseBadgeEstatusOrden(st)}`}
                             >
                               {st}
                             </span>
