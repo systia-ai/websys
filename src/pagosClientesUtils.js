@@ -1,4 +1,5 @@
 import { aYmdLocalDesdeRaw } from './reparacionUtils.js'
+import { fetchAllRows } from './supabaseFetchAll.js'
 
 export const LS_PAGOS_CLIENTES = 'sistefix_local_pagosclientes'
 export const LS_PAGOCLIENTE_LEGACY = 'sistefix_local_pagocliente'
@@ -75,14 +76,16 @@ export async function cargarTodosPagosClientes(supabase) {
   const bloques = []
   let algunaTabla = false
   for (const tabla of TABLAS_PAGOS_SUPABASE) {
-    const { data, error } = await supabase.from(tabla).select('*').order('id', { ascending: false })
-    if (!error) {
+    try {
+      const rows = await fetchAllRows(() =>
+        supabase.from(tabla).select('*').order('id', { ascending: false }),
+      )
       algunaTabla = true
-      bloques.push(data ?? [])
-      continue
+      bloques.push(rows)
+    } catch (error) {
+      if (isTableMissingError(error)) continue
+      throw error
     }
-    if (isTableMissingError(error)) continue
-    throw error
   }
   if (!algunaTabla) {
     throw new Error('En Supabase no existe la tabla pagosclientes ni pagocliente.')

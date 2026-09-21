@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { claseBadgeEstatusOrden } from './reparacionUtils.js'
+import { fetchAllRows } from './supabaseFetchAll.js'
 
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
@@ -106,15 +107,12 @@ function buildSessionFromDetalleFixed(row) {
 
 async function cargarTablas(supabase) {
   if (supabase) {
-    const [a, b, c] = await Promise.all([
-      supabase.from('reparaciones').select('*').order('id', { ascending: false }),
-      supabase.from('clientes').select('*'),
-      supabase.from('equipos').select('*'),
+    const [reps, clientes, equipos] = await Promise.all([
+      fetchAllRows(() => supabase.from('reparaciones').select('*').order('id', { ascending: false })),
+      fetchAllRows(() => supabase.from('clientes').select('*').order('id', { ascending: true })),
+      fetchAllRows(() => supabase.from('equipos').select('*').order('id', { ascending: true })),
     ])
-    if (a.error) throw a.error
-    if (b.error) throw b.error
-    if (c.error) throw c.error
-    return { reps: a.data ?? [], clientes: b.data ?? [], equipos: c.data ?? [] }
+    return { reps, clientes, equipos }
   }
   return {
     reps: readLs(LS_REP, []),

@@ -7,6 +7,7 @@ import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { fetchAllRows } from './supabaseFetchAll.js'
 import {
   aYmdLocalDesdeRaw,
   formatFechaLegibleEsMx,
@@ -338,13 +339,12 @@ export default function ReportesModulo({
         let todos = []
         let cuentas = []
         if (supabase) {
-          const [rRep, rCuentas] = await Promise.all([
-            supabase.from('reparaciones').select('*').order('id', { ascending: false }),
-            supabase.from('cuentas').select('*'),
+          const [todosRep, todasCuentas] = await Promise.all([
+            fetchAllRows(() => supabase.from('reparaciones').select('*').order('id', { ascending: false })),
+            fetchAllRows(() => supabase.from('cuentas').select('*').order('id', { ascending: true })).catch(() => []),
           ])
-          if (rRep.error) throw rRep.error
-          todos = rRep.data ?? []
-          if (!rCuentas.error) cuentas = rCuentas.data ?? []
+          todos = todosRep
+          cuentas = todasCuentas
         } else {
           todos = readLs(LS_REP, [])
           cuentas = readLs(LS_CUENTAS, [])

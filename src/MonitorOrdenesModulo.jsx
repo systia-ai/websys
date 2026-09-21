@@ -4,6 +4,7 @@ import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { fetchAllRows } from './supabaseFetchAll.js'
 import {
   aYmdLocalDesdeRaw,
   contarNotificacionesClienteBitacora,
@@ -356,31 +357,24 @@ export default function MonitorOrdenesModulo({
     setLoading(true)
     try {
       if (supabase) {
-        const [r1, r2, r3, r4, r5] = await Promise.all([
-          supabase.from('reparaciones').select('*'),
-          supabase.from('clientes').select('*'),
-          supabase.from('equipos').select('*'),
-          supabase.from('cuentas').select('*'),
-          supabase.from('pagosclientes').select('*'),
+        const [reps, clientesRows, equiposRows, cuentasRows, pagosRows] = await Promise.all([
+          fetchAllRows(() => supabase.from('reparaciones').select('*').order('id', { ascending: true })),
+          fetchAllRows(() => supabase.from('clientes').select('*').order('id', { ascending: true })),
+          fetchAllRows(() => supabase.from('equipos').select('*').order('id', { ascending: true })),
+          fetchAllRows(() => supabase.from('cuentas').select('*').order('id', { ascending: true })).catch((e) => {
+            console.warn('Monitor: no se cargaron cuentas para fechas de entrega:', e.message)
+            return []
+          }),
+          fetchAllRows(() => supabase.from('pagosclientes').select('*').order('id', { ascending: true })).catch((e) => {
+            console.warn('Monitor: no se cargaron pagos para fechas de entrega:', e.message)
+            return []
+          }),
         ])
-        if (r1.error) throw r1.error
-        if (r2.error) throw r2.error
-        if (r3.error) throw r3.error
-        setReparaciones(r1.data ?? [])
-        setClientes((r2.data ?? []).map((x) => normalizeClienteRow(x)))
-        setEquipos(r3.data ?? [])
-        if (r4.error) {
-          console.warn('Monitor: no se cargaron cuentas para fechas de entrega:', r4.error.message)
-          setCuentas([])
-        } else {
-          setCuentas(r4.data ?? [])
-        }
-        if (r5.error) {
-          console.warn('Monitor: no se cargaron pagos para fechas de entrega:', r5.error.message)
-          setPagos([])
-        } else {
-          setPagos(r5.data ?? [])
-        }
+        setReparaciones(reps)
+        setClientes(clientesRows.map((x) => normalizeClienteRow(x)))
+        setEquipos(equiposRows)
+        setCuentas(cuentasRows)
+        setPagos(pagosRows)
       } else {
         setReparaciones(readLs(LS_REP, []))
         setClientes(readLs(LS_CLIENTES, []).map((x) => normalizeClienteRow(x)))

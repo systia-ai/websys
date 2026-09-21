@@ -22,6 +22,7 @@ import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
+import { fetchAllRows } from './supabaseFetchAll.js'
 
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_VISTA_CLIENTES = 'sistefix_clientes_lista_vista'
@@ -693,9 +694,9 @@ export default function ClientesModulo({
       try {
         let todas = []
         if (supabase) {
-          const { data, error } = await supabase.from('reparaciones').select('*').order('id', { ascending: false })
-          if (error) throw error
-          todas = data ?? []
+          todas = await fetchAllRows(() =>
+            supabase.from('reparaciones').select('*').order('id', { ascending: false }),
+          )
         } else {
           todas = readLs(LS_REP, [])
         }
@@ -714,18 +715,16 @@ export default function ClientesModulo({
         let todasCuentas = []
         let todosPagos = []
         if (supabase) {
-          const [eqRes, cuRes, pagRes] = await Promise.all([
-            supabase.from('equipos').select('*'),
-            supabase.from('cuentas').select('*'),
-            supabase.from('pagosclientes').select('*'),
+          const [eqRows, cuRows, pagRows] = await Promise.all([
+            fetchAllRows(() => supabase.from('equipos').select('*').order('id', { ascending: true })).catch(() => []),
+            fetchAllRows(() => supabase.from('cuentas').select('*').order('id', { ascending: true })).catch(() => []),
+            fetchAllRows(() => supabase.from('pagosclientes').select('*').order('id', { ascending: true })).catch(() => []),
           ])
-          if (!eqRes.error) {
-            for (const e of eqRes.data ?? []) {
-              if (e?.id != null) eqMap[String(e.id)] = e
-            }
+          for (const e of eqRows) {
+            if (e?.id != null) eqMap[String(e.id)] = e
           }
-          if (!cuRes.error) todasCuentas = cuRes.data ?? []
-          if (!pagRes.error) todosPagos = pagRes.data ?? []
+          todasCuentas = cuRows
+          todosPagos = pagRows
         } else {
           for (const e of readLs(LS_EQUIPOS, [])) {
             if (e?.id != null) eqMap[String(e.id)] = e
