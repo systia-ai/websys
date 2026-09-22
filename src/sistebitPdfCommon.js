@@ -436,6 +436,19 @@ export function drawContactoSistebitPdf(pdf, y, contentW, centerX, { compact = f
 }
 
 /**
+ * Descarga el PDF para visualizarlo con el visor predeterminado (p. ej. Acrobat),
+ * sin abrir el diálogo de impresión.
+ * @param {import('jspdf').jsPDF} pdf
+ * @param {{ filename?: string }} [opts]
+ */
+export function openSistebitPdfDocument(pdf, opts = {}) {
+  const raw = String(opts.filename ?? 'documento.pdf').trim() || 'documento.pdf'
+  const safe = raw.replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').slice(0, 160)
+  const filename = /\.pdf$/i.test(safe) ? safe : `${safe}.pdf`
+  pdf.save(filename)
+}
+
+/**
  * Abre el diálogo de impresión de un documento jsPDF.
  * @param {import('jspdf').jsPDF} pdf
  * @param {{ timeoutMsg?: string, iframeTitle?: string }} [opts]

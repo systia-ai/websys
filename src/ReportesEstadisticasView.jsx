@@ -1,28 +1,30 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   AGRUPACIONES_ESTADISTICAS,
+  datasetsComparativaReporte,
+  datasetsTienenDatos,
   guardarAgrupacionEstadisticas,
   hayDatosConFecha,
-  labelDiaCorta,
-  labelEstatusGrafica,
+  kpisDesdeDatasets,
   labelPeriodoEje,
   leerAgrupacionEstadisticas,
-  reparacionesEnRango,
-  segmentosAnioEnPeriodo,
-  segmentosMesEnPeriodo,
-  serieDistribucionOrdenes,
-  serieEstatus,
-  serieOrdenesAgrupada,
-  serieOrdenesPorDia,
   serieTieneDatos,
-  serieVerificadasAgrupada,
-  tituloAgrupacionOrdenes,
-  tituloAgrupacionVerificadas,
+  tituloComparativa,
+  totalesDesdeDatasets,
 } from './reportesEstadisticas.js'
 
 const W = 640
 const H = 240
-const PAD = { t: 28, r: 20, b: 48, l: 56 }
+const PAD = { t: 36, r: 20, b: 48, l: 56 }
+
+function yEtiquetaValor(yPunto, offset = 11) {
+  return Math.max(12, Number(yPunto) - offset)
+}
+
+function dxEtiquetaSerie(indice, nSeries) {
+  if (nSeries <= 1) return 0
+  return (indice - (nSeries - 1) / 2) * 9
+}
 
 const BAR_COLORS = ['#1976d2', '#42a5f5', '#26a69a', '#66bb6a', '#ffa726', '#ab47bc', '#78909c']
 
@@ -31,10 +33,59 @@ function maxValor(series) {
   return m <= 0 ? 1 : m
 }
 
+function maxValorDatasets(datasets) {
+  let m = 0
+  for (const d of datasets ?? []) {
+    for (const p of d.points ?? []) {
+      m = Math.max(m, Number(p.value) || 0)
+    }
+  }
+  return m <= 0 ? 1 : m
+}
+
+function normalizarDatasets(datasets, series, color = '#1976d2') {
+  if (datasets?.length) return datasets
+  if (series?.length) {
+    return [{ id: 'serie', label: 'Serie', color, points: series }]
+  }
+  return []
+}
+
 function formatCantEje(v) {
   const n = Number(v)
   if (!Number.isFinite(n)) return '0'
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+export function ReportesKpisSeleccion({ kpis }) {
+  if (!kpis?.length) return null
+  return (
+    <section className="reportes-kpi-grid card-pad" aria-label="Cantidades de la selección">
+      {kpis.map((k) => (
+        <div key={k.id} className="reportes-kpi" style={{ borderTopColor: k.color }}>
+          <span className="label">
+            <span className="reportes-kpi-swatch" style={{ background: k.color }} aria-hidden />
+            {k.label}
+          </span>
+          <strong>{k.value}</strong>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function LeyendaComparativa({ datasets }) {
+  if (!datasets?.length) return null
+  return (
+    <ul className="reportes-chart-legend reportes-chart-legend--comparativa">
+      {datasets.map((d) => (
+        <li key={d.id}>
+          <span className="reportes-chart-legend-swatch" style={{ background: d.color }} />
+          {d.label}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 function SvgChartEmpty({ title, mensaje = 'Sin datos en este periodo' }) {
@@ -64,10 +115,11 @@ function SvgDefs() {
   )
 }
 
-function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) {
+function SvgLineChart({ title, series, datasets, formatY = formatCantEje, formatXLabel }) {
   const fmtX = formatXLabel ?? ((l) => l)
-  const conDatos = serieTieneDatos(series)
-  const n = series?.length ?? 0
+  const sets = normalizarDatasets(datasets, series)
+  const n = sets[0]?.points?.length ?? 0
+  const conDatos = datasetsTienenDatos(sets)
 
   if (!conDatos || n === 0) {
     return <SvgChartEmpty title={title} />
@@ -75,18 +127,10 @@ function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) 
 
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
-  const maxY = maxValor(series)
-  const pts = series.map((d, i) => {
-    const x = PAD.l + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-    const y = PAD.t + innerH - (Number(d.value) / maxY) * innerH
-    return { x, y, ...d }
-  })
-
-  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
-  const areaPath =
-    pts.length > 0
-      ? `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${(PAD.t + innerH).toFixed(1)} L${pts[0].x.toFixed(1)},${(PAD.t + innerH).toFixed(1)} Z`
-      : ''
+  const maxY = maxValorDatasets(sets)
+  const labels = sets[0].points.map((p) => p.label)
+  const xAt = (i) => PAD.l + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
+  const yAt = (v) => PAD.t + innerH - (Number(v) / maxY) * innerH
 
   const gridLines = 4
   const yTicks = Array.from({ length: gridLines + 1 }, (_, i) => {
@@ -94,14 +138,13 @@ function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) 
     const y = PAD.t + (i / gridLines) * innerH
     return { v, y, key: `y-${i}` }
   })
-
   const xStep = Math.max(1, Math.ceil(n / 7))
+  const multi = sets.length > 1
 
   return (
     <figure className="reportes-chart-card">
       <figcaption className="reportes-chart-title">{title}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
-        <SvgDefs />
         {yTicks.map(({ v, y, key }) => (
           <g key={key}>
             <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} className="reportes-chart-grid" />
@@ -110,26 +153,49 @@ function SvgLineChart({ title, series, formatY = formatCantEje, formatXLabel }) 
             </text>
           </g>
         ))}
-        {areaPath ? <path d={areaPath} fill="url(#reportesAreaGrad)" /> : null}
-        {linePath ? <path d={linePath} className="reportes-chart-line" fill="none" /> : null}
-        {pts.map((p, i) => (
-          <g key={`pt-${i}-${p.label}`}>
-            <circle cx={p.x} cy={p.y} r={5} className="reportes-chart-dot" />
-            {Number(p.value) > 0 ? (
-              <text x={p.x} y={p.y - 10} textAnchor="middle" className="reportes-chart-point-val">
-                {formatY(p.value)}
-              </text>
-            ) : null}
-          </g>
-        ))}
-        {pts.map((p, i) =>
+        {sets.map((set, si) => {
+          const pts = (set.points ?? []).map((d, i) => ({
+            x: xAt(i),
+            y: yAt(d.value),
+            ...d,
+          }))
+          const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+          const dx = dxEtiquetaSerie(si, sets.length)
+          return (
+            <g key={`line-${set.id}`}>
+              {linePath ? (
+                <path d={linePath} fill="none" stroke={set.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              ) : null}
+              {pts.map((p, i) => (
+                <g key={`pt-${set.id}-${i}`}>
+                  <circle cx={p.x} cy={p.y} r={multi ? 3.5 : 5} fill={set.color} className="reportes-chart-dot">
+                    <title>{`${set.label}: ${formatY(p.value)}`}</title>
+                  </circle>
+                  {Number(p.value) > 0 ? (
+                    <text
+                      x={p.x + dx}
+                      y={yEtiquetaValor(p.y)}
+                      textAnchor="middle"
+                      className="reportes-chart-point-val"
+                      style={{ fill: set.color }}
+                    >
+                      {formatY(p.value)}
+                    </text>
+                  ) : null}
+                </g>
+              ))}
+            </g>
+          )
+        })}
+        {labels.map((label, i) =>
           i % xStep === 0 || i === n - 1 ? (
-            <text key={`x-${i}-${p.label}`} x={p.x} y={H - 14} textAnchor="middle" className="reportes-chart-axis-x">
-              {fmtX(p.label)}
+            <text key={`x-${i}-${label}`} x={xAt(i)} y={H - 14} textAnchor="middle" className="reportes-chart-axis-x">
+              {fmtX(label)}
             </text>
           ) : null,
         )}
       </svg>
+      <LeyendaComparativa datasets={sets} />
     </figure>
   )
 }
@@ -148,6 +214,7 @@ function lineasEtiquetaBarra(texto, maxPorLinea = 11) {
 function SvgBarChart({
   title,
   series,
+  datasets,
   formatY = formatCantEje,
   formatXLabel,
   formatBarValue,
@@ -157,11 +224,99 @@ function SvgBarChart({
 }) {
   const fmtX = formatXLabel ?? ((l) => l)
   const fmtVal = formatBarValue ?? formatY
-  const conDatos = serieTieneDatos(series)
-  const n = series?.length ?? 0
+  const sets = normalizarDatasets(datasets, series, colorCycle[0])
+  const grouped = Boolean(datasets?.length)
+  const n = grouped ? (sets[0]?.points?.length ?? 0) : (series?.length ?? sets[0]?.points?.length ?? 0)
+  const conDatos = grouped ? datasetsTienenDatos(sets) : serieTieneDatos(series ?? sets[0]?.points)
 
   if (!conDatos || n === 0) {
     return <SvgChartEmpty title={title} />
+  }
+
+  if (grouped) {
+    const pad = PAD
+    const innerW = W - pad.l - pad.r
+    const innerH = H - pad.t - pad.b
+    const maxY = maxValorDatasets(sets)
+    const nSeries = sets.length
+    const groupGap = n > 10 ? 4 : 8
+    const groupW = n > 0 ? (innerW - groupGap * (n + 1)) / n : 0
+    const barGap = 2
+    const barW = Math.max(3, (groupW - barGap * (nSeries - 1)) / nSeries)
+    const xStep = Math.max(1, Math.ceil(n / 8))
+    const labels = sets[0].points.map((p) => p.label)
+
+    return (
+      <figure className="reportes-chart-card">
+        <figcaption className="reportes-chart-title">{title}</figcaption>
+        <svg viewBox={`0 0 ${W} ${H}`} className="reportes-chart-svg" role="img" aria-label={title}>
+          {[0, 0.25, 0.5, 0.75, 1].map((frac, i) => {
+            const y = pad.t + innerH * (1 - frac)
+            const v = maxY * frac
+            return (
+              <g key={`grid-${i}`}>
+                <line x1={pad.l} y1={y} x2={W - pad.r} y2={y} className="reportes-chart-grid" />
+                <text x={pad.l - 6} y={y + 4} textAnchor="end" className="reportes-chart-axis-y">
+                  {formatY(v)}
+                </text>
+              </g>
+            )
+          })}
+          {labels.map((label, i) => {
+            const groupX = pad.l + groupGap + i * (groupW + groupGap)
+            const cx = groupX + groupW / 2
+            return (
+              <g key={`grp-${i}-${label}`}>
+                {sets.map((set, j) => {
+                  const val = Number(set.points[i]?.value || 0)
+                  const h = Math.max(val > 0 ? 3 : 0, (val / maxY) * innerH)
+                  const x = groupX + j * (barW + barGap)
+                  const y = pad.t + innerH - h
+                  const cxBar = x + barW / 2
+                  return (
+                    <g key={`bar-${set.id}-${i}`}>
+                      <rect
+                        x={x}
+                        y={y}
+                        width={barW}
+                        height={h}
+                        rx={2}
+                        fill={set.color}
+                        className="reportes-chart-bar"
+                      >
+                        <title>{`${set.label}: ${fmtVal(val)}`}</title>
+                      </rect>
+                      {val > 0 ? (
+                        <text
+                          x={cxBar}
+                          y={yEtiquetaValor(y, 5)}
+                          textAnchor="middle"
+                          className={`reportes-chart-bar-val${n > 12 || barW < 12 ? ' reportes-chart-bar-val--dense' : ''}`}
+                          style={{ fill: set.color }}
+                        >
+                          {fmtVal(val)}
+                        </text>
+                      ) : null}
+                    </g>
+                  )
+                })}
+                {i % xStep === 0 || i === n - 1 ? (
+                  <text
+                    x={cx}
+                    y={H - 12}
+                    textAnchor="middle"
+                    className="reportes-chart-axis-x reportes-chart-axis-x--bar"
+                  >
+                    {fmtX(label)}
+                  </text>
+                ) : null}
+              </g>
+            )
+          })}
+        </svg>
+        <LeyendaComparativa datasets={sets} />
+      </figure>
+    )
   }
 
   const pad = chipXLabels ? { ...PAD, b: 16 } : PAD
@@ -218,8 +373,8 @@ function SvgBarChart({
           return (
             <g key={`bar-${i}-${d.label}`}>
               <rect x={x} y={y} width={barW} height={h} rx={3} fill={fill} className="reportes-chart-bar" />
-              {val > 0 && h >= 14 ? (
-                <text x={cx} y={y - 5} textAnchor="middle" className="reportes-chart-bar-val">
+              {val > 0 ? (
+                <text x={cx} y={yEtiquetaValor(y, 5)} textAnchor="middle" className="reportes-chart-bar-val">
                   {fmtVal(val)}
                 </text>
               ) : null}
@@ -313,7 +468,7 @@ function SvgDonutChart({ title, series }) {
           {total}
         </text>
         <text x={cx} y={cy + 16} textAnchor="middle" className="reportes-chart-donut-sub">
-          órdenes
+          total
         </text>
       </svg>
       <ul className="reportes-chart-legend">
@@ -329,116 +484,22 @@ function SvgDonutChart({ title, series }) {
   )
 }
 
-function GraficasTemporales({ agrupacion, reparaciones, periodoAplicado }) {
-  const periodo = periodoAplicado
+function GraficasTemporales({ agrupacion, datasets }) {
   const fmtX = useCallback((l) => labelPeriodoEje(l, agrupacion), [agrupacion])
-
-  const ordenesSerie = useMemo(
-    () => serieOrdenesAgrupada(reparaciones, periodo, agrupacion),
-    [reparaciones, periodo, agrupacion],
-  )
-  const verificadasSerie = useMemo(
-    () => serieVerificadasAgrupada(reparaciones, periodo, agrupacion),
-    [reparaciones, periodo, agrupacion],
-  )
-
-  const mesesDetalle = useMemo(
-    () => (agrupacion === 'mes' ? segmentosMesEnPeriodo(periodo) : []),
-    [agrupacion, periodo],
-  )
-  const aniosDetalle = useMemo(
-    () => (agrupacion === 'anio' ? segmentosAnioEnPeriodo(periodo) : []),
-    [agrupacion, periodo],
-  )
-  const fmtMes = useCallback((l) => labelPeriodoEje(l, 'mes'), [])
-
-  const tituloOrdenes = tituloAgrupacionOrdenes(agrupacion)
-  const tituloVerificadas = tituloAgrupacionVerificadas(agrupacion)
-  const usarBarras = agrupacion === 'semana' || agrupacion === 'mes' || agrupacion === 'anio'
-  const colorVerificadas = ['#00695c', '#00897b', '#26a69a', '#4db6ac', '#80cbc4']
+  const totales = useMemo(() => totalesDesdeDatasets(datasets), [datasets])
+  const titulo = tituloComparativa(agrupacion)
 
   return (
-    <>
-      {usarBarras ? (
-        <>
-          <SvgBarChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
-          <SvgBarChart
-            title={tituloVerificadas}
-            series={verificadasSerie}
-            formatXLabel={fmtX}
-            colorCycle={colorVerificadas}
-          />
-        </>
-      ) : (
-        <>
-          <SvgLineChart title={tituloOrdenes} series={ordenesSerie} formatXLabel={fmtX} />
-          <SvgLineChart title={tituloVerificadas} series={verificadasSerie} formatXLabel={fmtX} />
-        </>
-      )}
-
-      {mesesDetalle.length > 0 ? (
-        <section className="reportes-meses-detalle" aria-labelledby="reportes-meses-detalle-titulo">
-          <h2 id="reportes-meses-detalle-titulo" className="reportes-meses-detalle-titulo">
-            Detalle por mes
-          </h2>
-          <p className="reportes-meses-detalle-desc muted">
-            Vista diaria dentro de cada mes del periodo seleccionado.
-          </p>
-          {mesesDetalle.map((seg) => {
-            const repMes = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
-            const ordenesDia = serieOrdenesPorDia(repMes, { ini: seg.ini, fin: seg.fin })
-            const verificadasDia = serieVerificadasAgrupada(repMes, { ini: seg.ini, fin: seg.fin }, 'dia')
-            if (!serieTieneDatos(ordenesDia) && !serieTieneDatos(verificadasDia)) return null
-            return (
-              <div key={seg.key} className="reportes-mes-detalle card-pad">
-                <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
-                <SvgLineChart title={`Órdenes — ${seg.label}`} series={ordenesDia} formatXLabel={labelDiaCorta} />
-                <SvgLineChart
-                  title={`Verificaciones — ${seg.label}`}
-                  series={verificadasDia}
-                  formatXLabel={labelDiaCorta}
-                />
-              </div>
-            )
-          })}
-        </section>
-      ) : null}
-
-      {aniosDetalle.length > 0 ? (
-        <section className="reportes-meses-detalle" aria-labelledby="reportes-anios-detalle-titulo">
-          <h2 id="reportes-anios-detalle-titulo" className="reportes-meses-detalle-titulo">
-            Detalle por año
-          </h2>
-          <p className="reportes-meses-detalle-desc muted">
-            Vista mensual dentro de cada año del periodo seleccionado.
-          </p>
-          {aniosDetalle.map((seg) => {
-            const repAnio = reparacionesEnRango(reparaciones, seg.ini, seg.fin)
-            const ordenesMes = serieOrdenesAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            const verificadasMes = serieVerificadasAgrupada(repAnio, { ini: seg.ini, fin: seg.fin }, 'mes')
-            if (!serieTieneDatos(ordenesMes) && !serieTieneDatos(verificadasMes)) return null
-            return (
-              <div key={seg.key} className="reportes-mes-detalle card-pad">
-                <h3 className="reportes-mes-detalle-nombre">{seg.label}</h3>
-                <SvgBarChart title={`Órdenes por mes — ${seg.label}`} series={ordenesMes} formatXLabel={fmtMes} />
-                <SvgBarChart
-                  title={`Verificaciones por mes — ${seg.label}`}
-                  series={verificadasMes}
-                  formatXLabel={fmtMes}
-                  colorCycle={colorVerificadas}
-                />
-              </div>
-            )
-          })}
-        </section>
-      ) : null}
-    </>
+    <section className="reportes-graficas-comparativa" aria-label={titulo}>
+      <SvgLineChart title={`${titulo} (lineal)`} datasets={datasets} formatXLabel={fmtX} />
+      <SvgBarChart title={`${titulo} (barras)`} datasets={datasets} formatXLabel={fmtX} />
+      <SvgDonutChart title={`${titulo} (circular)`} series={totales} />
+    </section>
   )
 }
 
 export default function ReportesEstadisticasView({
   reparaciones,
-  resumen,
   periodoAplicado,
   estatusAplicado,
   formatearFechaCorta,
@@ -457,20 +518,25 @@ export default function ReportesEstadisticasView({
   }
 
   const conFecha = useMemo(() => hayDatosConFecha(reparaciones), [reparaciones])
-  const estatusSerie = useMemo(() => serieEstatus(resumen.porEstatus), [resumen.porEstatus])
-  const distribucionSerie = useMemo(
+  const datasets = useMemo(
     () =>
-      serieDistribucionOrdenes({
-        entregadas: resumen.entregadas,
-        verificadas: resumen.verificadas,
-        enProceso: resumen.enProceso,
+      datasetsComparativaReporte({
+        reparaciones,
+        periodo: periodoAplicado,
+        agrupacion,
+        incluirIngreso: Boolean(periodoAplicado?.incluirIngreso),
+        incluirEntrega: Boolean(periodoAplicado?.incluirEntrega),
+        incluirEstatus: Boolean(periodoAplicado?.incluirEstatus),
+        estatusSet: periodoAplicado?.estatusSet,
       }),
-    [resumen.entregadas, resumen.verificadas, resumen.enProceso],
+    [reparaciones, periodoAplicado, agrupacion],
   )
+  const kpis = useMemo(() => kpisDesdeDatasets(datasets), [datasets])
 
   const periodoTxt = periodoAplicado
     ? `${formatearFechaCorta(periodoAplicado.ini)} — ${formatearFechaCorta(periodoAplicado.fin)}`
     : '—'
+  const filtrosTxt = String(estatusAplicado || '').trim()
 
   return (
     <div className="servicios-root inventarios-root reportes-modulo-root reportes-estadisticas-root">
@@ -501,7 +567,13 @@ export default function ReportesEstadisticasView({
             📆
           </span>
           <span>
-            <strong>Periodo:</strong> {periodoTxt} · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
+            <strong>Periodo:</strong> {periodoTxt}
+            {filtrosTxt ? (
+              <>
+                {' '}
+                · <strong>Comparativa:</strong> {filtrosTxt}
+              </>
+            ) : null}
           </span>
         </div>
 
@@ -516,10 +588,10 @@ export default function ReportesEstadisticasView({
           <div
             className="reportes-agrupacion-bar card-pad"
             role="group"
-            aria-label="Agrupar gráficas por periodo"
+            aria-label="Comparativo de gráficas por día, mes o año"
           >
             <span className="reportes-agrupacion-label">
-              <span aria-hidden="true">📉</span> Ver gráficas:
+              <span aria-hidden="true">📉</span> Comparativo:
             </span>
             <div className="reportes-agrupacion-opciones">
               {AGRUPACIONES_ESTADISTICAS.map((opt) => (
@@ -539,28 +611,7 @@ export default function ReportesEstadisticasView({
 
         {loading ? <p className="muted center card-pad">Actualizando gráficas…</p> : null}
 
-        {!soloPeriodo ? (
-          <section className="reportes-kpi-grid card-pad">
-            <div className="reportes-kpi">
-              <span className="label">
-                <span aria-hidden="true">🧾</span> Órdenes
-              </span>
-              <strong>{resumen.total}</strong>
-            </div>
-            <div className="reportes-kpi">
-              <span className="label">
-                <span aria-hidden="true">✅</span> Entregadas
-              </span>
-              <strong>{resumen.entregadas}</strong>
-            </div>
-            <div className="reportes-kpi reportes-kpi--verificadas">
-              <span className="label">
-                <span aria-hidden="true">✓</span> Verificadas
-              </span>
-              <strong>{resumen.verificadas}</strong>
-            </div>
-          </section>
-        ) : null}
+        {!loading && kpis.length > 0 ? <ReportesKpisSeleccion kpis={kpis} /> : null}
 
         {!loading && !conFecha ? (
           <p className="corte-caja-warning-inset card-pad">
@@ -568,24 +619,7 @@ export default function ReportesEstadisticasView({
             disponibles.
           </p>
         ) : !loading && conFecha ? (
-          <GraficasTemporales
-            agrupacion={agrupacion}
-            reparaciones={reparaciones}
-            periodoAplicado={periodoAplicado}
-          />
-        ) : null}
-
-        {!loading && estatusSerie.length > 0 ? (
-          <SvgBarChart
-            title="Órdenes por estatus"
-            series={estatusSerie}
-            formatXLabel={labelEstatusGrafica}
-            chipXLabels
-          />
-        ) : null}
-
-        {!loading && distribucionSerie.length > 0 ? (
-          <SvgDonutChart title="En taller, verificadas y entregadas" series={distribucionSerie} />
+          <GraficasTemporales agrupacion={agrupacion} datasets={datasets} />
         ) : null}
 
         <button type="button" className="btn-agregar-equipo btn-volver-reporte" onClick={onVolver}>

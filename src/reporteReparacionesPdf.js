@@ -7,7 +7,7 @@ import {
   anchoRecuadroCampo,
   anchoRecuadroCompacto,
   drawEncabezadoSistebit,
-  printSistebitPdfDocument,
+  openSistebitPdfDocument,
 } from './sistebitPdfCommon.js'
 import {
   PDF_MARGIN,
@@ -30,57 +30,71 @@ function anchoCampoResumenPdf(pdf, label, value, maxW) {
 }
 
 const COLS_DETALLE = [
-  { key: 'orden', label: 'NO.', width: 11 },
+  { key: 'ingreso', label: 'INGRESO', width: 18 },
+  { key: 'salida', label: 'ENT/BAJA', width: 18 },
+  { key: 'dias', label: 'DÍAS', width: 10, align: 'right' },
+  { key: 'orden', label: 'NO.', width: 12 },
   { key: 'cliente', label: 'CLIENTE', flex: 1 },
-  { key: 'estatus', label: 'ESTATUS', width: 24 },
-  { key: 'tipo', label: 'TIPO', width: 22 },
-  { key: 'fecha', label: 'FECHA', width: 21 },
-  { key: 'pago', label: 'PAGO', width: 18, align: 'right', bold: true },
-  { key: 'costo', label: 'COSTO', width: 18, align: 'right', bold: true },
+  { key: 'equipo', label: 'EQUIPO', width: 16 },
+  { key: 'servicio', label: 'SERVICIO', width: 18 },
+  { key: 'descripcion', label: 'DESCRIPCIÓN', flex: 1 },
+  { key: 'problema', label: 'PROBLEMA', flex: 1 },
+  { key: 'tecnico', label: 'TÉCNICO', width: 16 },
+  { key: 'estatus', label: 'ESTATUS', width: 22 },
 ]
 
-function drawResumenReporte(pdf, p, x, y, width, pageH) {
-  const { periodoTxt, estatusFiltro, resumen, porEstatus } = p
+function temaKpiPdf(id) {
+  if (id === 'ingreso') return TEMA.orden
+  if (id === 'entrega') return TEMA.pago
+  if (String(id ?? '').startsWith('estatus-')) return TEMA.servicio
+  return TEMA.descripcion
+}
+
+function drawResumenReporte(pdf, p, x, y, width) {
+  const { periodoTxt, estatusFiltro, kpis, nOrdenes } = p
   let cy = y
 
   cy += drawCampo(pdf, 'Periodo', periodoTxt, x, cy, anchoCampoResumenPdf(pdf, 'Periodo', periodoTxt, width), 9, TEMA.fecha, CAMPO) + PDF_GAP
-  const filtroVal = estatusFiltro || 'Todos'
+  const filtroVal = estatusFiltro || 'Ninguno'
   cy +=
-    drawCamposCompactosFila(
+    drawCampo(
       pdf,
-      [
-        { label: 'Filtro estatus', value: filtroVal, theme: TEMA.descripcion, minW: 32 },
-        { label: 'Total órdenes', value: String(resumen.total), theme: TEMA.orden, minW: 28 },
-        { label: 'Activas', value: String(resumen.activas), theme: TEMA.problema, minW: 22 },
-        { label: 'Entregadas', value: String(resumen.entregadas), theme: TEMA.pago, minW: 26 },
-        { label: 'Suma costo', value: `$${resumen.totalCosto.toFixed(2)}`, theme: TEMA.tipo, minW: 28 },
-      ],
-      drawCampo,
-      anchoRecuadroCompacto,
+      'Filtros',
+      filtroVal,
+      x,
+      cy,
+      anchoCampoResumenPdf(pdf, 'Filtros', filtroVal, width),
+      9,
+      TEMA.descripcion,
       CAMPO,
-      { x, y: cy, width },
     ) + PDF_GAP
 
-  const estatusRows = Object.entries(porEstatus ?? {})
-    .filter(([, n]) => n > 0)
-    .map(([k, n]) => ({ estatus: k, cantidad: String(n) }))
+  if (nOrdenes != null) {
+    const nTxt = String(nOrdenes)
+    cy +=
+      drawCampo(
+        pdf,
+        'Órdenes encontradas',
+        nTxt,
+        x,
+        cy,
+        anchoCampoResumenPdf(pdf, 'Órdenes encontradas', nTxt, 48),
+        9,
+        TEMA.orden,
+        CAMPO,
+      ) + PDF_GAP
+  }
 
-  if (estatusRows.length > 0) {
-    cy += 1
-    cy = drawTituloSeccionPdf(pdf, 'Por estatus', x, cy)
-    cy += drawTablaCompactaPdf(pdf, {
-      columns: [
-        { key: 'estatus', label: 'ESTATUS', flex: 1 },
-        { key: 'cantidad', label: 'CANT.', width: 16, align: 'right', bold: true },
-      ],
-      rows: estatusRows,
-      x,
-      yStart: cy,
-      contentW: width,
-      pageH,
-      margin: PDF_MARGIN,
-      pageFormat: SISTEBIT_PDF_FORMAT,
-    })
+  const kpiCampos = (kpis ?? []).map((k) => ({
+    label: k.label,
+    value: String(k.value ?? 0),
+    theme: temaKpiPdf(k.id),
+    minW: 28,
+  }))
+  if (kpiCampos.length > 0) {
+    cy +=
+      drawCamposCompactosFila(pdf, kpiCampos, drawCampo, anchoRecuadroCompacto, CAMPO, { x, y: cy, width }) +
+      PDF_GAP
   }
 
   return cy - y
@@ -91,8 +105,7 @@ function drawResumenReporte(pdf, p, x, y, width, pageH) {
  *   periodo: { ini: string, fin: string },
  *   formatearFechaCorta: (ymd: string) => string,
  *   estatusFiltro?: string,
- *   resumen: object,
- *   porEstatus?: Record<string, number>,
+ *   kpis?: { id?: string, label: string, value: number|string }[],
  *   filas?: object[],
  * }} p
  */
@@ -122,13 +135,12 @@ export function createReporteReparacionesPdf(p) {
       {
         periodoTxt,
         estatusFiltro: p.estatusFiltro,
-        resumen: p.resumen,
-        porEstatus: p.porEstatus,
+        kpis: p.kpis,
+        nOrdenes: (p.filas ?? []).length,
       },
       PDF_MARGIN,
       y + 2,
       contentW,
-      H,
     ) + 4
 
   if (y > H - 35) {
@@ -147,16 +159,24 @@ export function createReporteReparacionesPdf(p) {
     pageH: H,
     margin: PDF_MARGIN,
     pageFormat: SISTEBIT_PDF_FORMAT,
-    emptyText: 'Sin órdenes en el periodo',
+    emptyText: 'Sin órdenes con los filtros seleccionados',
   })
 
   return pdf
 }
 
-export async function printReporteReparacionesPdf(p) {
+export function buildReporteReparacionesPdfFilename(periodo) {
+  const ini = String(periodo?.ini ?? '').slice(0, 10) || 'inicio'
+  const fin = String(periodo?.fin ?? '').slice(0, 10) || 'fin'
+  return `reporte-reparaciones-${ini}_${fin}.pdf`
+}
+
+export function abrirReporteReparacionesPdf(p) {
   const pdf = createReporteReparacionesPdf(p)
-  return printSistebitPdfDocument(pdf, {
-    timeoutMsg: 'Tiempo de espera al cargar el reporte para imprimir.',
-    iframeTitle: 'Imprimir reporte',
-  })
+  openSistebitPdfDocument(pdf, { filename: buildReporteReparacionesPdfFilename(p.periodo) })
+}
+
+/** @deprecated Use abrirReporteReparacionesPdf — el reporte se visualiza, no se imprime. */
+export function printReporteReparacionesPdf(p) {
+  return abrirReporteReparacionesPdf(p)
 }

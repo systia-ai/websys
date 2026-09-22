@@ -1,43 +1,82 @@
-import { ESTATUS_ORDEN } from './catalogos.js'
 import {
   aYmdLocalDesdeRaw,
   esOrdenDuplicada,
-  estatusCanonicoFiltro,
+  ESTATUS_BAJA,
+  ESTATUS_ENTREGADO_SIN_REPARACION,
   estatusEsEntregado,
+  estatusParaFiltroMonitor,
+  ordenUsaSistemaWeb,
   repCoincideFiltroMonitor,
   repEnRangoFechasMonitor,
   repEsVerificadaListaEntrega,
 } from './reparacionUtils.js'
 
-/** Orden en la cuadrícula de filtros de reportes (2 columnas). */
+/** Misma cuadrícula de estatus que el monitor (sin avisos ni buscador). */
 export const ESTATUS_ORDEN_REPORTES = [
   'INGRESADO',
   'ENTREGADO',
-  'EN ESPERA POR REFACCION',
-  'EN REVISION',
-  'SIN REPARACION',
+  ESTATUS_ENTREGADO_SIN_REPARACION,
   'REPARADO',
-  'BAJA',
+  'EN ESPERA POR REFACCION',
+  'SIN REPARACION',
+  ESTATUS_BAJA,
+  'EN REVISION',
 ]
 
+export const ESTATUS_REPORTES_ANCLADOS_INICIO = [
+  'INGRESADO',
+  'ENTREGADO',
+  ESTATUS_ENTREGADO_SIN_REPARACION,
+]
+export const ESTATUS_REPORTES_SECUNDARIOS = [
+  'REPARADO',
+  'EN ESPERA POR REFACCION',
+  'SIN REPARACION',
+  ESTATUS_BAJA,
+]
+export const ESTATUS_REPORTES_ANCLADOS_FIN = ['EN REVISION']
+
 export function estatusParaFiltroReporte(rep) {
-  return estatusCanonicoFiltro(rep?.estatus)
+  return estatusParaFiltroMonitor(rep?.estatus)
 }
 
 export function crearSetEstatusTodos() {
-  return new Set(ESTATUS_ORDEN.map((e) => String(e).trim().toUpperCase()))
+  return new Set(ESTATUS_ORDEN_REPORTES.map((e) => String(e).trim().toUpperCase()))
 }
 
 export function labelEstatusAplicados(estatusSet) {
   if (!estatusSet || estatusSet.size === 0) return 'Ninguno'
-  if (estatusSet.size >= ESTATUS_ORDEN.length) return 'Todos'
+  if (estatusSet.size >= ESTATUS_ORDEN_REPORTES.length) return 'Todos'
   return [...estatusSet].sort().join(', ')
 }
 
 export function filtrarPorEstatus(rows, estatusSet) {
   if (!estatusSet || estatusSet.size === 0) return []
-  if (estatusSet.size >= ESTATUS_ORDEN.length) return rows
+  if (estatusSet.size >= ESTATUS_ORDEN_REPORTES.length) return rows
   return rows.filter((r) => estatusSet.has(estatusParaFiltroReporte(r)))
+}
+
+export function etiquetaEstatusChipReporte(est) {
+  const st = String(est).trim().toUpperCase()
+  if (st === 'INGRESADO') return 'Ingresado (estatus)'
+  if (st === 'ENTREGADO') return 'Entregado (estatus)'
+  if (st === ESTATUS_ENTREGADO_SIN_REPARACION) return 'Entregado sin reparación'
+  if (st === ESTATUS_BAJA) return 'Baja'
+  return est
+}
+
+/** Texto del banner: modos de fecha + estatus si aplica. */
+export function etiquetaFiltrosReporteAplicados({
+  incluirIngreso = false,
+  incluirEntrega = false,
+  incluirEstatus = false,
+  estatusSet,
+} = {}) {
+  const partes = []
+  if (incluirIngreso) partes.push('Equipos que entraron')
+  if (incluirEntrega) partes.push('Equipos que salieron')
+  if (incluirEstatus) partes.push(`Estatus: ${labelEstatusAplicados(estatusSet)}`)
+  return partes.length ? partes.join(' · ') : 'Ninguno'
 }
 
 /** Quita órdenes marcadas como duplicadas (no deben contar en reportes ni estadísticas). */
@@ -82,61 +121,98 @@ export function mapsFechasEntregaReporte(cuentas = [], pagos = []) {
   return { cuentaPorReparaId, entregaDesdePagosPorRepara }
 }
 
-/** Reporte de entregados: por «Fecha entrega» o solo estatus ENTREGADO. */
-function esFiltroReporteEntregados(estatusSet, modoFecha) {
-  if (modoFecha === 'entrega') return true
-  if (!modoFecha && estatusSet?.size === 1 && estatusSet.has('ENTREGADO')) return true
-  return false
+function coincideSalidaReporte(rep, d, h, cuentaVinculada, ymdDesdePagos) {
+  if (!estatusEsEntregado(rep?.estatus)) return false
+  if (repEsVerificadaListaEntrega(rep)) return false
+  return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
 }
 
 /**
- * Filtro de reportes: en entregados solo cuenta órdenes con estatus ENTREGADO/A
- * (excluye las que solo están verificadas en REPARADO).
+ * En reportes se pueden combinar (unión) equipos que entraron, que salieron y filtro por estatus.
+ * Lo marcado se incluye en el listado y en las gráficas.
  */
-function repCoincideFiltroReporte(
+export function repCoincideFiltroReporte(
   rep,
-  { estatusSet, desde, hasta, modoFecha, cuentaVinculada, ymdDesdePagos },
+  {
+    estatusSet,
+    desde,
+    hasta,
+    incluirIngreso = false,
+    incluirEntrega = false,
+    incluirEstatus = false,
+    cuentaVinculada,
+    ymdDesdePagos,
+  },
 ) {
+  if (!ordenUsaSistemaWeb(rep)) return false
+
   const d = String(desde ?? '').trim()
   const h = String(hasta ?? '').trim()
   const hayRango = Boolean(d || h)
 
-  if (esFiltroReporteEntregados(estatusSet, modoFecha)) {
-    if (!estatusEsEntregado(rep?.estatus)) return false
-    if (repEsVerificadaListaEntrega(rep)) return false
-    if (modoFecha === 'entrega' && !hayRango) return false
-    if (!hayRango) return true
-    return repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'entrega')
+  if (incluirIngreso) {
+    if (hayRango && repEnRangoFechasMonitor(rep, d, h, cuentaVinculada, ymdDesdePagos, 'ingreso')) {
+      return true
+    }
   }
 
-  return repCoincideFiltroMonitor(rep, {
-    estatusSeleccionados: estatusSet,
-    desde: d,
-    hasta: h,
-    modoFecha,
-    cuentaVinculada,
-    ymdDesdePagos,
-    estatusParaFiltroFn: estatusParaFiltroReporte,
-  })
+  if (incluirEntrega) {
+    if (hayRango && coincideSalidaReporte(rep, d, h, cuentaVinculada, ymdDesdePagos)) {
+      return true
+    }
+  }
+
+  if (incluirEstatus) {
+    return repCoincideFiltroMonitor(rep, {
+      estatusSeleccionados: estatusSet,
+      desde: d,
+      hasta: h,
+      modoFecha: null,
+      cuentaVinculada,
+      ymdDesdePagos,
+      estatusParaFiltroFn: estatusParaFiltroReporte,
+    })
+  }
+
+  return false
 }
 
 /**
- * Filtra órdenes para reportes (estatus + rango, o solo por fecha ingreso/entrega como el monitor).
- * @param {'ingreso'|'entrega'|null} modoFecha
+ * Filtra órdenes para reportes. Los modos de fecha y el estatus se combinan por unión.
  */
 export function filtrarReparacionesParaReporte(
   rows,
-  { estatusSet, ini, fin, modoFecha = null, cuentaPorReparaId = new Map(), entregaDesdePagosPorRepara = new Map() },
+  {
+    estatusSet,
+    ini,
+    fin,
+    incluirIngreso = false,
+    incluirEntrega = false,
+    incluirEstatus = false,
+    modoFecha = null,
+    cuentaPorReparaId = new Map(),
+    entregaDesdePagosPorRepara = new Map(),
+  },
 ) {
   const desde = String(ini ?? '').trim()
   const hasta = String(fin ?? '').trim()
+  let ingreso = incluirIngreso
+  let entrega = incluirEntrega
+  let estatus = incluirEstatus
+  if (!ingreso && !entrega && !estatus && modoFecha) {
+    ingreso = modoFecha === 'ingreso'
+    entrega = modoFecha === 'entrega'
+    estatus = modoFecha !== 'ingreso' && modoFecha !== 'entrega'
+  }
   return rows.filter((r) => {
     const rid = String(r.id)
     return repCoincideFiltroReporte(r, {
       estatusSet,
       desde,
       hasta,
-      modoFecha,
+      incluirIngreso: ingreso,
+      incluirEntrega: entrega,
+      incluirEstatus: estatus,
       cuentaVinculada: cuentaPorReparaId.get(rid) ?? null,
       ymdDesdePagos: entregaDesdePagosPorRepara.get(rid) ?? null,
     })

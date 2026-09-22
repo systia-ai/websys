@@ -1,13 +1,20 @@
 /** Utilidades para gráficas del reporte de reparaciones. */
 
-import { aYmdLocalDesdeRaw, estaVerificadoEntrega, ymdLocalDesdeDate } from './reparacionUtils.js'
+import {
+  aYmdLocalDesdeRaw,
+  estaVerificadoEntrega,
+  estatusParaFiltroMonitor,
+  fechaHitoEstatusMonitor,
+  fechaIngresoFiltroYmd,
+  ymdLocalDesdeDate,
+} from './reparacionUtils.js'
 import { extractFechaPagoYmd } from './pagosClientesUtils.js'
+import { ESTATUS_ORDEN_REPORTES } from './reportesFiltros.js'
 
 export { extractFechaPagoYmd }
 
 export const AGRUPACIONES_ESTADISTICAS = [
   { id: 'dia', label: 'Por día' },
-  { id: 'semana', label: 'Por semana' },
   { id: 'mes', label: 'Por mes' },
   { id: 'anio', label: 'Por año' },
 ]
@@ -17,7 +24,7 @@ const LS_AGRUPACION = 'sistefix_reportes_agrupacion'
 export function leerAgrupacionEstadisticas() {
   try {
     const v = localStorage.getItem(LS_AGRUPACION)
-    if (v === 'semana' || v === 'mes' || v === 'anio') return v
+    if (v === 'mes' || v === 'anio') return v
     return 'dia'
   } catch {
     return 'dia'
@@ -43,6 +50,14 @@ export function extractDateYmdReporte(row) {
     aYmdLocalDesdeRaw(row?.updated_at) ??
     aYmdLocalDesdeRaw(row?.date)
   )
+}
+
+export function extractFechaIngresoYmdReporte(row) {
+  return fechaIngresoFiltroYmd(row)
+}
+
+export function extractFechaSalidaYmdReporte(row) {
+  return aYmdLocalDesdeRaw(row?.fecha_entrega ?? row?.fechaEntrega)
 }
 
 export function extractFechaVerificacionYmd(row) {
@@ -176,6 +191,178 @@ export function serieOrdenesAgrupada(reparaciones, periodo, agrupacion = 'dia') 
   return serieDesdeMapa(map, periodo, agrupacion, false)
 }
 
+/** Cuenta órdenes por una fecha extraída (ingreso, entrega, etc.). */
+export function serieOrdenesPorFechaExtractor(reparaciones, periodo, agrupacion, extractor) {
+  const map = new Map()
+  const getYmd = typeof extractor === 'function' ? extractor : extractDateYmdReporte
+  for (const r of reparaciones ?? []) {
+    const y = getYmd(r)
+    if (!y) continue
+    if (periodo?.ini && y < periodo.ini) continue
+    if (periodo?.fin && y > periodo.fin) continue
+    const key = claveAgrupacion(y, agrupacion)
+    map.set(key, (map.get(key) ?? 0) + 1)
+  }
+  return serieDesdeMapa(map, periodo, agrupacion, false)
+}
+
+export const COLORES_COMPARATIVA = {
+  ingreso: '#1976d2',
+  entrega: '#ef6c00',
+  estatus: '#7b1fa2',
+  ordenes: '#1976d2',
+}
+
+const COLORES_ESTATUS_SERIE = ['#7b1fa2', '#00897b', '#c62828', '#1565c0', '#f9a825', '#6d4c41', '#455a64', '#2e7d32']
+
+export const COLOR_ESTATUS_COMPARATIVA = {
+  INGRESADO: '#1565c0',
+  ENTREGADO: '#2e7d32',
+  'ENTREGADO SIN REPARACION': '#00897b',
+  REPARADO: '#7b1fa2',
+  'EN ESPERA POR REFACCION': '#f9a825',
+  'SIN REPARACION': '#c62828',
+  BAJA: '#6d4c41',
+  'EN REVISION': '#00838f',
+}
+
+export function colorEstatusComparativa(estatus, index = 0) {
+  const k = String(estatus ?? '').trim().toUpperCase()
+  return COLOR_ESTATUS_COMPARATIVA[k] ?? COLORES_ESTATUS_SERIE[index % COLORES_ESTATUS_SERIE.length]
+}
+
+export function extractFechaHitoYmdReporte(row) {
+  return fechaHitoEstatusMonitor(row)
+}
+
+function listaEstatusSet(estatusSet) {
+  if (estatusSet == null) return null
+  const raw = estatusSet instanceof Set ? [...estatusSet] : Array.isArray(estatusSet) ? estatusSet : []
+  return raw.map((s) => String(s).trim().toUpperCase()).filter(Boolean)
+}
+
+function clavesEstatusParaGrafica(rows, estatusSet) {
+  const order = ESTATUS_ORDEN_REPORTES.map((e) => String(e).trim().toUpperCase())
+  const selected = listaEstatusSet(estatusSet)
+  if (selected) {
+    const sel = new Set(selected)
+    const out = order.filter((k) => sel.has(k))
+    for (const k of selected) {
+      if (!out.includes(k)) out.push(k)
+    }
+    return out
+  }
+  const seen = new Set()
+  for (const r of rows) {
+    const k = estatusParaFiltroMonitor(r?.estatus)
+    if (k) seen.add(k)
+  }
+  return order.filter((k) => seen.has(k)).concat([...seen].filter((k) => !order.includes(k)))
+}
+
+/**
+ * Series combinadas según filtros del reporte (entrada, salida, cada estatus marcado).
+ * Sirven para línea, barras agrupadas, circular y las tarjetas de selección.
+ */
+export function datasetsComparativaReporte({
+  reparaciones,
+  periodo,
+  agrupacion = 'dia',
+  incluirIngreso = false,
+  incluirEntrega = false,
+  incluirEstatus = false,
+  estatusSet,
+} = {}) {
+  const rows = reparaciones ?? []
+  const out = []
+
+  if (incluirIngreso) {
+    out.push({
+      id: 'ingreso',
+      label: 'Entraron',
+      color: COLORES_COMPARATIVA.ingreso,
+      points: serieOrdenesPorFechaExtractor(rows, periodo, agrupacion, extractFechaIngresoYmdReporte),
+    })
+  }
+  if (incluirEntrega) {
+    out.push({
+      id: 'entrega',
+      label: 'Salieron',
+      color: COLORES_COMPARATIVA.entrega,
+      points: serieOrdenesPorFechaExtractor(rows, periodo, agrupacion, extractFechaSalidaYmdReporte),
+    })
+  }
+  if (incluirEstatus) {
+    const claves = clavesEstatusParaGrafica(rows, estatusSet)
+    claves.forEach((clave, i) => {
+      const filas = rows.filter((r) => estatusParaFiltroMonitor(r?.estatus) === clave)
+      out.push({
+        id: `estatus-${clave}`,
+        label: labelEstatusGrafica(clave),
+        color: colorEstatusComparativa(clave, i),
+        points: serieOrdenesPorFechaExtractor(filas, periodo, agrupacion, extractFechaHitoYmdReporte),
+      })
+    })
+  }
+  if (!out.length) {
+    out.push({
+      id: 'ordenes',
+      label: 'Órdenes',
+      color: COLORES_COMPARATIVA.ordenes,
+      points: serieOrdenesAgrupada(rows, periodo, agrupacion),
+    })
+  }
+  return out
+}
+
+export function totalesDesdeDatasets(datasets) {
+  return (datasets ?? [])
+    .map((d) => ({
+      id: d.id,
+      label: d.label,
+      color: d.color,
+      value: (d.points ?? []).reduce((s, p) => s + Number(p.value || 0), 0),
+    }))
+    .filter((t) => t.value > 0)
+}
+
+/** Totales de lo seleccionado (incluye ceros) para las tarjetas antes de las gráficas. */
+export function kpisDesdeDatasets(datasets) {
+  return (datasets ?? []).map((d) => ({
+    id: d.id,
+    label:
+      d.id === 'ingreso' ? 'Equipos que entraron' : d.id === 'entrega' ? 'Equipos que salieron' : d.label,
+    color: d.color,
+    value: (d.points ?? []).reduce((s, p) => s + Number(p.value || 0), 0),
+  }))
+}
+
+/** Tarjetas del reporte/gráficas: solo lo marcado (entrada, salida, cada estatus). */
+export function kpisSeleccionReporte({ reparaciones, periodo, agrupacion = 'dia' } = {}) {
+  if (!periodo) return []
+  return kpisDesdeDatasets(
+    datasetsComparativaReporte({
+      reparaciones,
+      periodo,
+      agrupacion,
+      incluirIngreso: Boolean(periodo.incluirIngreso),
+      incluirEntrega: Boolean(periodo.incluirEntrega),
+      incluirEstatus: Boolean(periodo.incluirEstatus),
+      estatusSet: periodo.estatusSet,
+    }),
+  )
+}
+
+export function datasetsTienenDatos(datasets) {
+  return (datasets ?? []).some((d) => serieTieneDatos(d.points))
+}
+
+export function tituloComparativa(agrupacion) {
+  if (agrupacion === 'anio') return 'Comparativa por año'
+  if (agrupacion === 'mes') return 'Comparativa por mes'
+  return 'Comparativa por día'
+}
+
 function agregarSeriesVerificadas(conteoMap, reparaciones, agrupacion) {
   for (const r of reparaciones) {
     if (!estaVerificadoEntrega(r)) continue
@@ -284,8 +471,13 @@ export function segmentosMesEnPeriodo(periodo) {
 }
 
 export function reparacionesEnRango(reparaciones, ini, fin) {
-  return reparaciones.filter((r) => {
-    const y = extractDateYmdReporte(r)
+  return reparacionesEnRangoPorExtractor(reparaciones, ini, fin, extractDateYmdReporte)
+}
+
+export function reparacionesEnRangoPorExtractor(reparaciones, ini, fin, extractor) {
+  const getYmd = typeof extractor === 'function' ? extractor : extractDateYmdReporte
+  return (reparaciones ?? []).filter((r) => {
+    const y = getYmd(r)
     return y != null && y >= ini && y <= fin
   })
 }
@@ -295,6 +487,18 @@ export function tituloAgrupacionOrdenes(agrupacion) {
   if (agrupacion === 'mes') return 'Órdenes por mes'
   if (agrupacion === 'semana') return 'Órdenes por semana'
   return 'Órdenes por día'
+}
+
+export function tituloAgrupacionEntradas(agrupacion) {
+  if (agrupacion === 'anio') return 'Equipos que entraron por año'
+  if (agrupacion === 'mes') return 'Equipos que entraron por mes'
+  return 'Equipos que entraron por día'
+}
+
+export function tituloAgrupacionSalidas(agrupacion) {
+  if (agrupacion === 'anio') return 'Equipos que salieron por año'
+  if (agrupacion === 'mes') return 'Equipos que salieron por mes'
+  return 'Equipos que salieron por día'
 }
 
 export function tituloAgrupacionPagos(agrupacion) {

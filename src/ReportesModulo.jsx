@@ -4,15 +4,23 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import { normalizeClienteRow, sameId } from './clienteUtils.js'
 import { MENSAJE_SIN_PERMISO_FECHAS, rangoFechasPermitidoUsuario } from './permisosUtils.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
-import ReportesEstadisticasView from './ReportesEstadisticasView.jsx'
+import ReportesEstadisticasView, { ReportesKpisSeleccion } from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { fetchAllRows } from './supabaseFetchAll.js'
 import {
   aYmdLocalDesdeRaw,
+  claseBadgeEstatusOrden,
+  contarNotificacionesClienteBitacora,
+  estaVerificadoEntrega,
+  estatusEsBaja,
+  estatusEsEntregado,
+  fechaBajaYmd,
+  fechaEntregaYmd,
+  fechaIngresoFiltroYmd,
+  fechaIngresoYmd,
   formatFechaLegibleEsMx,
-  repCoincideBusquedaTextoMonitor,
-  repEsVerificadaListaEntrega,
+  TIPO_GARANTIA_EPSON,
   TIPOS_SERVICIO_CANONICOS,
   tipoServicioDeRep,
   ymdHoyLocal,
@@ -22,14 +30,14 @@ import {
   crearSetEstatusTodos,
   contarOrdenesDuplicadas,
   excluirOrdenesDuplicadas,
-  labelEstatusAplicados,
+  etiquetaFiltrosReporteAplicados,
   filtrarReparacionesParaReporte,
   mapsFechasEntregaReporte,
 } from './reportesFiltros.js'
 import {
   cargarTodosPagosClientes,
 } from './pagosClientesUtils.js'
-import { normalizarLabelEstatus } from './reportesEstadisticas.js'
+import { kpisSeleccionReporte } from './reportesEstadisticas.js'
 
 const LS_VISTA_REPORTES = 'sistefix_reportes_vista'
 const LS_ORDEN_FECHA_REPORTES = 'sistefix_reportes_orden_fecha'
@@ -123,8 +131,84 @@ function nombreCliente(clientes, clienteId) {
 }
 
 function formatearFechaCorta(ymdStr) {
-  if (!ymdStr || ymdStr.length < 10) return ymdStr
+  if (!ymdStr || ymdStr.length < 10) return ymdStr || '—'
   return formatFechaLegibleEsMx(ymdStr, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function diffDiasCalendario(ymdA, ymdB) {
+  if (!ymdA || !ymdB || ymdA.length < 10 || ymdB.length < 10) return null
+  const [ya, ma, da] = ymdA.slice(0, 10).split('-').map(Number)
+  const [yb, mb, db] = ymdB.slice(0, 10).split('-').map(Number)
+  const ta = Date.UTC(ya, ma - 1, da)
+  const tb = Date.UTC(yb, mb - 1, db)
+  return Math.round((tb - ta) / 86400000)
+}
+
+/** Igual que el monitor: días en taller solo si la orden no está entregada. */
+function diasEnTallerReporte(rep) {
+  if (estatusEsEntregado(rep?.estatus)) return null
+  const ing = fechaIngresoYmd(rep)
+  if (!ing) return null
+  const n = diffDiasCalendario(ing, ymdHoyLocal())
+  return n == null ? null : Math.max(0, n)
+}
+
+function datosEquipoReporte(rep, equipoPorId) {
+  const id = rep?.equipo_id
+  if (id == null) return { tipo: '—', desc: String(rep?.descripcion_equipo ?? '—') }
+  const eq = equipoPorId?.get(String(id))
+  const tipo = eq?.tipo_equipo != null && String(eq.tipo_equipo).trim() !== '' ? String(eq.tipo_equipo) : '—'
+  const desc =
+    rep.descripcion_equipo != null && String(rep.descripcion_equipo).trim() !== ''
+      ? String(rep.descripcion_equipo)
+      : eq?.descripcion != null
+        ? String(eq.descripcion)
+        : '—'
+  return { tipo, desc }
+}
+
+function etiquetaTiposServicioReporte(tiposSet) {
+  if (!tiposSet || tiposSet.size === 0) return 'Ningún tipo de servicio'
+  const todos =
+    TIPOS_SERVICIO_CANONICOS.length > 0 && TIPOS_SERVICIO_CANONICOS.every((t) => tiposSet.has(t))
+  if (todos) return 'Todos los tipos de servicio'
+  return `Tipos: ${[...tiposSet].join(', ')}`
+}
+
+function filasEstiloMonitor(reparaciones, { equipoPorId, cuentaPorReparaId, entregaDesdePagosPorRepara }) {
+  return (reparaciones ?? []).map((r) => {
+    const rid = String(r.id)
+    const cuenta = cuentaPorReparaId?.get(rid) ?? null
+    const ymdPago = entregaDesdePagosPorRepara?.get(rid) ?? null
+    const ymdIng = fechaIngresoFiltroYmd(r) ?? fechaIngresoYmd(r)
+    const ymdEnt = fechaEntregaYmd(r, cuenta, ymdPago)
+    const ymdBaja = fechaBajaYmd(r)
+    const ent = estatusEsEntregado(r?.estatus)
+    const baja = estatusEsBaja(r?.estatus)
+    const ymdSalida = ent ? ymdEnt : baja ? ymdBaja : null
+    const { tipo, desc } = datosEquipoReporte(r, equipoPorId)
+    const tipoCanon = tipoServicioDeRep(r, equipoPorId)
+    const folioEpson = String(r?.folio_epson ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+    const dias = diasEnTallerReporte(r)
+    return {
+      rep: r,
+      ymdIngreso: ymdIng,
+      ymdSalida,
+      dias,
+      diasTxt: ent ? '✅' : dias == null ? '—' : String(dias),
+      tipo,
+      desc,
+      tipoServicio: tipoCanon ?? '—',
+      folioEpson: tipoCanon === TIPO_GARANTIA_EPSON && folioEpson ? folioEpson : '',
+      problema: String(r.problemas_reportados ?? '').trim() || '—',
+      tecnico: String(r.tecnico ?? '').trim() || '—',
+      estatus: String(r.estatus ?? '—').trim() || '—',
+      verificada: estaVerificadoEntrega(r),
+      notificaciones: contarNotificacionesClienteBitacora(r?.bitacora),
+    }
+  })
 }
 
 function serializarEstadoReporte(estado) {
@@ -143,13 +227,47 @@ function serializarEstadoReporte(estado) {
     tiposServicioSeleccionados: [...(estado.tiposServicioSeleccionados ?? TIPOS_SERVICIO_CANONICOS)],
     filtroModoFechaIngreso: Boolean(estado.filtroModoFechaIngreso),
     filtroModoFechaEntrega: Boolean(estado.filtroModoFechaEntrega),
+    filtroPorEstatus: Boolean(estado.filtroPorEstatus),
     vista: estado.vista === 'tabla' ? 'tabla' : 'lista',
     ordenFecha: estado.ordenFecha === 'asc' ? 'asc' : 'desc',
   }
 }
 
-function esEntregada(rep) {
-  return /ENTREGAD/i.test(String(rep?.estatus ?? ''))
+function BadgeEstatusReporte({ fila }) {
+  return (
+    <span className="monitor-ordenes-estatus-celda">
+      <span className={`rep-orden-badge rep-orden-badge--tabla ${claseBadgeEstatusOrden(fila.estatus)}`}>
+        {fila.estatus}
+      </span>
+      {fila.verificada ? (
+        <span className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--verificada">VERIFICADA</span>
+      ) : null}
+      {fila.notificaciones > 0 ? (
+        <span
+          className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--notificada"
+          title={`${fila.notificaciones} notificación${fila.notificaciones === 1 ? '' : 'es'} al cliente`}
+        >
+          NOTIFICACIÓN({fila.notificaciones})
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function CeldaTipoServicioReporte({ fila }) {
+  return (
+    <div className="monitor-ordenes-tipo-servicio-inner">
+      <span className="monitor-ordenes-tipo-servicio-texto">{fila.tipoServicio}</span>
+      {fila.folioEpson ? (
+        <span
+          className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--folio-epson"
+          title={`Folio Epson: ${fila.folioEpson}`}
+        >
+          Folio {fila.folioEpson}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 /**
@@ -181,13 +299,16 @@ export default function ReportesModulo({
   const [reparaciones, setReparaciones] = useState([])
   const [equipos, setEquipos] = useState([])
   const [clientes, setClientes] = useState([])
+  const [cuentaPorReparaId, setCuentaPorReparaId] = useState(() => new Map())
+  const [entregaDesdePagosPorRepara, setEntregaDesdePagosPorRepara] = useState(() => new Map())
   const [loading, setLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [tiposServicioSeleccionados, setTiposServicioSeleccionados] = useState(
     () => new Set(TIPOS_SERVICIO_CANONICOS),
   )
-  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(false)
-  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(false)
+  const [filtroModoFechaIngreso, setFiltroModoFechaIngreso] = useState(true)
+  const [filtroModoFechaEntrega, setFiltroModoFechaEntrega] = useState(true)
+  const [filtroPorEstatus, setFiltroPorEstatus] = useState(false)
   const [vista, setVista] = useState(leerVistaReportes)
   const [ordenFecha, setOrdenFecha] = useState(leerOrdenFechaReportes)
   const omitirResetFechasRef = useRef(false)
@@ -242,6 +363,7 @@ export default function ReportesModulo({
         tiposServicioSeleccionados,
         filtroModoFechaIngreso,
         filtroModoFechaEntrega,
+        filtroPorEstatus,
         vista,
         ordenFecha,
       }),
@@ -294,6 +416,10 @@ export default function ReportesModulo({
     }
     setFiltroModoFechaIngreso(Boolean(estadoRestaurar.filtroModoFechaIngreso))
     setFiltroModoFechaEntrega(Boolean(estadoRestaurar.filtroModoFechaEntrega))
+    setFiltroPorEstatus(
+      Boolean(estadoRestaurar.filtroPorEstatus) ||
+        (!estadoRestaurar.filtroModoFechaIngreso && !estadoRestaurar.filtroModoFechaEntrega),
+    )
     if (estadoRestaurar.vista === 'tabla' || estadoRestaurar.vista === 'lista') {
       setVista(estadoRestaurar.vista)
     }
@@ -332,7 +458,7 @@ export default function ReportesModulo({
   }, [cargarEquipos])
 
   const cargarDatosPeriodo = useCallback(
-    async (ini, fin, estatusSet, modoFecha = null, { limpiarBusqueda = false } = {}) => {
+    async (ini, fin, estatusSet, modos = {}, { limpiarBusqueda = false } = {}) => {
       setLoading(true)
       setSinColumnaFecha(false)
       try {
@@ -351,32 +477,44 @@ export default function ReportesModulo({
         }
 
         const pagosTodos = await cargarTodosPagosClientes(supabase)
-        const { cuentaPorReparaId, entregaDesdePagosPorRepara } = mapsFechasEntregaReporte(
-          cuentas,
-          pagosTodos,
-        )
+        const mapsEntrega = mapsFechasEntregaReporte(cuentas, pagosTodos)
+        const incluirIngreso = Boolean(modos.incluirIngreso)
+        const incluirEntrega = Boolean(modos.incluirEntrega)
+        const incluirEstatus = Boolean(modos.incluirEstatus)
         const porFiltro = filtrarReparacionesParaReporte(todos, {
           estatusSet,
           ini,
           fin,
-          modoFecha,
-          cuentaPorReparaId,
-          entregaDesdePagosPorRepara,
+          incluirIngreso,
+          incluirEntrega,
+          incluirEstatus,
+          cuentaPorReparaId: mapsEntrega.cuentaPorReparaId,
+          entregaDesdePagosPorRepara: mapsEntrega.entregaDesdePagosPorRepara,
         })
         const nDup = contarOrdenesDuplicadas(porFiltro)
         const filas = excluirOrdenesDuplicadas(porFiltro)
         setReparaciones(filas)
+        setCuentaPorReparaId(mapsEntrega.cuentaPorReparaId)
+        setEntregaDesdePagosPorRepara(mapsEntrega.entregaDesdePagosPorRepara)
 
         setDuplicadasExcluidas(nDup)
         setSinColumnaFecha(false)
-        setPeriodoAplicado({ ini, fin })
-        const etiquetaFiltro =
-          modoFecha === 'ingreso'
-            ? 'Fecha ingresado'
-            : modoFecha === 'entrega'
-              ? 'Fecha entrega'
-              : labelEstatusAplicados(estatusSet)
-        setEstatusAplicado(etiquetaFiltro)
+        setPeriodoAplicado({
+          ini,
+          fin,
+          incluirIngreso,
+          incluirEntrega,
+          incluirEstatus,
+          estatusSet: [...(estatusSet ?? [])],
+        })
+        setEstatusAplicado(
+          etiquetaFiltrosReporteAplicados({
+            incluirIngreso,
+            incluirEntrega,
+            incluirEstatus,
+            estatusSet,
+          }),
+        )
         if (limpiarBusqueda) setBusqueda('')
         if (nDup > 0) {
           onNotice?.(
@@ -389,6 +527,8 @@ export default function ReportesModulo({
       } catch (e) {
         onError?.(`Error al cargar datos: ${e.message}`)
         setReparaciones([])
+        setCuentaPorReparaId(new Map())
+        setEntregaDesdePagosPorRepara(new Map())
         return false
       } finally {
         setLoading(false)
@@ -398,45 +538,50 @@ export default function ReportesModulo({
   )
 
   const rangoInvalido = Boolean(fechaInicio && fechaFin && fechaInicio > fechaFin)
-  const modoFechaActivo = filtroModoFechaIngreso
-    ? 'ingreso'
-    : filtroModoFechaEntrega
-      ? 'entrega'
-      : null
+  const modosFiltro = {
+    incluirIngreso: filtroModoFechaIngreso,
+    incluirEntrega: filtroModoFechaEntrega,
+    incluirEstatus: filtroPorEstatus,
+  }
   const filtrosListos =
     !rangoInvalido &&
     Boolean(fechaInicio.trim() && fechaFin.trim()) &&
-    (modoFechaActivo != null || estatusSeleccionados.size > 0)
+    (filtroModoFechaIngreso || filtroModoFechaEntrega || (filtroPorEstatus && estatusSeleccionados.size > 0))
 
-  function clearModoFecha() {
+  function resetModosFechaDefault() {
+    setFiltroModoFechaIngreso(true)
+    setFiltroModoFechaEntrega(true)
+    setFiltroPorEstatus(false)
+  }
+
+  function toggleModoFechaIngreso() {
+    setFiltroModoFechaIngreso((prev) => !prev)
+  }
+
+  function toggleModoFechaEntrega() {
+    setFiltroModoFechaEntrega((prev) => !prev)
+  }
+
+  function toggleFiltroPorEstatus() {
+    setFiltroPorEstatus((prev) => !prev)
+  }
+
+  function soloFiltroEstatus() {
+    setFiltroPorEstatus(true)
     setFiltroModoFechaIngreso(false)
     setFiltroModoFechaEntrega(false)
   }
 
-  function toggleModoFechaIngreso() {
-    setFiltroModoFechaIngreso((prev) => {
-      const next = !prev
-      if (next) setFiltroModoFechaEntrega(false)
-      return next
-    })
-  }
-
-  function toggleModoFechaEntrega() {
-    setFiltroModoFechaEntrega((prev) => {
-      const next = !prev
-      if (next) setFiltroModoFechaIngreso(false)
-      return next
-    })
-  }
-
   function soloModoFechaIngreso() {
-    setFiltroModoFechaEntrega(false)
     setFiltroModoFechaIngreso(true)
+    setFiltroModoFechaEntrega(false)
+    setFiltroPorEstatus(false)
   }
 
   function soloModoFechaEntrega() {
     setFiltroModoFechaIngreso(false)
     setFiltroModoFechaEntrega(true)
+    setFiltroPorEstatus(false)
   }
 
   function validarFiltros() {
@@ -450,17 +595,21 @@ export default function ReportesModulo({
       onError?.('La fecha inicio no puede ser posterior a la fecha fin')
       return null
     }
-    if (!modoFechaActivo && estatusSeleccionados.size === 0) {
-      onError?.('Seleccione al menos un estatus o active Fecha ingresado / Fecha entrega')
+    if (!filtroModoFechaIngreso && !filtroModoFechaEntrega && !filtroPorEstatus) {
+      onError?.('Seleccione al menos un filtro: equipos que entraron, equipos que salieron o filtrar por estatus')
       return null
     }
-    return { ini, fin, modoFecha: modoFechaActivo }
+    if (filtroPorEstatus && estatusSeleccionados.size === 0 && !filtroModoFechaIngreso && !filtroModoFechaEntrega) {
+      onError?.('Seleccione al menos un estatus')
+      return null
+    }
+    return { ini, fin, modos: modosFiltro }
   }
 
   async function onGenerarReporte() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha, {
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modos, {
       limpiarBusqueda: true,
     })
     if (ok) {
@@ -472,7 +621,7 @@ export default function ReportesModulo({
   async function onVerEstadisticas() {
     const rango = validarFiltros()
     if (!rango) return
-    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha, {
+    const ok = await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modos, {
       limpiarBusqueda: true,
     })
     if (ok) {
@@ -484,34 +633,19 @@ export default function ReportesModulo({
   async function onActualizarReporte() {
     const rango = validarFiltros()
     if (!rango) return
-    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
+    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modos)
   }
 
   async function onActualizarEstadisticas() {
     const rango = validarFiltros()
     if (!rango) return
-    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modoFecha)
+    await cargarDatosPeriodo(rango.ini, rango.fin, estatusSeleccionados, rango.modos)
   }
 
   function onVerEstadisticasDelPeriodo() {
     setEstadisticasDesdeReporte(true)
     setPantalla('estadisticas')
   }
-
-  const resumen = useMemo(() => {
-    const total = reparaciones.length
-    const entregadas = reparaciones.filter(esEntregada).length
-    const verificadas = reparaciones.filter(repEsVerificadaListaEntrega).length
-    const activas = total - entregadas
-    const enProceso = Math.max(0, activas - verificadas)
-    const totalCosto = reparaciones.reduce((s, r) => s + Number(r.costo_reparacion ?? 0), 0)
-    const porEstatus = {}
-    for (const r of reparaciones) {
-      const k = normalizarLabelEstatus(r.estatus)
-      porEstatus[k] = (porEstatus[k] ?? 0) + 1
-    }
-    return { total, entregadas, activas, verificadas, enProceso, totalCosto, porEstatus }
-  }, [reparaciones])
 
   const equipoPorId = useMemo(() => {
     const m = new Map()
@@ -538,32 +672,49 @@ export default function ReportesModulo({
       }
     }
 
-    const qTexto = String(busqueda ?? '').trim()
-    if (qTexto) {
-      filas = filas.filter((r) =>
-        repCoincideBusquedaTextoMonitor(r, qTexto, clientes, equipoPorId),
-      )
-    }
-
     return ordenarReparacionesPorFecha(filas, ordenFecha)
-  }, [reparaciones, busqueda, clientes, tiposServicioSeleccionados, equipoPorId, ordenFecha])
+  }, [reparaciones, tiposServicioSeleccionados, equipoPorId, ordenFecha])
 
-  const filtroBusquedaActivo = Boolean(String(busqueda ?? '').trim())
+  const kpisSeleccion = useMemo(
+    () => kpisSeleccionReporte({ reparaciones: filtrados, periodo: periodoAplicado }),
+    [filtrados, periodoAplicado],
+  )
+
+  const filasVista = useMemo(
+    () =>
+      filasEstiloMonitor(filtrados, {
+        equipoPorId,
+        cuentaPorReparaId,
+        entregaDesdePagosPorRepara,
+      }),
+    [filtrados, equipoPorId, cuentaPorReparaId, entregaDesdePagosPorRepara],
+  )
+
+  const resumenListado = useMemo(() => {
+    const partes = []
+    if (estatusAplicado) partes.push(estatusAplicado)
+    partes.push(etiquetaTiposServicioReporte(tiposServicioSeleccionados))
+    return partes.join(' · ')
+  }, [estatusAplicado, tiposServicioSeleccionados])
 
   function volverAElegirFechas() {
     setPantalla('fechas')
     setEstadisticasDesdeReporte(false)
     setReparaciones([])
-    setPagosPeriodo([])
+    setCuentaPorReparaId(new Map())
+    setEntregaDesdePagosPorRepara(new Map())
     setPeriodoAplicado(null)
     setEstatusAplicado('')
     setSinColumnaFecha(false)
     setDuplicadasExcluidas(0)
     setBusqueda('')
     setTiposServicioSeleccionados(new Set(TIPOS_SERVICIO_CANONICOS))
-    clearModoFecha()
-    if (!puedeElegirRangoFechas) {
-      const hoy = ymdHoy()
+    resetModosFechaDefault()
+    const hoy = ymdHoy()
+    if (puedeElegirRangoFechas) {
+      setFechaInicio(ymdInicioMes())
+      setFechaFin(hoy)
+    } else {
       setFechaInicio(hoy)
       setFechaFin(hoy)
     }
@@ -578,15 +729,15 @@ export default function ReportesModulo({
     onEstatusSeleccionados: setEstatusSeleccionados,
     filtroModoFechaIngreso,
     filtroModoFechaEntrega,
+    filtroPorEstatus,
     onToggleModoFechaIngreso: toggleModoFechaIngreso,
     onToggleModoFechaEntrega: toggleModoFechaEntrega,
+    onToggleFiltroPorEstatus: toggleFiltroPorEstatus,
+    onSoloFiltroEstatus: soloFiltroEstatus,
     onSoloModoFechaIngreso: soloModoFechaIngreso,
     onSoloModoFechaEntrega: soloModoFechaEntrega,
-    onClearModoFecha: clearModoFecha,
     tiposServicioSeleccionados,
     onTiposServicioSeleccionados: setTiposServicioSeleccionados,
-    busqueda,
-    onBusqueda: setBusqueda,
     rangoInvalido,
     puedeCambiarFechas: puedeElegirRangoFechas,
     onIntentoSinPermisoFecha: avisarSinPermisoFecha,
@@ -597,8 +748,7 @@ export default function ReportesModulo({
       <>
       <AlertaPermiso mensaje={alertaPermiso} />
       <ReportesEstadisticasView
-        reparaciones={reparaciones}
-        resumen={resumen}
+        reparaciones={filtrados}
         periodoAplicado={periodoAplicado}
         estatusAplicado={estatusAplicado}
         formatearFechaCorta={formatearFechaCorta}
@@ -626,36 +776,34 @@ export default function ReportesModulo({
     )
   }
 
-  async function imprimirReporte() {
-    if (!periodoAplicado || reparaciones.length === 0) {
-      onError?.('No hay datos del reporte para imprimir.')
+  async function abrirPdfReporte() {
+    if (!periodoAplicado || filtrados.length === 0) {
+      onError?.('No hay datos del reporte para abrir.')
       return
     }
     try {
-      const { printReporteReparacionesPdf } = await import('./reporteReparacionesPdf.js')
-      await printReporteReparacionesPdf({
+      const { abrirReporteReparacionesPdf } = await import('./reporteReparacionesPdf.js')
+      abrirReporteReparacionesPdf({
         periodo: periodoAplicado,
         formatearFechaCorta,
-        estatusFiltro: estatusAplicado || 'Todos',
-        resumen: {
-          total: resumen.total,
-          activas: resumen.activas,
-          entregadas: resumen.entregadas,
-          totalCosto: resumen.totalCosto,
-        },
-        porEstatus: resumen.porEstatus,
-        filas: ordenarReparacionesPorFecha(reparaciones, ordenFecha).map((r) => ({
-          orden: String(r.id ?? '—'),
-          cliente: nombreCliente(clientes, r.cliente_id),
-          estatus: String(r.estatus ?? '—'),
-          tipo: String(r.tipo_reparacion ?? '—'),
-          fecha: extractDateYmd(r) ?? '—',
-          pago: `$${Number(r.pago ?? 0).toFixed(2)}`,
-          costo: `$${Number(r.costo_reparacion ?? 0).toFixed(2)}`,
+        estatusFiltro: [estatusAplicado || 'Ninguno', etiquetaTiposServicioReporte(tiposServicioSeleccionados)].join(' · '),
+        kpis: kpisSeleccion,
+        filas: filasVista.map((f) => ({
+          ingreso: f.ymdIngreso ? formatearFechaCorta(f.ymdIngreso) : '—',
+          salida: f.ymdSalida ? formatearFechaCorta(f.ymdSalida) : '—',
+          dias: f.diasTxt,
+          orden: String(f.rep.id ?? '—'),
+          cliente: nombreCliente(clientes, f.rep.cliente_id),
+          equipo: f.tipo,
+          servicio: f.folioEpson ? `${f.tipoServicio} (${f.folioEpson})` : f.tipoServicio,
+          descripcion: f.desc,
+          problema: f.problema,
+          tecnico: f.tecnico,
+          estatus: f.verificada ? `${f.estatus} · VERIFICADA` : f.estatus,
         })),
       })
     } catch (e) {
-      onError?.(`No se pudo imprimir el reporte: ${e?.message ?? e}`)
+      onError?.(`No se pudo abrir el PDF del reporte: ${e?.message ?? e}`)
     }
   }
 
@@ -733,7 +881,13 @@ export default function ReportesModulo({
             </span>
             <span>
               <strong>Periodo:</strong> {formatearFechaCorta(periodoAplicado.ini)} —{' '}
-              {formatearFechaCorta(periodoAplicado.fin)} · <strong>Estatus:</strong> {estatusAplicado || 'Todos'}
+              {formatearFechaCorta(periodoAplicado.fin)}
+              {estatusAplicado ? (
+                <>
+                  {' '}
+                  · <strong>Filtros:</strong> {estatusAplicado}
+                </>
+              ) : null}
             </span>
           </div>
         ) : null}
@@ -752,61 +906,7 @@ export default function ReportesModulo({
           </p>
         ) : null}
 
-        <section className="corte-caja-resumen card-pad reportes-resumen">
-          <header className="corte-caja-resumen-header">
-            <span className="corte-caja-resumen-ico" aria-hidden="true">
-              📊
-            </span>
-            <h2 className="corte-caja-resumen-titulo">Resumen del periodo</h2>
-          </header>
-          <div className="corte-caja-stats reportes-stats">
-            <div className="corte-caja-stat corte-caja-stat--total">
-              <span className="label">
-                <span aria-hidden="true">🧾</span> Total órdenes
-              </span>
-              <strong>{resumen.total}</strong>
-            </div>
-            <div className="corte-caja-stat reportes-stat--activas">
-              <span className="label">
-                <span aria-hidden="true">🔧</span> Activas
-              </span>
-              <strong>{resumen.activas}</strong>
-            </div>
-            <div className="corte-caja-stat reportes-stat--entregadas">
-              <span className="label">
-                <span aria-hidden="true">✅</span> Entregadas
-              </span>
-              <strong>{resumen.entregadas}</strong>
-            </div>
-            <div className="corte-caja-stat reportes-stat--verificadas">
-              <span className="label">
-                <span aria-hidden="true">✓</span> Verificadas
-              </span>
-              <strong>{resumen.verificadas}</strong>
-            </div>
-            <div className="corte-caja-stat corte-caja-stat--otro">
-              <span className="label">
-                <span aria-hidden="true">🛠️</span> Suma costo reparación
-              </span>
-              <strong>${resumen.totalCosto.toFixed(2)}</strong>
-            </div>
-          </div>
-          <div className="reportes-por-estatus">
-            <h3 className="reportes-subtitulo">
-              <span aria-hidden="true">🏷️</span> Por estatus
-            </h3>
-            <ul className="reportes-estatus-lista">
-              {Object.entries(resumen.porEstatus)
-                .filter(([, n]) => n > 0)
-                .map(([k, n]) => (
-                  <li key={k}>
-                    <span>{k}</span>
-                    <strong>{n}</strong>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        </section>
+        {!loading ? <ReportesKpisSeleccion kpis={kpisSeleccion} /> : null}
 
         <ReportesFiltrosCard {...propsFiltrosReporte}>
           <button
@@ -824,17 +924,17 @@ export default function ReportesModulo({
             type="button"
             className="btn-agregar-equipo btn-ver-estadisticas"
             onClick={onVerEstadisticasDelPeriodo}
-            disabled={loading || reparaciones.length === 0}
+            disabled={loading || filtrados.length === 0}
           >
             📈 Ver estadísticas del periodo
           </button>
           <button
             type="button"
             className="btn-agregar-equipo btn-imprimir-corte-caja"
-            onClick={() => void imprimirReporte()}
-            disabled={loading || reparaciones.length === 0}
+            onClick={() => void abrirPdfReporte()}
+            disabled={loading || filtrados.length === 0}
           >
-            🖨 IMPRIMIR REPORTE
+            📄 ABRIR PDF
           </button>
         </div>
 
@@ -875,112 +975,153 @@ export default function ReportesModulo({
 
         {loading ? (
           <p className="muted center">Cargando…</p>
-        ) : filtrados.length === 0 ? (
-          <div className="empty-card">
-            <p>
-              {filtroBusquedaActivo
-                ? `Ninguna orden coincide con «${String(busqueda).trim()}» entre los resultados filtrados.`
-                : sinColumnaFecha
-                  ? 'No hay órdenes'
-                  : 'No hay órdenes en el periodo y filtro seleccionados'}
+        ) : (
+          <section className="monitor-ordenes-resultados reportes-resultados-monitor">
+            <p className="monitor-ordenes-conteo" role="status" aria-live="polite">
+              <span className="monitor-ordenes-conteo-icon" aria-hidden="true">
+                📋
+              </span>
+              <span className="monitor-ordenes-conteo-num">{filasVista.length}</span>
+              <span className="monitor-ordenes-conteo-cuerpo">
+                <span className="monitor-ordenes-conteo-texto">
+                  {filasVista.length === 1 ? 'orden encontrada' : 'órdenes encontradas'}
+                </span>
+                <span className="monitor-ordenes-conteo-resumen">{resumenListado}</span>
+              </span>
             </p>
-          </div>
-        ) : vista === 'tabla' ? (
-          <TablaScrollSuperior
-            ariaLabel="Órdenes del reporte en tabla"
-            classNameWrap="reportes-tabla-wrap"
-            syncDeps={[vista, filtrados, loading, ordenFecha]}
-          >
-              <div className="inventario-tabla-grid reportes-tabla-grid">
-                <div className="inventario-tabla-fila-grupo inventario-tabla-cabecera" role="row">
-                  <div className="inventario-tabla-grupo-celdas inventario-tabla-grupo-celdas--cabecera">
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--orden-rep">No.</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--cliente-corte">Cliente</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--forma-corte">Estatus</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--desc">Equipo / tipo</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--fecha-corte">Fecha</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--monto-cat">Pago</span>
-                    <span className="inventario-tabla-th inventario-celda inventario-celda--costo-rep">Costo</span>
-                  </div>
-                </div>
-                {filtrados.map((r) => {
-                  const ymd = extractDateYmd(r)
+
+            {filasVista.length === 0 ? (
+              <div className="monitor-ordenes-vacio-card empty-card">
+                <p>
+                  {sinColumnaFecha
+                    ? 'No hay órdenes'
+                    : 'No hay órdenes con los filtros seleccionados.'}
+                </p>
+              </div>
+            ) : vista === 'tabla' ? (
+              <TablaScrollSuperior
+                ariaLabel="Órdenes del reporte en tabla"
+                classNameWrap="cuentas-cliente-tabla-wrap monitor-ordenes-tabla-wrap"
+                syncDeps={[vista, filasVista, loading, ordenFecha]}
+              >
+                <table className="cuentas-cliente-tabla monitor-ordenes-tabla">
+                  <thead>
+                    <tr>
+                      <th>Fecha ingreso</th>
+                      <th>Fecha entrega / baja</th>
+                      <th>Días</th>
+                      <th>No. orden</th>
+                      <th>Cliente</th>
+                      <th>Equipo</th>
+                      <th>Servicio</th>
+                      <th>Descripción</th>
+                      <th>Problema</th>
+                      <th>Técnico</th>
+                      <th>Estatus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filasVista.map((f) => {
+                      const r = f.rep
+                      const puedeAbrir = Boolean(onAbrirOrden && r.id != null)
+                      return (
+                        <tr
+                          key={r.id}
+                          className={`monitor-ordenes-tabla-fila${puedeAbrir ? ' monitor-ordenes-tabla-fila--clic' : ''}${f.verificada ? ' monitor-ordenes-tabla-fila--verificada' : ''}`}
+                          title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
+                          onClick={puedeAbrir ? () => abrirOrden(r) : undefined}
+                          onKeyDown={puedeAbrir ? (e) => onOrdenKeyDown(e, r) : undefined}
+                          tabIndex={puedeAbrir ? 0 : undefined}
+                          role={puedeAbrir ? 'button' : undefined}
+                        >
+                          <td className="monitor-ordenes-fecha-ingreso cuentas-cliente-tabla-fecha">
+                            {f.ymdIngreso ? formatearFechaCorta(f.ymdIngreso) : '—'}
+                          </td>
+                          <td
+                            className={`monitor-ordenes-fecha-entrega-celda cuentas-cliente-tabla-fecha${f.ymdSalida ? ' cuentas-cliente-tabla-fecha--entrega' : ''}`}
+                          >
+                            {f.ymdSalida ? formatearFechaCorta(f.ymdSalida) : '—'}
+                          </td>
+                          <td
+                            className={`monitor-ordenes-dias${estatusEsEntregado(r?.estatus) ? ' monitor-ordenes-dias--entregado' : ''}`}
+                            title={
+                              estatusEsEntregado(r?.estatus)
+                                ? 'Entregado'
+                                : f.dias == null
+                                  ? 'Sin fecha de ingreso'
+                                  : `${f.dias} días en taller`
+                            }
+                          >
+                            {f.diasTxt}
+                          </td>
+                          <td className="monitor-ordenes-num cuentas-cliente-tabla-orden">{r.id ?? '—'}</td>
+                          <td className="monitor-ordenes-col-cliente">{nombreCliente(clientes, r.cliente_id)}</td>
+                          <td>{f.tipo}</td>
+                          <td className="monitor-ordenes-tipo-servicio">
+                            <CeldaTipoServicioReporte fila={f} />
+                          </td>
+                          <td className="monitor-ordenes-col-texto">{f.desc}</td>
+                          <td className="monitor-ordenes-col-texto">{f.problema}</td>
+                          <td>{f.tecnico}</td>
+                          <td>
+                            <BadgeEstatusReporte fila={f} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </TablaScrollSuperior>
+            ) : (
+              <ul className="equipo-list inventario-list reportes-lista">
+                {filasVista.map((f) => {
+                  const r = f.rep
                   const puedeAbrir = Boolean(onAbrirOrden && r.id != null)
                   return (
-                    <div
+                    <li
                       key={r.id}
-                      className={`inventario-tabla-fila-grupo${puedeAbrir ? ' inventario-tabla-fila-grupo--clic reportes-tabla-fila--clic' : ''}`}
-                      role={puedeAbrir ? 'button' : 'row'}
-                      tabIndex={puedeAbrir ? 0 : undefined}
-                      title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
-                      onClick={puedeAbrir ? () => abrirOrden(r) : undefined}
-                      onKeyDown={puedeAbrir ? (e) => onOrdenKeyDown(e, r) : undefined}
+                      className={`equipo-card inventario-card reportes-card${puedeAbrir ? ' reportes-card--clic' : ' corte-caja-card--solo-lectura'}${f.verificada ? ' reportes-card--verificada' : ''}`}
                     >
-                      <div className="inventario-tabla-grupo-celdas">
-                        <span className="inventario-celda inventario-celda--orden-rep">#{r.id}</span>
-                        <span className="inventario-celda inventario-celda--cliente-corte">
-                          {nombreCliente(clientes, r.cliente_id)}
+                      <button
+                        type="button"
+                        className={`equipo-card-main inventario-card-main reportes-fila${puedeAbrir ? ' reportes-fila--clic' : ''}`}
+                        disabled={!puedeAbrir}
+                        title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
+                        onClick={() => abrirOrden(r)}
+                      >
+                        <strong>
+                          <span aria-hidden="true">📋</span> Orden #{r.id}
+                        </strong>
+                        <span className="reportes-cliente-lista">
+                          <span aria-hidden="true">👤</span> {nombreCliente(clientes, r.cliente_id)}
                         </span>
-                        <span className="inventario-celda inventario-celda--forma-corte corte-caja-chip">
-                          {String(r.estatus ?? '—')}
+                        <BadgeEstatusReporte fila={f} />
+                        <span className="muted small reportes-meta-lista">
+                          <span aria-hidden="true">📅</span> Ingreso:{' '}
+                          {f.ymdIngreso ? formatearFechaCorta(f.ymdIngreso) : '—'}
+                          {' · '}
+                          Entrega/baja: {f.ymdSalida ? formatearFechaCorta(f.ymdSalida) : '—'}
+                          {' · '}
+                          Días: {f.diasTxt}
                         </span>
-                        <span className="inventario-celda inventario-celda--desc">
-                          {String(r.descripcion_equipo ?? r.tipo_reparacion ?? '—')}
+                        <span className="muted small">
+                          <span aria-hidden="true">🖨️</span> {f.tipo} · {f.tipoServicio}
+                          {f.folioEpson ? ` · Folio ${f.folioEpson}` : ''}
                         </span>
-                        <span className="inventario-celda inventario-celda--fecha-corte">
-                          {ymd ? formatearFechaCorta(ymd) : '—'}
+                        <span className="muted small reportes-meta-lista">{f.desc}</span>
+                        <span className="muted small reportes-meta-lista">
+                          <span aria-hidden="true">⚠️</span> {f.problema}
                         </span>
-                        <span className="inventario-celda inventario-celda--monto-cat corte-caja-monto-celda">
-                          ${Number(r.pago ?? 0).toFixed(2)}
+                        <span className="muted small">
+                          <span aria-hidden="true">🔧</span> Técnico: {f.tecnico}
                         </span>
-                        <span className="inventario-celda inventario-celda--costo-rep">
-                          ${Number(r.costo_reparacion ?? 0).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+                      </button>
+                    </li>
                   )
                 })}
-              </div>
-          </TablaScrollSuperior>
-        ) : (
-          <ul className="equipo-list inventario-list reportes-lista">
-            {filtrados.map((r) => {
-              const ymd = extractDateYmd(r)
-              const puedeAbrir = Boolean(onAbrirOrden && r.id != null)
-              return (
-                <li key={r.id} className={`equipo-card inventario-card reportes-card${puedeAbrir ? ' reportes-card--clic' : ' corte-caja-card--solo-lectura'}`}>
-                  <button
-                    type="button"
-                    className={`equipo-card-main inventario-card-main reportes-fila${puedeAbrir ? ' reportes-fila--clic' : ''}`}
-                    disabled={!puedeAbrir}
-                    title={puedeAbrir ? `Abrir orden #${r.id}` : undefined}
-                    onClick={() => abrirOrden(r)}
-                  >
-                    <strong>
-                      <span aria-hidden="true">📋</span> Orden #{r.id}
-                    </strong>
-                    <span className="reportes-cliente-lista">
-                      <span aria-hidden="true">👤</span> {nombreCliente(clientes, r.cliente_id)}
-                    </span>
-                    <span className="corte-caja-chip">{String(r.estatus ?? '—')}</span>
-                    <span className="muted small">
-                      <span aria-hidden="true">🖨️</span> {String(r.descripcion_equipo ?? r.tipo_reparacion ?? '—')}
-                    </span>
-                    <span className="muted small reportes-meta-lista">
-                      <span aria-hidden="true">💵</span> Pago ${Number(r.pago ?? 0).toFixed(2)} ·{' '}
-                      <span aria-hidden="true">🛠️</span> Costo ${Number(r.costo_reparacion ?? 0).toFixed(2)}
-                      {ymd ? (
-                        <>
-                          {' '}
-                          · <span aria-hidden="true">📅</span> {formatearFechaCorta(ymd)}
-                        </>
-                      ) : null}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+              </ul>
+            )}
+          </section>
         )}
       </div>
     </div>

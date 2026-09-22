@@ -1,9 +1,16 @@
 import FechaInputPermiso from './FechaInputPermiso.jsx'
-import { crearSetEstatusTodos, ESTATUS_ORDEN_REPORTES } from './reportesFiltros.js'
-import { TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
+import {
+  crearSetEstatusTodos,
+  etiquetaEstatusChipReporte,
+  ESTATUS_REPORTES_ANCLADOS_FIN,
+  ESTATUS_REPORTES_ANCLADOS_INICIO,
+  ESTATUS_REPORTES_SECUNDARIOS,
+} from './reportesFiltros.js'
+import { ESTATUS_BAJA, ESTATUS_ENTREGADO_SIN_REPARACION, TIPOS_SERVICIO_CANONICOS } from './reparacionUtils.js'
 
 /**
- * Filtros de reportes / estadísticas (rango de fechas + estatus múltiple, estilo monitor).
+ * Filtros de reportes: mismos chips que el monitor (sin avisos ni buscador).
+ * Equipos que entraron, que salieron y filtrar por estatus se pueden combinar.
  */
 export default function ReportesFiltrosCard({
   fechaInicio,
@@ -16,20 +23,19 @@ export default function ReportesFiltrosCard({
   onEstatusSeleccionados,
   filtroModoFechaIngreso = false,
   filtroModoFechaEntrega = false,
+  filtroPorEstatus = false,
   onToggleModoFechaIngreso = null,
   onToggleModoFechaEntrega = null,
+  onToggleFiltroPorEstatus = null,
+  onSoloFiltroEstatus = null,
   onSoloModoFechaIngreso = null,
   onSoloModoFechaEntrega = null,
-  onClearModoFecha = null,
   tiposServicioSeleccionados = new Set(TIPOS_SERVICIO_CANONICOS),
   onTiposServicioSeleccionados = null,
-  busqueda = '',
-  onBusqueda = null,
   rangoInvalido,
   children,
 }) {
   const tiposServicioLista = TIPOS_SERVICIO_CANONICOS
-
   const tileActive = (on) => (on ? ' monitor-ordenes-tile--active' : '')
 
   function avisarSinPermisoFecha() {
@@ -64,11 +70,9 @@ export default function ReportesFiltrosCard({
 
   function seleccionarSolo(est) {
     const st = String(est).trim().toUpperCase()
-    onClearModoFecha?.()
     onEstatusSeleccionados(new Set([st]))
+    onSoloFiltroEstatus?.()
   }
-
-  const modoFechaActivo = filtroModoFechaIngreso || filtroModoFechaEntrega
 
   function toggleTipoServicio(tipo) {
     if (!onTiposServicioSeleccionados) return
@@ -86,6 +90,43 @@ export default function ReportesFiltrosCard({
     onTiposServicioSeleccionados(new Set([String(tipo).trim().toUpperCase()]))
   }
 
+  function chipFiltroEstatus(est) {
+    const st = String(est).trim().toUpperCase()
+    const checked = estatusSeleccionados.has(st)
+    return (
+      <label
+        key={est}
+        className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
+      >
+        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+        <input
+          type="checkbox"
+          className="monitor-ordenes-check-input"
+          checked={checked}
+          onChange={() => toggleEstatus(est)}
+        />
+        <span className="monitor-ordenes-check-text">{etiquetaEstatusChipReporte(est)}</span>
+        <button
+          type="button"
+          className="monitor-ordenes-solo"
+          onClick={(e) => {
+            e.preventDefault()
+            seleccionarSolo(est)
+          }}
+          title={
+            st === ESTATUS_ENTREGADO_SIN_REPARACION
+              ? 'Solo equipos entregados sin reparación'
+              : st === ESTATUS_BAJA
+                ? 'Solo equipos dados de baja'
+                : 'Solo este'
+          }
+        >
+          Solo
+        </button>
+      </label>
+    )
+  }
+
   return (
     <section className="corte-caja-hero-card card-pad reportes-filtros-card">
       <header className="corte-caja-hero-header">
@@ -95,66 +136,44 @@ export default function ReportesFiltrosCard({
         <h2 className="corte-caja-hero-titulo">Filtros del reporte</h2>
       </header>
 
-      <div className="corte-caja-fechas-grid reportes-filtros-fechas">
-        <label className="corte-caja-fecha-campo">
-          <span className="corte-caja-fecha-label">
-            <span aria-hidden="true">🗓️</span> Desde
-          </span>
-          <FechaInputPermiso
-            value={fechaInicio}
-            min={puedeCambiarFechas ? undefined : fechaInicio || undefined}
-            max={puedeCambiarFechas ? fechaFin || undefined : fechaInicio || undefined}
-            puedeEditar={puedeCambiarFechas}
-            onChange={cambiarFechaInicio}
-            onSinPermiso={avisarSinPermisoFecha}
-            ariaLabel="Fecha inicial"
-          />
-        </label>
-        <label className="corte-caja-fecha-campo">
-          <span className="corte-caja-fecha-label">
-            <span aria-hidden="true">📆</span> Hasta
-          </span>
-          <FechaInputPermiso
-            value={fechaFin}
-            min={puedeCambiarFechas ? fechaInicio || undefined : fechaFin || undefined}
-            max={puedeCambiarFechas ? undefined : fechaFin || undefined}
-            puedeEditar={puedeCambiarFechas}
-            onChange={cambiarFechaFin}
-            onSinPermiso={avisarSinPermisoFecha}
-            ariaLabel="Fecha final"
-          />
-        </label>
-      </div>
-      {rangoInvalido ? (
-        <p className="reportes-rango-aviso" role="alert">
-          <span aria-hidden="true">⚠️</span> La fecha inicial no puede ser posterior a la final.
-        </p>
-      ) : null}
-
-      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus reportes-estatus-fieldset">
-        <legend className="monitor-ordenes-legend">Estatus a incluir</legend>
-        <div className="reportes-estatus-acciones">
-          <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(crearSetEstatusTodos())}>
-            ✓ Todos
-          </button>
-          <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(new Set())}>
-            ✕ Ninguno
-          </button>
+      <div
+        className={`monitor-ordenes-filtros-rango monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(
+          Boolean(fechaInicio || fechaFin),
+        )}`}
+      >
+        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+        <span className="monitor-ordenes-filtros-grupo-titulo">Rango de fechas</span>
+        <div className="monitor-ordenes-rango-inputs reportes-filtros-fechas">
+          <label className="corte-caja-fecha-campo monitor-ordenes-label-fecha">
+            <span className="corte-caja-fecha-label">Desde</span>
+            <FechaInputPermiso
+              value={fechaInicio}
+              min={puedeCambiarFechas ? undefined : fechaInicio || undefined}
+              max={puedeCambiarFechas ? fechaFin || undefined : fechaInicio || undefined}
+              puedeEditar={puedeCambiarFechas}
+              onChange={cambiarFechaInicio}
+              onSinPermiso={avisarSinPermisoFecha}
+              ariaLabel="Fecha inicial"
+            />
+          </label>
+          <label className="corte-caja-fecha-campo monitor-ordenes-label-fecha">
+            <span className="corte-caja-fecha-label">Hasta</span>
+            <FechaInputPermiso
+              value={fechaFin}
+              min={puedeCambiarFechas ? fechaInicio || undefined : fechaFin || undefined}
+              max={puedeCambiarFechas ? undefined : fechaFin || undefined}
+              puedeEditar={puedeCambiarFechas}
+              onChange={cambiarFechaFin}
+              onSinPermiso={avisarSinPermisoFecha}
+              ariaLabel="Fecha final"
+            />
+          </label>
         </div>
-        <div className="monitor-ordenes-estatus-grid">
-          {ESTATUS_ORDEN_REPORTES.map((est) => {
-            const st = String(est).trim().toUpperCase()
-            const checked = estatusSeleccionados.has(st)
-            return (
-              <label key={est} className="monitor-ordenes-check">
-                <input type="checkbox" checked={checked} onChange={() => toggleEstatus(est)} />
-                <span>{est}</span>
-                <button type="button" className="monitor-ordenes-solo" onClick={() => seleccionarSolo(est)} title="Solo este">
-                  Solo
-                </button>
-              </label>
-            )
-          })}
+        <div
+          className="monitor-ordenes-rango-modos"
+          role="group"
+          aria-label="Incluir en el reporte: equipos que entraron, equipos que salieron y/o filtrar por estatus"
+        >
           <label
             className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(filtroModoFechaIngreso)}`}
           >
@@ -165,7 +184,7 @@ export default function ReportesFiltrosCard({
               checked={filtroModoFechaIngreso}
               onChange={() => onToggleModoFechaIngreso?.()}
             />
-            <span className="monitor-ordenes-check-text">Fecha ingresado</span>
+            <span className="monitor-ordenes-check-text">Equipos que entraron</span>
             <button
               type="button"
               className="monitor-ordenes-solo"
@@ -173,7 +192,7 @@ export default function ReportesFiltrosCard({
                 e.preventDefault()
                 onSoloModoFechaIngreso?.()
               }}
-              title="Solo órdenes ingresadas en el rango de fechas de arriba"
+              title="Solo órdenes con fecha de ingreso en el rango"
             >
               Solo
             </button>
@@ -188,7 +207,7 @@ export default function ReportesFiltrosCard({
               checked={filtroModoFechaEntrega}
               onChange={() => onToggleModoFechaEntrega?.()}
             />
-            <span className="monitor-ordenes-check-text">Fecha entrega</span>
+            <span className="monitor-ordenes-check-text">Equipos que salieron</span>
             <button
               type="button"
               className="monitor-ordenes-solo"
@@ -196,20 +215,58 @@ export default function ReportesFiltrosCard({
                 e.preventDefault()
                 onSoloModoFechaEntrega?.()
               }}
-              title="Solo órdenes entregadas en el rango de fechas de arriba"
+              title="Solo órdenes con fecha de entrega en el rango"
             >
               Solo
             </button>
           </label>
+          <label
+            className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip monitor-ordenes-check--filtrar-estatus${tileActive(filtroPorEstatus)}`}
+          >
+            <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
+            <input
+              type="checkbox"
+              className="monitor-ordenes-check-input"
+              checked={filtroPorEstatus}
+              onChange={() => onToggleFiltroPorEstatus?.()}
+            />
+            <span className="monitor-ordenes-check-text">Filtrar por estatus</span>
+          </label>
         </div>
-        {modoFechaActivo ? (
-          <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="status">
-            Modo fecha activo: se usa el rango «Desde / Hasta» y se omiten los estatus marcados arriba.
+        {rangoInvalido ? (
+          <p className="monitor-ordenes-rango-aviso" role="alert">
+            La fecha inicial no puede ser posterior a la final.
           </p>
         ) : null}
-      </fieldset>
+        <p className="monitor-ordenes-rango-aviso monitor-ordenes-rango-aviso--fieldset" role="status">
+          Lo que marque se incluye en el reporte y las gráficas (se pueden combinar entrada, salida y estatus).
+        </p>
+      </div>
 
-      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus reportes-estatus-fieldset">
+      {filtroPorEstatus ? (
+        <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide reportes-estatus-fieldset">
+          <legend className="monitor-ordenes-legend">Estatus de la orden</legend>
+          <div className="reportes-estatus-acciones">
+            <button
+              type="button"
+              className="monitor-ordenes-solo"
+              onClick={() => onEstatusSeleccionados(crearSetEstatusTodos())}
+            >
+              ✓ Todos
+            </button>
+            <button type="button" className="monitor-ordenes-solo" onClick={() => onEstatusSeleccionados(new Set())}>
+              ✕ Ninguno
+            </button>
+          </div>
+          <div className="monitor-ordenes-estatus-grid monitor-ordenes-estatus-grid--orden">
+            {ESTATUS_REPORTES_ANCLADOS_INICIO.map((est) => chipFiltroEstatus(est))}
+            {ESTATUS_REPORTES_SECUNDARIOS.map((est) => chipFiltroEstatus(est))}
+            {ESTATUS_REPORTES_ANCLADOS_FIN.map((est) => chipFiltroEstatus(est))}
+          </div>
+        </fieldset>
+      ) : null}
+
+      <fieldset className="monitor-ordenes-fieldset monitor-ordenes-fieldset--estatus monitor-ordenes-tile monitor-ordenes-tile--wide reportes-estatus-fieldset">
         <legend className="monitor-ordenes-legend">Tipo de servicio</legend>
         <div className="reportes-estatus-acciones">
           <button
@@ -227,7 +284,10 @@ export default function ReportesFiltrosCard({
           {tiposServicioLista.map((tipo) => {
             const checked = tiposServicioSeleccionados.has(tipo)
             return (
-              <label key={tipo} className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}>
+              <label
+                key={tipo}
+                className={`monitor-ordenes-check monitor-ordenes-tile monitor-ordenes-tile--chip${tileActive(checked)}`}
+              >
                 <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
                 <input
                   type="checkbox"
@@ -249,35 +309,6 @@ export default function ReportesFiltrosCard({
           })}
         </div>
       </fieldset>
-
-      <label
-        className={`monitor-ordenes-label-inline monitor-ordenes-filtros-busqueda monitor-ordenes-tile monitor-ordenes-tile--wide${tileActive(
-          Boolean(String(busqueda ?? '').trim()),
-        )}`}
-      >
-        <span className="monitor-ordenes-tile-badge" aria-hidden="true" />
-        <span className="monitor-ordenes-tile-label">Buscador</span>
-        <div className="monitor-ordenes-fecha-desde">
-          <input
-            type="search"
-            className="monitor-ordenes-busqueda-input"
-            value={busqueda}
-            onChange={(e) => onBusqueda?.(e.target.value)}
-            placeholder="Refinar resultados: problema, cliente, #469… (respeta filtros de arriba)"
-            aria-label="Buscador: cliente, número de orden o texto libre"
-          />
-          <button
-            type="button"
-            className="monitor-ordenes-fecha-clear"
-            onClick={() => onBusqueda?.('')}
-            disabled={!String(busqueda ?? '').trim()}
-            title="Limpiar buscador"
-            aria-label="Limpiar buscador"
-          >
-            Limpiar
-          </button>
-        </div>
-      </label>
 
       {children ? <div className="reportes-filtros-acciones">{children}</div> : null}
     </section>
