@@ -1,4 +1,5 @@
 import { sameId } from './clienteUtils.js'
+import { esConceptoAnticipo } from './pagoVentaProducto.js'
 import { LS_PAGOS_CLIENTES } from './pagosClientesUtils.js'
 
 const LS_CUENTAS = 'sistefix_local_cuentas'
@@ -21,7 +22,7 @@ function limpiarPrefijoDescripcion(texto) {
     .trim() || 'Concepto'
 }
 
-function lineaCargo(descripcion, cantidad, costoUnitario) {
+function lineaCargo(descripcion, cantidad, costoUnitario, origen) {
   const cant = Number(cantidad ?? 1)
   const unit = Number(costoUnitario ?? 0)
   const monto = cant * unit
@@ -31,18 +32,19 @@ function lineaCargo(descripcion, cantidad, costoUnitario) {
     cantidad: cant,
     precioUnitario: unit,
     monto,
+    origen,
   }
 }
 
 function cargosDesdeMovs(movs = []) {
   return movs
-    .map((m) => lineaCargo(m.descripcion, m.cantidad, m.costo))
+    .map((m) => lineaCargo(m.descripcion, m.cantidad, m.costo, 'cuentamov'))
     .filter(Boolean)
 }
 
 function cargosDesdeReps(reps = []) {
   return reps
-    .map((r) => lineaCargo(r.descripcion, r.cantidad, r.costo))
+    .map((r) => lineaCargo(r.descripcion, r.cantidad, r.costo, 'reparamov'))
     .filter(Boolean)
 }
 
@@ -62,6 +64,7 @@ function inyectarCostoReparacion(cargos, rep) {
       cantidad: 1,
       precioUnitario: faltante,
       monto: faltante,
+      origen: 'reparacion',
     },
   ]
 }
@@ -76,6 +79,7 @@ function inyectarSaldoCuenta(cargos, cuentaRow) {
       cantidad: 1,
       precioUnitario: ct,
       monto: ct,
+      origen: 'cuenta',
     },
   ]
 }
@@ -89,8 +93,27 @@ function construirCargosCuenta(cuentaRow, movs, reps, repOrden) {
 
 function etiquetaAbonoPago(pago) {
   const concepto = String(pago?.concepto ?? 'Pago').trim()
-  if (/anticipo/i.test(concepto)) return 'Anticipo'
+  if (esConceptoAnticipo(concepto)) return 'Anticipo'
   return concepto || 'Abono'
+}
+
+function descripcionCargoNormalizada(linea) {
+  return String(linea?.descripcion ?? '')
+    .trim()
+    .toLowerCase()
+}
+
+/** Cargos que este pago representa en el desglose (evita atribuir ventas de producto a un anticipo). */
+export function cargosDePagoEnDesglose(pago, cargos = []) {
+  const concepto = String(pago?.concepto ?? '').trim()
+  const conceptoNorm = concepto.toLowerCase()
+  const lista = cargos ?? []
+  const coincidentes = lista.filter((c) => descripcionCargoNormalizada(c) === conceptoNorm)
+  if (coincidentes.length) return coincidentes
+  if (esConceptoAnticipo(concepto)) {
+    return lista.filter((c) => c.origen !== 'cuentamov')
+  }
+  return lista
 }
 
 function lineaAbonoDesglose(pago) {
@@ -220,7 +243,7 @@ export function desgloseParaPago(pago, desglosePorCuenta) {
   const bloque = desglosePorCuenta.get(String(cid))
   if (!bloque) return []
 
-  const lineas = [...(bloque.cargos ?? [])]
+  const lineas = [...cargosDePagoEnDesglose(pago, bloque.cargos)]
   for (const pg of bloque.pagos ?? []) {
     if (pago?.id != null && sameId(pg.id, pago.id)) continue
     const abono = lineaAbonoDesglose(pg)
