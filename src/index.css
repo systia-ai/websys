@@ -6983,6 +6983,10 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
   background: #e3f2fd !important;
 }
 
+.orden-resultados-fila--elegida {
+  background: #bbdefb !important;
+}
+
 .orden-resultados-num {
   font-weight: 700;
   color: #1976d2;
@@ -8760,12 +8764,45 @@ input.full {
   background: #e8f5e9;
 }
 
+.ventas-tabla-totales {
+  background: #eceff1;
+  font-weight: 700;
+  border-top: 2px solid #cfd8dc;
+}
+
+.ventas-tabla-totales > span:nth-child(2) {
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: #455a64;
+}
+
 .ventas-tabla-fecha {
   font-size: 0.82rem;
   color: #78909c;
 }
 
 .ventas-tabla-fecha--pago {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.ventas-tabla-monto {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ventas-tabla-head > span:nth-child(4),
+.ventas-tabla-head > span:nth-child(5) {
+  text-align: right;
+}
+
+.ventas-tabla-monto--cargo {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.ventas-tabla-monto--abono {
   color: #2e7d32;
   font-weight: 600;
 }
@@ -13221,6 +13258,10 @@ input.full {
   background: #475569 !important;
 }
 
+:root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-fila--elegida {
+  background: #334155 !important;
+}
+
 :root[data-theme='dark'] .orden-resultados-tabla .orden-resultados-fila--clic:hover td {
   background: transparent !important;
   color: #ffffff !important;
@@ -13602,12 +13643,30 @@ input.full {
   color: #c8e6c9;
 }
 
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-totales {
+  background: var(--app-color-surface-2) !important;
+  border-top-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-totales > span:nth-child(2) {
+  color: #e2e8f0 !important;
+}
+
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-vacia {
   color: #94a3b8 !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-head {
-  color: #94a3b8 !important;
+  background: var(--app-color-surface-2) !important;
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-monto--cargo {
+  color: #f87171 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-monto--abono {
+  color: #86efac !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-fecha {

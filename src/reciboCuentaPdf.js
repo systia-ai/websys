@@ -35,8 +35,8 @@ const PIE_COMPACT = { compact: true }
 const COLS = {
   cant: 11,
   fecha: 20,
-  precio: 20,
-  subtotal: 24,
+  cargo: 22,
+  abono: 22,
 }
 
 const CAMPO_RECIBO = { compact: true, valueFontSize: 8 }
@@ -48,17 +48,32 @@ function montoLineaRecibo(raw) {
 
 function mapLineaRecibo(L) {
   const esPago = L.tipo === 'pago'
-  const precio = montoLineaRecibo(L.precioUnitario)
-  const subtotal = montoLineaRecibo(L.subtotal)
   const cantRaw = montoLineaRecibo(L.cantidad)
+  const cargo = esPago
+    ? null
+    : Math.abs(montoLineaRecibo(L.subtotal) || montoLineaRecibo(L.cantidad) * montoLineaRecibo(L.precioUnitario))
+  const abono = esPago ? Math.abs(montoLineaRecibo(L.subtotal) || montoLineaRecibo(L.precioUnitario)) : null
   return {
-    cant: esPago ? -Math.abs(cantRaw || 1) : cantRaw,
+    cant: esPago ? Math.abs(cantRaw || 1) : cantRaw,
     descripcion: String(L.descripcion ?? L.concepto ?? 'Sin descripción'),
     fecha: esPago ? String(L.fechaPago ?? '—') : '—',
-    precio: formatMontoRecibo(precio),
-    subtotal: formatMontoRecibo(subtotal),
+    cargo: cargo == null ? '—' : formatMontoRecibo(cargo),
+    abono: abono == null ? '—' : formatMontoRecibo(abono),
+    cargoNum: cargo == null ? 0 : cargo,
+    abonoNum: abono == null ? 0 : abono,
     esPago,
   }
+}
+
+function sumasCargoAbonoRecibo(lineas) {
+  let cargo = 0
+  let abono = 0
+  for (const L of lineas ?? []) {
+    const row = mapLineaRecibo(L)
+    cargo += Number(row.cargoNum ?? 0)
+    abono += Number(row.abonoNum ?? 0)
+  }
+  return { cargo, abono }
 }
 
 /** Normaliza líneas de la cuenta antes de generar el PDF. */
@@ -193,12 +208,12 @@ function drawTotalesRecibo(pdf, total, saldo, x, y, width, opts = {}) {
     const xTotal = x + width - wTotal
     return drawCampo(pdf, labelTotal, totalVal, xTotal, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
   }
-  const rowW = wSaldo + GAP_TOTAL_SALDO + wTotal
+  const rowW = wTotal + GAP_TOTAL_SALDO + wSaldo
   let xCur = x + width - rowW
   const temaSaldo = saldoNum < -0.0001 ? TEMA.pago : TEMA.orden
-  const hSaldo = drawCampo(pdf, labelSaldo, saldoVal, xCur, y, wSaldo, TOTAL_BOX_H, temaSaldo, CAMPO_RECIBO)
-  xCur += wSaldo + GAP_TOTAL_SALDO
   const hTotal = drawCampo(pdf, labelTotal, totalVal, xCur, y, wTotal, TOTAL_BOX_H, TEMA.orden, CAMPO_RECIBO)
+  xCur += wTotal + GAP_TOTAL_SALDO
+  const hSaldo = drawCampo(pdf, labelSaldo, saldoVal, xCur, y, wSaldo, TOTAL_BOX_H, temaSaldo, CAMPO_RECIBO)
   return Math.max(hTotal, hSaldo)
 }
 
@@ -219,12 +234,12 @@ function drawPieRecibo(pdf, y, contentW, centerX) {
 }
 
 function anchosTabla(contentW) {
-  const wDesc = Math.max(24, contentW - COLS.cant - COLS.fecha - COLS.precio - COLS.subtotal)
+  const wDesc = Math.max(24, contentW - COLS.cant - COLS.fecha - COLS.cargo - COLS.abono)
   return { wDesc, ...COLS }
 }
 
 function drawEncabezadoTabla(pdf, x, y, contentW) {
-  const { wDesc, cant, fecha, precio } = anchosTabla(contentW)
+  const { wDesc, cant, fecha, cargo } = anchosTabla(contentW)
   const h = 6
 
   pdf.setFillColor(...TEMA.orden.fill)
@@ -244,9 +259,9 @@ function drawEncabezadoTabla(pdf, x, y, contentW) {
   cx += wDesc
   pdf.text('FECHA', cx, ty)
   cx += fecha
-  pdf.text('PRECIO', cx, ty)
-  cx += precio
-  pdf.text('SUBTOTAL', cx, ty)
+  pdf.text('COSTO', cx, ty)
+  cx += cargo
+  pdf.text('PAGOS', cx, ty)
 
   return h
 }
@@ -260,7 +275,7 @@ function calcAlturaFila(pdf, row, contentW) {
 }
 
 function drawFilaTabla(pdf, row, x, y, contentW, idx) {
-  const { wDesc, cant, fecha, precio } = anchosTabla(contentW)
+  const { wDesc, cant, fecha, cargo } = anchosTabla(contentW)
   const rowH = calcAlturaFila(pdf, row, contentW)
 
   pdf.setFont('helvetica', 'normal')
@@ -290,12 +305,32 @@ function drawFilaTabla(pdf, row, x, y, contentW, idx) {
   pdf.text(row.fecha, cx, ty)
   cx += fecha
 
-  pdf.text(row.precio, cx, ty)
-  cx += precio
+  pdf.text(row.cargo, cx, ty)
+  cx += cargo
 
   pdf.setFont('helvetica', 'bold')
-  pdf.text(row.subtotal, cx, ty)
+  pdf.text(row.abono, cx, ty)
 
+  return rowH
+}
+
+function drawFilaTotalesTabla(pdf, x, y, contentW, cargo, abono) {
+  const { wDesc, cant, fecha, cargo: wCargo } = anchosTabla(contentW)
+  const rowH = 6.4
+  pdf.setFillColor(...TEMA.orden.fill)
+  pdf.setDrawColor(...TEMA.orden.border)
+  pdf.setLineWidth(0.35)
+  pdf.roundedRect(x, y, contentW, rowH, 1.2, 1.2, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(FUENTE_TABLA_HDR)
+  pdf.setTextColor(...TEMA.orden.label)
+  const ty = y + 4.1
+  let cx = x + 1.5 + cant
+  pdf.text('TOTALES', cx, ty)
+  cx += wDesc + fecha
+  pdf.text(formatMontoRecibo(cargo), cx, ty)
+  cx += wCargo
+  pdf.text(formatMontoRecibo(abono), cx, ty)
   return rowH
 }
 
@@ -337,6 +372,14 @@ function drawTablaDetalle(pdf, lineas, x, yStart, contentW, zonaMaxY) {
     y += h + 0.65
   }
 
+  const totales = sumasCargoAbonoRecibo(lineas)
+  const totH = 6.4
+  if (y + totH > maxY) {
+    addMediaCartaPage(pdf)
+    y = MARGIN
+    y += drawEncabezadoTabla(pdf, x, y, contentW) + 1
+  }
+  y += drawFilaTotalesTabla(pdf, x, y, contentW, totales.cargo, totales.abono)
   return y
 }
 

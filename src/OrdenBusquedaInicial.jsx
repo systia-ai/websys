@@ -7,6 +7,7 @@ import { fetchAllRows } from './supabaseFetchAll.js'
 const LS_REP = 'sistefix_local_reparaciones'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_EQUIPOS = 'sistefix_local_equipos'
+const LS_CUENTAS = 'sistefix_local_cuentas'
 
 function readLs(key, fb) {
   try {
@@ -88,6 +89,88 @@ function formatearFechaRep(rep) {
   return s.substring(0, 10)
 }
 
+function writeLs(key, v) {
+  localStorage.setItem(key, JSON.stringify(v))
+}
+
+function nextLocalCuentaId(list) {
+  const max = (list ?? []).reduce((m, r) => {
+    const id = Number(r.id)
+    return Number.isFinite(id) && id > m ? id : m
+  }, 0)
+  return max + 1
+}
+
+function esViolacionUnica(error) {
+  const msg = String(error?.message ?? error?.details ?? '').toLowerCase()
+  return msg.includes('duplicate') || msg.includes('unique')
+}
+
+function cuentaParaVentas(cuenta) {
+  if (!cuenta?.id) return undefined
+  return {
+    id: cuenta.id,
+    total: cuenta.total,
+    saldo: cuenta.saldo,
+    estatus: cuenta.estatus,
+    repara_id: cuenta.repara_id ?? null,
+  }
+}
+
+function elegirCuentaMasReciente(lista) {
+  let cuenta = null
+  for (const c of lista ?? []) {
+    if (!cuenta) {
+      cuenta = c
+      continue
+    }
+    const tNew = new Date(c.updated_at ?? c.created_at ?? 0).getTime()
+    const tPrev = new Date(cuenta.updated_at ?? cuenta.created_at ?? 0).getTime()
+    if (tNew >= tPrev) cuenta = c
+  }
+  return cuenta
+}
+
+async function obtenerCuentaDeOrden(supabase, reparaId) {
+  const rid = Number(reparaId)
+  if (!Number.isFinite(rid)) return null
+  if (supabase) {
+    const { data, error } = await supabase.from('cuentas').select('*').eq('repara_id', rid)
+    if (error) throw error
+    return elegirCuentaMasReciente(data ?? [])
+  }
+  const directas = readLs(LS_CUENTAS, []).filter((c) => sameId(c.repara_id ?? c.reparacion_id, rid))
+  return elegirCuentaMasReciente(directas)
+}
+
+async function crearCuentaVinculadaOrden(supabase, reparaId, clienteId) {
+  const rid = Number(reparaId)
+  const cid = Number(clienteId)
+  if (!Number.isFinite(rid) || !Number.isFinite(cid)) return null
+  const now = new Date().toISOString()
+  const row = {
+    cliente_id: cid,
+    total: 0,
+    saldo: 0,
+    estatus: 'PENDIENTE',
+    created_at: now,
+    fecha_liquidada: null,
+    repara_id: rid,
+    tipo_pago: null,
+  }
+  if (supabase) {
+    const { data, error } = await supabase.from('cuentas').insert(row).select('*').single()
+    if (error) {
+      if (esViolacionUnica(error)) return obtenerCuentaDeOrden(supabase, rid)
+      throw error
+    }
+    return data
+  }
+  const nuevo = { id: nextLocalCuentaId(readLs(LS_CUENTAS, [])), ...row }
+  writeLs(LS_CUENTAS, [nuevo, ...readLs(LS_CUENTAS, [])])
+  return nuevo
+}
+
 function buildSessionFromDetalleFixed(row) {
   const { rep, nombreCliente, serieEquipo, tipoEquipo, clienteRow } = row
   const c = normalizeClienteRow(clienteRow ?? { nombre: nombreCliente })
@@ -125,7 +208,7 @@ async function cargarTablas(supabase) {
  * Primera pantalla de Orden de servicio (como OrdenesScreen.kt antes de `ordenSeleccionada`):
  * No de orden, buscar; sin número → diálogo de rango de fechas (Android); lista y al elegir → sesión para ReparacionesOrden.
  */
-export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onError }) {
+export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onIrCuentaCliente, onError }) {
   const [numeroOrden, setNumeroOrden] = useState('')
   const [loading, setLoading] = useState(false)
   const [modalFechas, setModalFechas] = useState(false)
@@ -135,6 +218,8 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
   const [tituloResultados, setTituloResultados] = useState('')
   const [subtituloResultados, setSubtituloResultados] = useState('')
   const [resultados, setResultados] = useState([])
+  const [filaDestino, setFilaDestino] = useState(null)
+  const [abriendoCuenta, setAbriendoCuenta] = useState(false)
 
   function abrirBuscar() {
     const raw = numeroOrden.replace(/\r/g, '').replace(/\n/g, ' ')
@@ -164,7 +249,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
         }
         lista = [mapConClienteRow(rep, clientes, equipos)]
         setTituloResultados('Orden Encontrada (1)')
-        setSubtituloResultados('Orden encontrada por ID exacto:')
+        setSubtituloResultados('Selecciona la orden para ir a la orden o a la cuenta:')
       } else {
         lista = reps
           .filter((r) => repCoincideBusquedaTexto(r, no, clientes, equipos))
@@ -172,7 +257,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
         setTituloResultados(`Órdenes Encontradas (${lista.length})`)
         setSubtituloResultados(
           lista.length
-            ? 'Selecciona una orden para cargar sus datos:'
+            ? 'Selecciona una orden para ir a la orden o a la cuenta:'
             : `No se encontraron órdenes con: ${no}`,
         )
       }
@@ -215,7 +300,9 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
 
       setTituloResultados(`Órdenes en rango (${fechaIni} - ${fechaFin}) (${lista.length})`)
       setSubtituloResultados(
-        lista.length ? 'Selecciona una orden para cargar sus datos:' : 'No se encontraron órdenes en el rango seleccionado.',
+        lista.length
+          ? 'Selecciona una orden para ir a la orden o a la cuenta:'
+          : 'No se encontraron órdenes en el rango seleccionado.',
       )
       if (!lista.length) {
         onError?.('No se encontraron órdenes en el rango de fechas seleccionado')
@@ -230,9 +317,65 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
     }
   }
 
-  function elegir(row) {
+  function cerrarResultados() {
+    if (abriendoCuenta) return
+    setFilaDestino(null)
     setModalResultados(false)
-    onSeleccionarOrden?.(buildSessionFromDetalleFixed(row))
+  }
+
+  function elegir(row) {
+    setFilaDestino(row)
+  }
+
+  function irAOrdenElegida() {
+    const row = filaDestino
+    setFilaDestino(null)
+    setModalResultados(false)
+    if (row) onSeleccionarOrden?.(buildSessionFromDetalleFixed(row))
+  }
+
+  async function irACuentaElegida() {
+    const row = filaDestino
+    if (!row) return
+    if (!onIrCuentaCliente) {
+      onError?.('No se puede abrir la cuenta desde aquí.')
+      return
+    }
+    const rid = Number(row.rep?.id)
+    if (!Number.isFinite(rid)) {
+      onError?.('La orden no tiene un número válido.')
+      return
+    }
+    setAbriendoCuenta(true)
+    try {
+      const cliente = normalizeClienteRow(row.clienteRow ?? { nombre: row.nombreCliente, id: row.rep?.cliente_id })
+      if (!cliente?.id) {
+        onError?.('No se encontró el cliente de esta orden.')
+        return
+      }
+      let cuenta = await obtenerCuentaDeOrden(supabase, rid)
+      if (!cuenta?.id) {
+        cuenta = await crearCuentaVinculadaOrden(supabase, rid, cliente.id)
+      }
+      if (!cuenta?.id) {
+        onError?.('Esta orden no tiene una cuenta vinculada.')
+        return
+      }
+      setFilaDestino(null)
+      setModalResultados(false)
+      onIrCuentaCliente({
+        cliente,
+        cuenta: {
+          ...cuentaParaVentas(cuenta),
+          repara_id: cuenta.repara_id ?? rid,
+        },
+        reparacionOrdenId: rid,
+      })
+    } catch (e) {
+      onError?.(`No se pudo abrir la cuenta: ${e.message}`)
+    } finally {
+      setAbriendoCuenta(false)
+    }
   }
 
   return (
@@ -309,7 +452,7 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
       )}
 
       {modalResultados && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setModalResultados(false)}>
+        <div className="modal-backdrop" role="presentation" onClick={cerrarResultados}>
           <div className="modal modal-ordenes-lista" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{tituloResultados}</h3>
@@ -341,8 +484,8 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
                       return (
                         <tr
                           key={rep.id}
-                          className="orden-resultados-fila orden-resultados-fila--clic"
-                          title={`Seleccionar orden #${rep.id}`}
+                          className={`orden-resultados-fila orden-resultados-fila--clic${sameId(filaDestino?.rep?.id, rep.id) ? ' orden-resultados-fila--elegida' : ''}`}
+                          title={`Elegir destino de la orden #${rep.id}`}
                           onClick={() => elegir(row)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -373,16 +516,78 @@ export default function OrdenBusquedaInicial({ supabase, onSeleccionarOrden, onE
                   </tbody>
                 </table>
               </TablaScrollSuperior>
-              <p className="muted tiny orden-resultados-hint">Toque una fila para cargar la orden</p>
+              <p className="muted tiny orden-resultados-hint">Toque una fila para ir a la orden o a la cuenta</p>
             </div>
             <div className="modal-footer">
-              <button type="button" className="secondary" onClick={() => setModalResultados(false)}>
+              <button type="button" className="secondary" onClick={cerrarResultados} disabled={abriendoCuenta}>
                 Cerrar
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {filaDestino ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!abriendoCuenta) setFilaDestino(null)
+          }}
+        >
+          <div
+            className="modal modal-alerta modal-alerta--info monitor-accion-orden-modal"
+            role="dialog"
+            aria-labelledby="orden-busqueda-destino-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="orden-busqueda-destino-titulo">
+                <span className="modal-alerta-icon" aria-hidden="true">
+                  ℹ
+                </span>
+                ¿Qué desea abrir?
+              </h3>
+            </div>
+            <div className="modal-body">
+              <p className="modal-alerta-mensaje">
+                Orden <strong>#{filaDestino.rep?.id ?? '—'}</strong>
+                <br />
+                Cliente: <strong>{filaDestino.nombreCliente ?? '—'}</strong>
+              </p>
+              <p className="modal-alerta-sugerencia">Elija si desea ver la orden de servicio o la cuenta del cliente.</p>
+            </div>
+            <div className="modal-footer modal-footer-wrap monitor-accion-orden-footer">
+              <div className="monitor-accion-orden-acciones">
+                <button
+                  type="button"
+                  className="btn-cuentas monitor-accion-orden-btn-cuenta"
+                  onClick={() => void irACuentaElegida()}
+                  disabled={abriendoCuenta}
+                >
+                  {abriendoCuenta ? '⏳ Abriendo…' : '💰 Cuenta del cliente'}
+                </button>
+                <button
+                  type="button"
+                  className="modal-alerta-btn monitor-accion-orden-btn-orden"
+                  onClick={irAOrdenElegida}
+                  disabled={abriendoCuenta}
+                >
+                  📋 Orden de servicio
+                </button>
+              </div>
+              <button
+                type="button"
+                className="secondary monitor-accion-orden-cancelar"
+                onClick={() => setFilaDestino(null)}
+                disabled={abriendoCuenta}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

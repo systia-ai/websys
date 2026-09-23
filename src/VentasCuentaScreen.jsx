@@ -16,6 +16,11 @@ import {
 } from './productosRecientesVentas.js'
 import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
+  pagosConConceptoDesdeLineas,
+  payloadPagoVentaProducto,
+  ventaProductoCubiertaPorAnticipo,
+} from './pagoVentaProducto.js'
+import {
   activarFacturaEnCuenta,
   cuentaMarcadaParaFactura,
   desactivarFacturaEnCuenta,
@@ -86,6 +91,37 @@ function readLs(key, fb) {
 
 function writeLs(key, v) {
   localStorage.setItem(key, JSON.stringify(v))
+}
+
+function cargoAbonoDeLinea(L) {
+  if (L?.tipo === 'pago') {
+    const abono = Math.abs(Number(L.subtotal ?? L.precioUnitario ?? L.pago ?? 0))
+    return { cargo: null, abono: Number.isFinite(abono) ? abono : 0 }
+  }
+  const sub = Number(L?.subtotal)
+  if (Number.isFinite(sub) && Math.abs(sub) > 0.0001) {
+    return { cargo: Math.abs(sub), abono: null }
+  }
+  const cant = Number(L?.cantidad ?? 1)
+  const unit = Number(L?.precioUnitario ?? L?.costo ?? 0)
+  const cargo = (Number.isFinite(cant) ? cant : 1) * (Number.isFinite(unit) ? unit : 0)
+  return { cargo: Number.isFinite(cargo) ? cargo : 0, abono: null }
+}
+
+function formatMontoLineaCuenta(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return `$${Number(n).toFixed(2)}`
+}
+
+function sumasCargoAbonoLineas(lineas) {
+  let cargo = 0
+  let abono = 0
+  for (const L of lineas ?? []) {
+    const m = cargoAbonoDeLinea(L)
+    cargo += Number(m.cargo ?? 0)
+    abono += Number(m.abono ?? 0)
+  }
+  return { cargo, abono }
 }
 
 function sumSubtotales(lineas) {
@@ -335,6 +371,8 @@ export default function VentasCuentaScreen({
   const [productoIdSel, setProductoIdSel] = useState(0)
   const [productoContableSel, setProductoContableSel] = useState(true)
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
+  const [ventaPendientePago, setVentaPendientePago] = useState(null)
+  const [registrandoVentaProducto, setRegistrandoVentaProducto] = useState(false)
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [modalNotificarCliente, setModalNotificarCliente] = useState(false)
   const [mensajeNotificacionEditado, setMensajeNotificacionEditado] = useState('')
@@ -386,6 +424,7 @@ export default function VentasCuentaScreen({
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
   const fechasPagosCuenta = useMemo(() => fechasPagosDesdeLineas(lineas), [lineas])
+  const totalesTablaCargoAbono = useMemo(() => sumasCargoAbonoLineas(lineas), [lineas])
   const pagosEnFechaRecibo = useMemo(() => {
     const filtradas = lineasReciboPorModo(lineas, 'pagos_fecha', fechaReciboPagos)
     return {
@@ -1088,37 +1127,103 @@ export default function VentasCuentaScreen({
         return
       }
     }
+    const pendiente = {
+      productoId: productoIdSel,
+      descripcion: descProd.trim(),
+      cantidad: cant,
+      precio,
+      subtotal: sub,
+      esContable: esContableVenta,
+    }
+    if (
+      ventaProductoCubiertaPorAnticipo({
+        cargosActuales: totalCargosDesdeLineas(lineas),
+        pagos: pagosConConceptoDesdeLineas(lineas),
+        nuevoCargo: sub,
+      })
+    ) {
+      setVentaPendientePago(pendiente)
+      return
+    }
+    await ejecutarAgregarProductoLinea(pendiente, null)
+  }
+
+  async function ejecutarAgregarProductoLinea(pendiente, formaPagoVenta) {
+    if (!pendiente || !cuentaId) return
+    if (registrandoVentaProducto) return
+    setRegistrandoVentaProducto(true)
+    let nuevoId = null
     try {
-      const { movId: nuevoId } = await registrarVentaEnCuenta({
+      const { movId } = await registrarVentaEnCuenta({
         supabase,
         cuentaId,
-        productoId: productoIdSel,
-        descripcion: descProd.trim(),
-        cantidad: cant,
-        precio,
+        productoId: pendiente.productoId,
+        descripcion: pendiente.descripcion,
+        cantidad: pendiente.cantidad,
+        precio: pendiente.precio,
         nextLocalId,
       })
-      setLineas((prev) => [
-        ...prev,
-        {
-          key: `cuentamov_${nuevoId}`,
-          tipo: 'cuentamov',
-          dbId: nuevoId,
-          producto_id: productoIdSel,
-          contable: esContableVenta,
-          cantidad: cant,
-          descripcion: descProd.trim(),
-          precioUnitario: precio,
-          subtotal: sub,
-        },
-      ])
-      setRecientesProductosIds(registrarProductoRecienteVentas(productoIdSel))
+      nuevoId = movId
+      const lineaProducto = {
+        key: `cuentamov_${nuevoId}`,
+        tipo: 'cuentamov',
+        dbId: nuevoId,
+        producto_id: pendiente.productoId,
+        contable: pendiente.esContable,
+        cantidad: pendiente.cantidad,
+        descripcion: pendiente.descripcion,
+        precioUnitario: pendiente.precio,
+        subtotal: pendiente.subtotal,
+      }
+      const nuevasLineas = [...lineas, lineaProducto]
+      if (formaPagoVenta) {
+        const pagoGuardado = await insertPagoCliente(
+          supabase,
+          payloadPagoVentaProducto({
+            clienteId: cliente.id,
+            cuentaId,
+            descripcion: pendiente.descripcion,
+            monto: pendiente.subtotal,
+            formaPago: formaPagoVenta,
+          }),
+          { nextLocalId },
+        )
+        lineaProducto.pagoDbId = pagoGuardado?.id
+        nuevasLineas.push(crearLineaPago(pagoGuardado))
+      }
+      setLineas(nuevasLineas)
+      setRecientesProductosIds(registrarProductoRecienteVentas(pendiente.productoId))
       cerrarCapturaProducto()
+      setVentaPendientePago(null)
+      await persistirTotalCuenta(nuevasLineas)
       onNotice?.(
-        esContableVenta ? 'Producto agregado · inventario actualizado' : 'Servicio agregado a la cuenta',
+        formaPagoVenta
+          ? `Venta registrada ($${Number(pendiente.subtotal).toFixed(2)} · ${formaPagoVenta}) · entra al corte`
+          : pendiente.esContable
+            ? 'Producto agregado · inventario actualizado'
+            : 'Servicio agregado a la cuenta',
       )
     } catch (e) {
+      if (nuevoId != null) {
+        try {
+          if (supabase) {
+            await deleteSupabaseVerificado(supabase, 'cuentamov', (q) => q.eq('id', nuevoId))
+          } else {
+            writeLs(
+              LS_CUENTAMOV,
+              readLs(LS_CUENTAMOV, []).filter((x) => !sameId(x.id, nuevoId)),
+            )
+          }
+          if (pendiente.esContable !== false) {
+            await reponerExistencia(supabase, pendiente.productoId, pendiente.cantidad)
+          }
+        } catch {
+          /* el error original se muestra abajo */
+        }
+      }
       onError?.(`Error al agregar línea: ${e.message}`)
+    } finally {
+      setRegistrandoVentaProducto(false)
     }
   }
 
@@ -1128,7 +1233,7 @@ export default function VentasCuentaScreen({
       return
     }
     if (!confirm('¿Eliminar este elemento de la lista?')) return
-    const lineasNuevas = lineas.filter((x) => x.key !== L.key)
+    let lineasNuevas = lineas.filter((x) => x.key !== L.key)
     try {
       if (L.tipo === 'reparamov' && L.dbId != null) {
         if (supabase) {
@@ -1152,6 +1257,17 @@ export default function VentasCuentaScreen({
         }
         if (prodId > 0 && Number.isFinite(cantLinea) && cantLinea > 0 && L.contable !== false) {
           await reponerExistencia(supabase, prodId, cantLinea)
+        }
+        if (L.pagoDbId != null) {
+          if (supabase) {
+            await deleteSupabaseVerificado(supabase, 'pagosclientes', (q) => q.eq('id', L.pagoDbId))
+          } else {
+            writeLs(
+              LS_PAGOS,
+              readLs(LS_PAGOS, []).filter((x) => !sameId(x.id, L.pagoDbId)),
+            )
+          }
+          lineasNuevas = lineasNuevas.filter((x) => !(x.tipo === 'pago' && sameId(x.dbId, L.pagoDbId)))
         }
       } else if (L.virtual) {
         setLineas(lineasNuevas)
@@ -1652,8 +1768,8 @@ export default function VentasCuentaScreen({
                 <span>Cant</span>
                 <span>Descripción</span>
                 <span>Fecha</span>
-                <span>Precio</span>
-                <span>Subtotal</span>
+                <span>Costo</span>
+                <span>Pagos</span>
                 <span />
               </div>
               {lineas.length === 0 ? (
@@ -1663,6 +1779,7 @@ export default function VentasCuentaScreen({
                   {lineas.map((L, idx) => {
                     const esPago = L.tipo === 'pago'
                     const cantDisp = esPago ? Math.abs(Number(L.cantidad)) : Number(L.cantidad)
+                    const { cargo, abono } = cargoAbonoDeLinea(L)
                     return (
                       <li
                         key={L.key}
@@ -1673,8 +1790,12 @@ export default function VentasCuentaScreen({
                         <span className={`ventas-tabla-fecha${esPago ? ' ventas-tabla-fecha--pago' : ''}`}>
                           {esPago ? L.fechaPago ?? '—' : '—'}
                         </span>
-                        <span>${Number(L.precioUnitario).toFixed(2)}</span>
-                        <span>${Number(L.subtotal).toFixed(2)}</span>
+                        <span className="ventas-tabla-monto ventas-tabla-monto--cargo">
+                          {formatMontoLineaCuenta(cargo)}
+                        </span>
+                        <span className="ventas-tabla-monto ventas-tabla-monto--abono">
+                          {formatMontoLineaCuenta(abono)}
+                        </span>
                         <button
                           type="button"
                           className="btn-elim-linea"
@@ -1686,6 +1807,18 @@ export default function VentasCuentaScreen({
                       </li>
                     )
                   })}
+                  <li className="ventas-tabla-fila ventas-tabla-totales" aria-label="Totales de costo y pagos">
+                    <span />
+                    <span>Totales</span>
+                    <span />
+                    <span className="ventas-tabla-monto ventas-tabla-monto--cargo">
+                      {formatMontoLineaCuenta(totalesTablaCargoAbono.cargo)}
+                    </span>
+                    <span className="ventas-tabla-monto ventas-tabla-monto--abono">
+                      {formatMontoLineaCuenta(totalesTablaCargoAbono.abono)}
+                    </span>
+                    <span />
+                  </li>
                 </ul>
               )}
             </div>
@@ -2154,6 +2287,68 @@ export default function VentasCuentaScreen({
           </div>
         </div>
       )}
+
+      {ventaPendientePago ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => !registrandoVentaProducto && setVentaPendientePago(null)}
+        >
+          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>💵 Cobrar venta para el corte</h3>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                El anticipo de servicio no cuenta como cobro de{' '}
+                <strong>{ventaPendientePago.descripcion}</strong> ($
+                {Number(ventaPendientePago.subtotal).toFixed(2)}). Elija cómo se cobró el producto para
+                sumarlo al corte de caja.
+              </p>
+            </div>
+            <div className="modal-body forma-pago-opciones">
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'EFECTIVO')}
+                disabled={registrandoVentaProducto}
+              >
+                <span aria-hidden="true">💵</span>
+                <span>Efectivo</span>
+              </button>
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'TRANSFERENCIA')}
+                disabled={registrandoVentaProducto}
+              >
+                <span aria-hidden="true">🏦</span>
+                <span>Transferencia</span>
+              </button>
+              <button
+                type="button"
+                className="btn-forma-pago"
+                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'TARJETA')}
+                disabled={registrandoVentaProducto}
+              >
+                <span aria-hidden="true">💳</span>
+                <span>Tarjeta de crédito o débito</span>
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setVentaPendientePago(null)}
+                disabled={registrandoVentaProducto}
+              >
+                Cancelar
+              </button>
+              {registrandoVentaProducto ? (
+                <span className="muted small">Registrando venta…</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {modalProductos && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalProductos(false)}>

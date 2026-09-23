@@ -80,7 +80,12 @@ export default function OrdenServicioModulo({
         {notice ? <p className="ok">{notice}</p> : null}
 
         {!mostrarFormulario ? (
-          <OrdenBusquedaInicial supabase={supabase} onSeleccionarOrden={onSeleccionarOrdenDesdeBusqueda} onError={onError} />
+          <OrdenBusquedaInicial
+            supabase={supabase}
+            onSeleccionarOrden={onSeleccionarOrdenDesdeBusqueda}
+            onIrCuentaCliente={onIrCuentaCliente}
+            onError={onError}
+          />
         ) : (
           <ReparacionesOrden
             key={[
