@@ -1826,20 +1826,6 @@ export default function VentasCuentaScreen({
           )}
         </section>
 
-        <button type="button" className="btn-agregar-pago-ventas" onClick={() => void abrirModalPago()}>
-          💰 AGREGAR PAGO
-        </button>
-
-        <button
-          type="button"
-          className={
-            mostrarCamposProducto || modalProductos ? 'btn-agregar-prod-ventas abierto' : 'btn-agregar-prod-ventas'
-          }
-          onClick={() => void abrirSelectorProductos()}
-        >
-          📦 Agregar Producto/Servicio
-        </button>
-
         <div className="ventas-cuenta-resumen" role="group" aria-label="Total y saldo de la cuenta">
           <div
             className={`ventas-cuenta-recuadro ventas-cuenta-recuadro--total${saldoAFavor ? ' ventas-cuenta-recuadro--saldo-favor' : ''}`}
@@ -1854,6 +1840,20 @@ export default function VentasCuentaScreen({
             <span className="ventas-cuenta-recuadro-monto">{saldoStr}</span>
           </div>
         </div>
+
+        <button type="button" className="btn-agregar-pago-ventas" onClick={() => void abrirModalPago()}>
+          💰 AGREGAR PAGO
+        </button>
+
+        <button
+          type="button"
+          className={
+            mostrarCamposProducto || modalProductos ? 'btn-agregar-prod-ventas abierto' : 'btn-agregar-prod-ventas'
+          }
+          onClick={() => void abrirSelectorProductos()}
+        >
+          📦 Agregar Producto/Servicio
+        </button>
 
         <label className="ventas-total-block">
           <span>Estatus de la Cuenta</span>
