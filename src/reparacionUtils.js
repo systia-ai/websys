@@ -1975,6 +1975,11 @@ export async function actualizarCuentaSupabase(supabase, cuentaId, patch) {
       payload = rest
       continue
     }
+    if (payload.total_factura != null && esErrorColumnaDesconocida(error, 'total_factura')) {
+      const { total_factura: _tf, ...rest } = payload
+      payload = rest
+      continue
+    }
     throw error
   }
   throw new Error('No se pudo actualizar la cuenta tras varios intentos.')

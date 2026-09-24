@@ -6,6 +6,7 @@ import { MENSAJE_SIN_PERMISO_FECHAS, rangoFechasPermitidoUsuario } from './permi
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReportesEstadisticasView, { ReportesKpisSeleccion } from './ReportesEstadisticasView.jsx'
 import ReportesFiltrosCard from './ReportesFiltrosCard.jsx'
+import ReportesFacturasView from './ReportesFacturasView.jsx'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
 import { fetchAllRows } from './supabaseFetchAll.js'
 import {
@@ -286,6 +287,7 @@ export default function ReportesModulo({
   const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeElegirRangoFechas)
   const avisarSinPermisoFecha = () => mostrarSinPermiso(MENSAJE_SIN_PERMISO_FECHAS)
 
+  const [tipoReporte, setTipoReporte] = useState(() => (estadoRestaurar ? 'equipos' : null))
   const [pantalla, setPantalla] = useState('fechas')
   const [fechaInicio, setFechaInicio] = useState(() => (puedeElegirRangoFechas ? ymdInicioMes() : ymdHoy()))
   const [fechaFin, setFechaFin] = useState(ymdHoy)
@@ -398,6 +400,7 @@ export default function ReportesModulo({
 
   useEffect(() => {
     if (!estadoRestaurar) return
+    setTipoReporte('equipos')
     setPantalla(estadoRestaurar.pantalla === 'estadisticas' ? 'estadisticas' : estadoRestaurar.pantalla === 'resultados' ? 'resultados' : 'fechas')
     if (estadoRestaurar.fechaInicio) setFechaInicio(estadoRestaurar.fechaInicio)
     if (estadoRestaurar.fechaFin) setFechaFin(estadoRestaurar.fechaFin)
@@ -743,6 +746,96 @@ export default function ReportesModulo({
     onIntentoSinPermisoFecha: avisarSinPermisoFecha,
   }
 
+  if (!tipoReporte) {
+    return (
+      <div className="servicios-root inventarios-root reportes-modulo-root">
+        <AlertaPermiso mensaje={alertaPermiso} />
+        <header className="servicios-appbar">
+          <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+            ←
+          </button>
+          <h1 className="servicios-appbar-title">
+            <span className="appbar-title-emoji" aria-hidden="true">
+              📊
+            </span>
+            Tipo de Reporte
+          </h1>
+          {onHome ? (
+            <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
+              Inicio
+            </button>
+          ) : (
+            <span className="servicios-appbar-placeholder" aria-hidden />
+          )}
+        </header>
+        <div className="servicios-body corte-caja-body reportes-body">
+          <section className="corte-caja-hero-card card-pad reportes-tipo-card-wrap">
+            <header className="corte-caja-hero-header">
+              <span className="corte-caja-hero-emoji" aria-hidden="true">
+                📂
+              </span>
+              <h2 className="corte-caja-hero-titulo">Seleccione el tipo de reporte</h2>
+            </header>
+            <p className="corte-caja-hero-tip">
+              <span className="corte-caja-hero-tip-ico" aria-hidden="true">
+                💡
+              </span>
+              Elija si desea el reporte de equipos (órdenes de servicio) o el reporte de facturas.
+            </p>
+            <div className="reportes-tipo-grid">
+              <button
+                type="button"
+                className="card home-menu-card reportes-tipo-opcion"
+                onClick={() => {
+                  setTipoReporte('equipos')
+                  setPantalla('fechas')
+                }}
+              >
+                <span className="home-menu-card-icon" aria-hidden="true">
+                  🖨️
+                </span>
+                <span>
+                  <h3 className="home-menu-card-title">Reporte de Equipos</h3>
+                  <span className="muted small">Órdenes de servicio por fechas, ingreso, salida y estatus.</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="card home-menu-card reportes-tipo-opcion"
+                onClick={() => setTipoReporte('facturas')}
+              >
+                <span className="home-menu-card-icon" aria-hidden="true">
+                  🧾
+                </span>
+                <span>
+                  <h3 className="home-menu-card-title">Reporte de Facturas</h3>
+                  <span className="muted small">Por rango de fechas o folio fiscal.</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  if (tipoReporte === 'facturas') {
+    return (
+      <>
+        <AlertaPermiso mensaje={alertaPermiso} />
+        <ReportesFacturasView
+          supabase={supabase}
+          onVolver={() => setTipoReporte(null)}
+          onHome={onHome}
+          onError={onError}
+          onNotice={onNotice}
+          puedeElegirRangoFechas={puedeElegirRangoFechas}
+          onIntentoSinPermisoFecha={avisarSinPermisoFecha}
+        />
+      </>
+    )
+  }
+
   if (pantalla === 'estadisticas') {
     return (
       <>
@@ -812,12 +905,12 @@ export default function ReportesModulo({
       <div className="servicios-root inventarios-root reportes-modulo-root">
         <AlertaPermiso mensaje={alertaPermiso} />
         <header className="servicios-appbar">
-          <button type="button" className="icon-back" onClick={onHome} aria-label="Atrás">
+          <button type="button" className="icon-back" onClick={() => setTipoReporte(null)} aria-label="Atrás">
             ←
           </button>
           <h1 className="servicios-appbar-title">
             <span className="appbar-title-emoji" aria-hidden="true">📊</span>
-            Reportes
+            Reporte de Equipos
           </h1>
           {onHome ? (
             <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>
@@ -862,7 +955,7 @@ export default function ReportesModulo({
         </button>
         <h1 className="servicios-appbar-title">
           <span className="appbar-title-emoji" aria-hidden="true">📊</span>
-          Reportes
+          Reporte de Equipos
         </h1>
         {onHome ? (
           <button type="button" className="appbar-text-btn appbar-text-btn--narrow" onClick={onHome}>

@@ -2397,6 +2397,49 @@ td {
   width: 100%;
 }
 
+.reportes-tipo-card-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.reportes-tipo-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.reportes-tipo-opcion {
+  width: 100%;
+  cursor: pointer;
+}
+
+.reportes-tipo-opcion .home-menu-card-title {
+  margin: 0 0 4px;
+}
+
+.reportes-facturas-criterio {
+  border: 0;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.reportes-facturas-criterio-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.reportes-facturas-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-weight: 700;
+  color: #1565c0;
+}
+
 .reportes-aviso-duplicadas {
   margin: 0 0 12px;
   padding: 10px 14px;
@@ -9391,6 +9434,17 @@ input.full {
   font-size: 0.9rem;
 }
 
+.ventas-factura-total-prefijo {
+  flex: 0 0 auto;
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: #0d47a1;
+}
+
+.ventas-factura-total-input {
+  max-width: 12rem;
+}
+
 .ventas-factura-folio-valor {
   color: #0d47a1;
   font-size: 1.15rem;
@@ -12323,6 +12377,10 @@ input.full {
 }
 
 /* Reportes generados — tabla, lista y controles (glow neón como Clientes / Monitor) */
+:root[data-theme='dark'] .reportes-facturas-campo {
+  color: #90caf9 !important;
+}
+
 :root[data-theme='dark'] .reportes-modulo-root .corte-caja-periodo-banner {
   background: var(--app-color-surface-2) !important;
   border-color: var(--app-color-border) !important;
@@ -13541,7 +13599,8 @@ input.full {
 
 :root[data-theme='dark'] .ventas-factura-titulo,
 :root[data-theme='dark'] .ventas-factura-folio-label,
-:root[data-theme='dark'] .ventas-factura-folio-valor {
+:root[data-theme='dark'] .ventas-factura-folio-valor,
+:root[data-theme='dark'] .ventas-factura-total-prefijo {
   color: #90caf9 !important;
 }
 

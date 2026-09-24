@@ -24,8 +24,12 @@ import {
   activarFacturaEnCuenta,
   cuentaMarcadaParaFactura,
   desactivarFacturaEnCuenta,
+  defaultTotalFactura,
   folioFacturaDeCuenta,
+  parseTotalFacturaInput,
   patchFolioFacturaManual,
+  textoTotalFacturaInput,
+  totalFacturaDeCuenta,
 } from './cuentaFacturaUtils.js'
 import {
   actualizarCuentaSupabase,
@@ -393,7 +397,9 @@ export default function VentasCuentaScreen({
   const [fechaReciboPagos, setFechaReciboPagos] = useState(() => ymdHoyLocal())
   const [guardandoFactura, setGuardandoFactura] = useState(false)
   const [folioFacturaInput, setFolioFacturaInput] = useState('')
+  const [totalFacturaInput, setTotalFacturaInput] = useState('0.00')
   const folioFacturaInputRef = useRef(null)
+  const totalFacturaEditadoRef = useRef(false)
   /** Tras elegir «Liquidar» o «Activa pagada» en el modal: no volver a PENDIENTE por sync automático. */
   const estatusElegidoManualRef = useRef(null)
 
@@ -401,6 +407,7 @@ export default function VentasCuentaScreen({
   const esCuentaExistente = cuentaId != null && Number(cuentaId) > 0
   const cuentaEstatus = String(cuentaInfo?.estatus ?? cuentaInicial?.estatus ?? '')
   const folioFacturaActual = folioFacturaDeCuenta(cuentaInfo) || folioFacturaDeCuenta(cuentaInicial)
+  const totalFacturaActual = totalFacturaDeCuenta(cuentaInfo) ?? totalFacturaDeCuenta(cuentaInicial)
   const llevaFacturaActual = cuentaMarcadaParaFactura(cuentaInfo ?? cuentaInicial)
 
   useEffect(() => {
@@ -423,6 +430,20 @@ export default function VentasCuentaScreen({
   const saldoAFavor = visiblesCuenta.saldoAFavor
   const totalStr = formatMontoCuenta(visiblesCuenta.totalDisplay)
   const saldoStr = formatMontoCuenta(visiblesCuenta.saldoDisplay)
+
+  useEffect(() => {
+    totalFacturaEditadoRef.current = false
+  }, [cuentaId])
+
+  useEffect(() => {
+    if (totalFacturaActual != null) {
+      setTotalFacturaInput(textoTotalFacturaInput(totalFacturaActual))
+      totalFacturaEditadoRef.current = true
+      return
+    }
+    if (totalFacturaEditadoRef.current) return
+    setTotalFacturaInput(textoTotalFacturaInput(visiblesCuenta.totalDisplay))
+  }, [cuentaId, totalFacturaActual, visiblesCuenta.totalDisplay])
   const fechasPagosCuenta = useMemo(() => fechasPagosDesdeLineas(lineas), [lineas])
   const totalesTablaCargoAbono = useMemo(() => sumasCargoAbonoLineas(lineas), [lineas])
   const pagosEnFechaRecibo = useMemo(() => {
@@ -1424,11 +1445,14 @@ export default function VentasCuentaScreen({
     try {
       const base = cuentaInfo ?? cuentaInicial ?? { id: cuentaId }
       if (activar) {
-        const patch = activarFacturaEnCuenta(base, folioFacturaInput)
+        const totalDefault = defaultTotalFactura(base, visiblesCuenta.totalDisplay)
+        const totalCaptura = parseTotalFacturaInput(totalFacturaInput) ?? totalDefault
+        setTotalFacturaInput(textoTotalFacturaInput(totalCaptura))
+        const patch = activarFacturaEnCuenta(base, folioFacturaInput, totalCaptura)
         await persistirPatchFactura(patch, {
           aviso: patch.folio_factura
             ? `Cuenta marcada para factura · Folio ${patch.folio_factura}`
-            : 'Cuenta marcada para factura. Escriba el folio fiscal.',
+            : 'Cuenta marcada para factura. Capture folio y total.',
         })
         setTimeout(() => folioFacturaInputRef.current?.focus(), 50)
       } else {
@@ -1446,16 +1470,22 @@ export default function VentasCuentaScreen({
     if (!esCuentaExistente || !cuentaId || guardandoFactura) return
     setGuardandoFactura(true)
     try {
-      const patch = patchFolioFacturaManual(folioFacturaInput, { llevaFactura: true })
-      await persistirPatchFactura(patch, {
-        aviso: `Folio fiscal guardado: ${patch.folio_factura}`,
+      const patch = patchFolioFacturaManual(folioFacturaInput, {
+        llevaFactura: true,
+        totalFactura: totalFacturaInput,
       })
+      await persistirPatchFactura(patch, {
+        aviso: patch.folio_factura
+          ? `Factura guardada · Folio ${patch.folio_factura} · ${formatMontoCuenta(patch.total_factura)}`
+          : `Total de factura guardado: ${formatMontoCuenta(patch.total_factura)}`,
+      })
+      totalFacturaEditadoRef.current = true
     } catch (e) {
       const msg = String(e?.message ?? e)
       if (/unique|duplicate|folio_factura/i.test(msg)) {
         onError?.('Ese folio fiscal ya está registrado en otra cuenta.')
       } else {
-        onError?.(msg.includes('Escriba') ? msg : `No se pudo guardar el folio: ${msg}`)
+        onError?.(msg.includes('Escriba') ? msg : `No se pudo guardar la factura: ${msg}`)
       }
     } finally {
       setGuardandoFactura(false)
@@ -1882,10 +1912,15 @@ export default function VentasCuentaScreen({
                   {guardandoFactura
                     ? 'Guardando…'
                     : llevaFacturaActual
-                      ? folioFacturaActual
-                        ? `Folio: ${folioFacturaActual}`
-                        : 'Escriba el folio fiscal de la factura'
-                      : 'Marque para capturar el folio fiscal'}
+                      ? [
+                          folioFacturaActual ? `Folio: ${folioFacturaActual}` : 'Escriba el folio fiscal',
+                          `Total factura: ${formatMontoCuenta(
+                            parseTotalFacturaInput(totalFacturaInput) ??
+                              totalFacturaActual ??
+                              visiblesCuenta.totalDisplay,
+                          )}`,
+                        ].join(' · ')
+                      : 'Marque para capturar folio y total de la factura'}
                 </span>
               </span>
             </label>
@@ -1912,13 +1947,41 @@ export default function VentasCuentaScreen({
                       }
                     }}
                   />
+                </div>
+                <label className="ventas-factura-folio-label" htmlFor="ventas-total-factura">
+                  Total de factura
+                </label>
+                <div className="ventas-factura-folio-row">
+                  <span className="ventas-factura-total-prefijo" aria-hidden="true">
+                    $
+                  </span>
+                  <input
+                    id="ventas-total-factura"
+                    type="text"
+                    inputMode="decimal"
+                    className="ventas-factura-folio-input ventas-factura-total-input"
+                    value={totalFacturaInput}
+                    disabled={guardandoFactura}
+                    placeholder={textoTotalFacturaInput(visiblesCuenta.totalDisplay)}
+                    autoComplete="off"
+                    onChange={(e) => {
+                      totalFacturaEditadoRef.current = true
+                      setTotalFacturaInput(e.target.value)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void guardarFolioFacturaManual()
+                      }
+                    }}
+                  />
                   <button
                     type="button"
                     className="btn-secondary ventas-factura-folio-guardar"
-                    disabled={guardandoFactura || !String(folioFacturaInput ?? '').trim()}
+                    disabled={guardandoFactura || parseTotalFacturaInput(totalFacturaInput) == null}
                     onClick={() => void guardarFolioFacturaManual()}
                   >
-                    {guardandoFactura ? 'Guardando…' : 'Guardar folio'}
+                    {guardandoFactura ? 'Guardando…' : 'Guardar'}
                   </button>
                 </div>
               </div>
