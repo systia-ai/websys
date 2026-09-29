@@ -639,6 +639,8 @@ export default function ReparacionesOrden({
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
         await cargarCuentaYEntregaAux(data.id)
+        const eidCargado = parseEquipoIdFromSession({ equipoId: data.equipo_id })
+        if (eidCargado != null) setEquipoIdSesion(eidCargado)
         if (supabase && data.equipo_id) {
           const { data: eq } = await supabase.from('equipos').select('*').eq('id', data.equipo_id).maybeSingle()
           if (eq) {
@@ -688,6 +690,8 @@ export default function ReparacionesOrden({
         setNivelMlight(nv.mL)
         setNivelClight(nv.cL)
         await cargarCuentaYEntregaAux(data.id)
+        const eidLocal = parseEquipoIdFromSession({ equipoId: data.equipo_id })
+        if (eidLocal != null) setEquipoIdSesion(eidLocal)
         const eq = readLs(LS_EQUIPOS, []).find((e) => sameId(e.id, data.equipo_id))
         if (eq) {
           setSerieEquipo(eq.serie ?? '')

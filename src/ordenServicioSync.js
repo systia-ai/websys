@@ -1,7 +1,15 @@
 import { sameId } from './clienteUtils.js'
+import { fetchAllRows } from './supabaseFetchAll.js'
 
 export function normalizarSerieEquipo(serie) {
   return String(serie ?? '').trim().toUpperCase()
+}
+
+function coincideSerie(row, serieNorm, excluirId) {
+  return (
+    normalizarSerieEquipo(row?.serie) === serieNorm &&
+    (excluirId == null || !sameId(row.id, excluirId))
+  )
 }
 
 async function cargarEquipoPorId(supabase, equipoId, { readLs, LS_EQUIPOS }) {
@@ -17,23 +25,19 @@ async function cargarEquipoPorId(supabase, equipoId, { readLs, LS_EQUIPOS }) {
 async function buscarEquipoPorSerie(supabase, serieNorm, excluirId, { readLs, LS_EQUIPOS }) {
   if (!serieNorm) return null
   if (supabase?.from) {
-    const { data, error } = await supabase.from('equipos').select('id, serie')
+    const { data, error } = await supabase.from('equipos').select('id, serie').eq('serie', serieNorm)
     if (error) throw error
-    return (
-      (data ?? []).find(
-        (x) =>
-          normalizarSerieEquipo(x.serie) === serieNorm &&
-          (excluirId == null || !sameId(x.id, excluirId)),
-      ) ?? null
+    const rows = data ?? []
+    const exacto = rows.find((x) => coincideSerie(x, serieNorm, excluirId))
+    if (exacto) return exacto
+    if (rows.length > 0) return null
+
+    const all = await fetchAllRows(() =>
+      supabase.from('equipos').select('id, serie').order('id', { ascending: true }),
     )
+    return all.find((x) => coincideSerie(x, serieNorm, excluirId)) ?? null
   }
-  return (
-    (readLs?.(LS_EQUIPOS, []) ?? []).find(
-      (x) =>
-        normalizarSerieEquipo(x.serie) === serieNorm &&
-        (excluirId == null || !sameId(x.id, excluirId)),
-    ) ?? null
-  )
+  return (readLs?.(LS_EQUIPOS, []) ?? []).find((x) => coincideSerie(x, serieNorm, excluirId)) ?? null
 }
 
 /**

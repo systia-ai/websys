@@ -176,6 +176,7 @@ function buildSessionFromDetalleFixed(row) {
   const c = normalizeClienteRow(clienteRow ?? { nombre: nombreCliente })
   return {
     reparacionId: rep?.id != null ? String(rep.id) : '',
+    equipoId: rep?.equipo_id ?? null,
     equipoSerie: serieEquipo || '',
     equipoTipo: tipoEquipo || '',
     equipoDescripcion: rep?.descripcion_equipo ?? '',
