@@ -377,6 +377,7 @@ export default function VentasCuentaScreen({
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
   const [ventaPendientePago, setVentaPendientePago] = useState(null)
   const [registrandoVentaProducto, setRegistrandoVentaProducto] = useState(false)
+  const [errorCapturaProducto, setErrorCapturaProducto] = useState('')
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
   const [modalNotificarCliente, setModalNotificarCliente] = useState(false)
   const [mensajeNotificacionEditado, setMensajeNotificacionEditado] = useState('')
@@ -1091,6 +1092,7 @@ export default function VentasCuentaScreen({
     setPrecioProd('')
     setProductoIdSel(0)
     setProductoContableSel(true)
+    setErrorCapturaProducto('')
   }
 
   function cerrarCapturaProducto() {
@@ -1108,43 +1110,49 @@ export default function VentasCuentaScreen({
     setExistencia(esContable ? String(p.existencia ?? '') : etiquetaExistencia(p))
     setPrecioProd(String(p.precio_venta ?? ''))
     setCantProd('')
+    setErrorCapturaProducto('')
     setModalProductos(false)
     setMostrarCamposProducto(true)
   }
 
   async function agregarProductoLinea() {
+    const fail = (msg) => {
+      setErrorCapturaProducto(msg)
+      onError?.(msg)
+    }
+    setErrorCapturaProducto('')
     if (!serieProd.trim()) {
-      onError?.('La serie del producto es requerida')
+      fail('La serie del producto es requerida')
       return
     }
     if (!descProd.trim()) {
-      onError?.('La descripción del producto es requerida')
+      fail('La descripción del producto es requerida')
       return
     }
     if (!productoIdSel) {
-      onError?.('Seleccione un producto del catálogo')
+      fail('Seleccione un producto del catálogo')
       return
     }
     const cant = Number(cantProd)
     const precio = Number(precioProd)
     if (!Number.isFinite(cant) || cant <= 0) {
-      onError?.('La cantidad debe ser mayor a 0')
+      fail('La cantidad debe ser mayor a 0')
       return
     }
     if (!Number.isFinite(precio) || precio <= 0) {
-      onError?.('El precio unitario debe ser mayor a 0')
+      fail('El precio unitario debe ser mayor a 0')
       return
     }
     const sub = cant * precio
     if (!cuentaId) {
-      onError?.('Genere o seleccione una cuenta antes de agregar productos')
+      fail('Genere o seleccione una cuenta antes de agregar productos')
       return
     }
     const esContableVenta = resolverContableProducto(productoIdSel, productoContableSel)
     if (esContableVenta) {
       const stockDisp = Number(existencia)
       if (Number.isFinite(stockDisp) && cant > stockDisp) {
-        onError?.(`Stock insuficiente. Disponible: ${stockDisp}`)
+        fail(`Stock insuficiente. Disponible: ${stockDisp}`)
         return
       }
     }
@@ -1242,7 +1250,9 @@ export default function VentasCuentaScreen({
           /* el error original se muestra abajo */
         }
       }
-      onError?.(`Error al agregar línea: ${e.message}`)
+      const msg = `Error al agregar línea: ${e.message}`
+      setErrorCapturaProducto(msg)
+      onError?.(msg)
     } finally {
       setRegistrandoVentaProducto(false)
     }
@@ -2353,7 +2363,7 @@ export default function VentasCuentaScreen({
 
       {ventaPendientePago ? (
         <div
-          className="modal-backdrop"
+          className="modal-backdrop ventas-cobro-venta-backdrop"
           role="presentation"
           onClick={() => !registrandoVentaProducto && setVentaPendientePago(null)}
         >
@@ -2686,11 +2696,25 @@ export default function VentasCuentaScreen({
               </div>
 
               <footer className="ventas-producto-panel-footer ventas-producto-panel-footer--flotante">
+                {errorCapturaProducto ? (
+                  <p className="error ventas-producto-error-captura" role="alert">
+                    {errorCapturaProducto}
+                  </p>
+                ) : null}
                 <button type="button" className="secondary" onClick={cerrarCapturaProducto}>
                   Cancelar
                 </button>
-                <button type="button" className="btn-primary-ventas" onClick={() => void agregarProductoLinea()}>
-                  {productoContableSel ? '✅ Agregar a la cuenta' : '✅ Agregar servicio'}
+                <button
+                  type="button"
+                  className="btn-primary-ventas"
+                  onClick={() => void agregarProductoLinea()}
+                  disabled={registrandoVentaProducto}
+                >
+                  {registrandoVentaProducto
+                    ? 'Agregando…'
+                    : productoContableSel
+                      ? '✅ Agregar a la cuenta'
+                      : '✅ Agregar servicio'}
                 </button>
               </footer>
             </section>

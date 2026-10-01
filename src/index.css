@@ -8952,6 +8952,10 @@ input.full {
   z-index: 1200;
 }
 
+.ventas-cobro-venta-backdrop {
+  z-index: 1300;
+}
+
 .ventas-producto-modal-dialog {
   width: min(520px, calc(100vw - 24px));
   max-width: 520px;
@@ -9015,6 +9019,11 @@ input.full {
 .ventas-producto-panel-footer--flotante .secondary {
   flex: 1 1 140px;
   margin-top: 0;
+}
+
+.ventas-producto-error-captura {
+  flex: 1 1 100%;
+  margin: 0;
 }
 
 .ventas-producto-panel {
