@@ -16,11 +16,6 @@ import {
 } from './productosRecientesVentas.js'
 import { insertPagoCliente, sumMontoPagos } from './pagosClientesUtils.js'
 import {
-  pagosConConceptoDesdeLineas,
-  payloadPagoVentaProducto,
-  ventaProductoCubiertaPorAnticipo,
-} from './pagoVentaProducto.js'
-import {
   activarFacturaEnCuenta,
   cuentaMarcadaParaFactura,
   desactivarFacturaEnCuenta,
@@ -375,7 +370,6 @@ export default function VentasCuentaScreen({
   const [productoIdSel, setProductoIdSel] = useState(0)
   const [productoContableSel, setProductoContableSel] = useState(true)
   const [modalFormaPagoTotal, setModalFormaPagoTotal] = useState(false)
-  const [ventaPendientePago, setVentaPendientePago] = useState(null)
   const [registrandoVentaProducto, setRegistrandoVentaProducto] = useState(false)
   const [errorCapturaProducto, setErrorCapturaProducto] = useState('')
   const [modalEstatusPagoCero, setModalEstatusPagoCero] = useState(false)
@@ -1164,20 +1158,10 @@ export default function VentasCuentaScreen({
       subtotal: sub,
       esContable: esContableVenta,
     }
-    if (
-      ventaProductoCubiertaPorAnticipo({
-        cargosActuales: totalCargosDesdeLineas(lineas),
-        pagos: pagosConConceptoDesdeLineas(lineas),
-        nuevoCargo: sub,
-      })
-    ) {
-      setVentaPendientePago(pendiente)
-      return
-    }
-    await ejecutarAgregarProductoLinea(pendiente, null)
+    await ejecutarAgregarProductoLinea(pendiente)
   }
 
-  async function ejecutarAgregarProductoLinea(pendiente, formaPagoVenta) {
+  async function ejecutarAgregarProductoLinea(pendiente) {
     if (!pendiente || !cuentaId) return
     if (registrandoVentaProducto) return
     setRegistrandoVentaProducto(true)
@@ -1205,32 +1189,14 @@ export default function VentasCuentaScreen({
         subtotal: pendiente.subtotal,
       }
       const nuevasLineas = [...lineas, lineaProducto]
-      if (formaPagoVenta) {
-        const pagoGuardado = await insertPagoCliente(
-          supabase,
-          payloadPagoVentaProducto({
-            clienteId: cliente.id,
-            cuentaId,
-            descripcion: pendiente.descripcion,
-            monto: pendiente.subtotal,
-            formaPago: formaPagoVenta,
-          }),
-          { nextLocalId },
-        )
-        lineaProducto.pagoDbId = pagoGuardado?.id
-        nuevasLineas.push(crearLineaPago(pagoGuardado))
-      }
       setLineas(nuevasLineas)
       setRecientesProductosIds(registrarProductoRecienteVentas(pendiente.productoId))
       cerrarCapturaProducto()
-      setVentaPendientePago(null)
       await persistirTotalCuenta(nuevasLineas)
       onNotice?.(
-        formaPagoVenta
-          ? `Venta registrada ($${Number(pendiente.subtotal).toFixed(2)} · ${formaPagoVenta}) · entra al corte`
-          : pendiente.esContable
-            ? 'Producto agregado · inventario actualizado'
-            : 'Servicio agregado a la cuenta',
+        pendiente.esContable
+          ? 'Producto agregado · inventario actualizado'
+          : 'Servicio agregado a la cuenta',
       )
     } catch (e) {
       if (nuevoId != null) {
@@ -2360,68 +2326,6 @@ export default function VentasCuentaScreen({
           </div>
         </div>
       )}
-
-      {ventaPendientePago ? (
-        <div
-          className="modal-backdrop ventas-cobro-venta-backdrop"
-          role="presentation"
-          onClick={() => !registrandoVentaProducto && setVentaPendientePago(null)}
-        >
-          <div className="modal" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>💵 Cobrar venta para el corte</h3>
-              <p className="muted small" style={{ margin: '4px 0 0' }}>
-                El anticipo de servicio no cuenta como cobro de{' '}
-                <strong>{ventaPendientePago.descripcion}</strong> ($
-                {Number(ventaPendientePago.subtotal).toFixed(2)}). Elija cómo se cobró el producto para
-                sumarlo al corte de caja.
-              </p>
-            </div>
-            <div className="modal-body forma-pago-opciones">
-              <button
-                type="button"
-                className="btn-forma-pago"
-                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'EFECTIVO')}
-                disabled={registrandoVentaProducto}
-              >
-                <span aria-hidden="true">💵</span>
-                <span>Efectivo</span>
-              </button>
-              <button
-                type="button"
-                className="btn-forma-pago"
-                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'TRANSFERENCIA')}
-                disabled={registrandoVentaProducto}
-              >
-                <span aria-hidden="true">🏦</span>
-                <span>Transferencia</span>
-              </button>
-              <button
-                type="button"
-                className="btn-forma-pago"
-                onClick={() => void ejecutarAgregarProductoLinea(ventaPendientePago, 'TARJETA')}
-                disabled={registrandoVentaProducto}
-              >
-                <span aria-hidden="true">💳</span>
-                <span>Tarjeta de crédito o débito</span>
-              </button>
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setVentaPendientePago(null)}
-                disabled={registrandoVentaProducto}
-              >
-                Cancelar
-              </button>
-              {registrandoVentaProducto ? (
-                <span className="muted small">Registrando venta…</span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {modalProductos && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalProductos(false)}>

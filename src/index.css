@@ -8952,10 +8952,6 @@ input.full {
   z-index: 1200;
 }
 
-.ventas-cobro-venta-backdrop {
-  z-index: 1300;
-}
-
 .ventas-producto-modal-dialog {
   width: min(520px, calc(100vw - 24px));
   max-width: 520px;

@@ -1,12 +1,8 @@
 /**
- * Cobro de producto vs anticipos (cuenta orden 1082: anticipo de pieza + servicio).
+ * Agregar producto a una cuenta con anticipo no debe pedir cobro extra (orden 1180).
  * Ejecutar: node scripts/test-pago-venta-producto.mjs
  */
-import {
-  esConceptoAnticipoPieza,
-  esConceptoAnticipoServicio,
-  ventaProductoCubiertaPorAnticipo,
-} from '../src/pagoVentaProducto.js'
+import { esConceptoAnticipo, ventaProductoCubiertaPorAnticipo } from '../src/pagoVentaProducto.js'
 
 let passed = 0
 let failed = 0
@@ -27,53 +23,35 @@ function assertEqual(actual, expected, msg) {
   if (actual !== expected) throw new Error(`${msg}: esperado ${expected}, obtenido ${actual}`)
 }
 
-test('ANTICIPO DE PIEZA no se trata como anticipo de servicio', () => {
-  assertEqual(esConceptoAnticipoPieza('ANTICIPO DE PIEZA'), true, 'pieza')
-  assertEqual(esConceptoAnticipoServicio('ANTICIPO DE PIEZA'), false, 'servicio')
+test('ANTICIPO DE SERVICIO se reconoce como anticipo', () => {
+  assertEqual(esConceptoAnticipo('ANTICIPO DE SERVICIO'), true, 'anticipo')
 })
 
-test('ANTICIPO DE SERVICIO sí es anticipo de servicio', () => {
-  assertEqual(esConceptoAnticipoPieza('ANTICIPO DE SERVICIO'), false, 'pieza')
-  assertEqual(esConceptoAnticipoServicio('ANTICIPO DE SERVICIO'), true, 'servicio')
+test('orden 1180: anticipo de servicio no pide cómo se cobró el producto', () => {
+  assertEqual(
+    ventaProductoCubiertaPorAnticipo({
+      cargosActuales: 0,
+      nuevoCargo: 350,
+      pagos: [{ pago: 300, concepto: 'ANTICIPO DE SERVICIO' }],
+    }),
+    false,
+    'cubiertaPorAnticipo',
+  )
 })
 
-test('cuenta 1082: SILA6 $700 con anticipo de pieza no pide otro cobro', () => {
-  const covered = ventaProductoCubiertaPorAnticipo({
-    cargosActuales: 0,
-    nuevoCargo: 700,
-    pagos: [
-      { pago: 300, concepto: 'ANTICIPO DE SERVICIO' },
-      { pago: 450, concepto: 'ANTICIPO DE PIEZA' },
-    ],
-  })
-  assertEqual(covered, false, 'cubiertaPorAnticipo')
-})
-
-test('solo anticipo de servicio que cubre el producto sí pide cobro para el corte', () => {
-  const covered = ventaProductoCubiertaPorAnticipo({
-    cargosActuales: 0,
-    nuevoCargo: 400,
-    pagos: [{ pago: 500, concepto: 'ANTICIPO DE SERVICIO' }],
-  })
-  assertEqual(covered, true, 'cubiertaPorAnticipo')
-})
-
-test('anticipo de servicio menor al producto no intercepta', () => {
-  const covered = ventaProductoCubiertaPorAnticipo({
-    cargosActuales: 0,
-    nuevoCargo: 700,
-    pagos: [{ pago: 300, concepto: 'ANTICIPO DE SERVICIO' }],
-  })
-  assertEqual(covered, false, 'cubiertaPorAnticipo')
-})
-
-test('sin anticipos no intercepta', () => {
-  const covered = ventaProductoCubiertaPorAnticipo({
-    cargosActuales: 0,
-    nuevoCargo: 700,
-    pagos: [{ pago: 800, concepto: 'ABONO' }],
-  })
-  assertEqual(covered, false, 'cubiertaPorAnticipo')
+test('anticipo de pieza tampoco pide cobro extra', () => {
+  assertEqual(
+    ventaProductoCubiertaPorAnticipo({
+      cargosActuales: 0,
+      nuevoCargo: 700,
+      pagos: [
+        { pago: 300, concepto: 'ANTICIPO DE SERVICIO' },
+        { pago: 450, concepto: 'ANTICIPO DE PIEZA' },
+      ],
+    }),
+    false,
+    'cubiertaPorAnticipo',
+  )
 })
 
 console.log(`\n${passed} ok, ${failed} fallos`)
