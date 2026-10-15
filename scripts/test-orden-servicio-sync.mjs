@@ -117,5 +117,40 @@ await test('sin coincidencia: mensaje con la serie buscada', async () => {
   }
 })
 
+await test('serie repetida: la orden usa el equipo de la sesión y no pide cambiar la serie', async () => {
+  const supabase = mockSupabase({
+    equipos: [
+      { id: 5, serie: 'X8G5080053', tipo_equipo: 'IMPRESORA', cliente_id: 9 },
+      { id: 8, serie: 'X8G5080053', tipo_equipo: 'IMPRESORA', cliente_id: 9 },
+    ],
+  })
+  const { id, error } = await sincronizarEquipoParaOrden(supabase, {
+    equipoId: 8,
+    serie: 'X8G5080053',
+    tipo_equipo: 'IMPRESORA',
+    clienteId: 9,
+  })
+  assertEqual(error, null, 'error')
+  assertEqual(id, 8, 'id')
+})
+
+await test('serie de otro equipo: usa el ya registrado del mismo cliente', async () => {
+  const supabase = mockSupabase({
+    equipos: [
+      { id: 1, serie: 'TEMPORAL', tipo_equipo: 'IMPRESORA', cliente_id: 9 },
+      { id: 2, serie: 'X8G5080053', tipo_equipo: 'IMPRESORA', cliente_id: 4 },
+      { id: 3, serie: 'X8G5080053', tipo_equipo: 'IMPRESORA', cliente_id: 9 },
+    ],
+  })
+  const { id, error } = await sincronizarEquipoParaOrden(supabase, {
+    equipoId: 1,
+    serie: 'X8G5080053',
+    tipo_equipo: 'IMPRESORA',
+    clienteId: 9,
+  })
+  assertEqual(error, null, 'error')
+  assertEqual(id, 3, 'id')
+})
+
 console.log(`\n${passed} ok, ${failed} fallos`)
 if (failed) process.exit(1)

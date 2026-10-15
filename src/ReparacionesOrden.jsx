@@ -861,6 +861,7 @@ export default function ReparacionesOrden({
       tipo_equipo: tipoEquipo,
       descripcion: descripcionEquipo,
       tipo_reparacion: tipoReparacion,
+      clienteId: clienteIdNum ?? parseClienteIdFromSession(s),
       readLs,
       writeLs,
       LS_EQUIPOS,
@@ -2990,7 +2991,7 @@ export default function ReparacionesOrden({
                 <h3>📝 {TEXTO_VERIFICAR_DATOS}</h3>
                 <p className="confirmar-datos-lead">
                   Revise cliente, equipo y orden. El <strong>número de orden</strong> lo asigna la base de datos al
-                  guardar (consecutivo). Si corrigió la serie aquí, se actualizará en el equipo antes de crear la orden.
+                  guardar (consecutivo). Si la serie ya está registrada, la orden usa ese equipo y no cambia su serie.
                 </p>
               </div>
             </div>

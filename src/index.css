@@ -8820,6 +8820,37 @@ input.full {
   color: #455a64;
 }
 
+.ventas-tabla-saldo {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  /* 40px de la columna de acciones + 6px de separación, para alinear el monto con Pagos */
+  padding-right: 58px;
+  background: #f5f7f8;
+  font-weight: 800;
+  border-top: 1px solid #cfd8dc;
+}
+
+.ventas-tabla-saldo > .ventas-tabla-saldo-etiqueta {
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: #37474f;
+}
+
+.ventas-tabla-saldo > .ventas-tabla-saldo-monto {
+  min-width: 88px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.02rem;
+  color: #2e7d32;
+}
+
+.ventas-tabla-saldo--pend > .ventas-tabla-saldo-monto {
+  color: #c62828;
+}
+
 .ventas-tabla-fecha {
   font-size: 0.82rem;
   color: #78909c;
@@ -13714,6 +13745,23 @@ input.full {
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-totales > span:nth-child(2) {
   color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-saldo {
+  background: var(--app-color-surface-2) !important;
+  border-top-color: var(--app-color-border) !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-saldo > .ventas-tabla-saldo-etiqueta {
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-saldo > .ventas-tabla-saldo-monto {
+  color: #81c784 !important;
+}
+
+:root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-saldo--pend > .ventas-tabla-saldo-monto {
+  color: #f87171 !important;
 }
 
 :root[data-theme='dark'] .ventas-cuenta-root .ventas-tabla-vacia {

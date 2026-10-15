@@ -1825,6 +1825,13 @@ export default function VentasCuentaScreen({
                     </span>
                     <span />
                   </li>
+                  <li
+                    className={`ventas-tabla-fila ventas-tabla-saldo${saldoPendiente > 0.0001 ? ' ventas-tabla-saldo--pend' : ''}`}
+                    aria-label="Saldo de la cuenta"
+                  >
+                    <span className="ventas-tabla-saldo-etiqueta">Saldo</span>
+                    <span className="ventas-tabla-saldo-monto">{saldoStr}</span>
+                  </li>
                 </ul>
               )}
             </div>

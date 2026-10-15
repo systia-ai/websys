@@ -6,6 +6,7 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares, buscarEquiposPorSerieExacta } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import { fetchAllRows } from './supabaseFetchAll.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { fechasHitosOrdenLegibles } from './reparacionUtils.js'
 
@@ -156,14 +157,12 @@ export default function ServiciosEquipos({
     setLoading(true)
     try {
       if (supabase) {
-        const [eqRes, cliRes] = await Promise.all([
-          supabase.from('equipos').select('*').order('id', { ascending: false }),
-          supabase.from('clientes').select('*').order('id', { ascending: false }),
+        const [eqRows, cliRows] = await Promise.all([
+          fetchAllRows(() => supabase.from('equipos').select('*').order('id', { ascending: false })),
+          fetchAllRows(() => supabase.from('clientes').select('*').order('id', { ascending: false })),
         ])
-        if (eqRes.error) throw eqRes.error
-        if (cliRes.error) throw cliRes.error
-        setEquipos(eqRes.data ?? [])
-        setClientes((cliRes.data ?? []).map(normalizeClienteRow))
+        setEquipos(eqRows)
+        setClientes(cliRows.map(normalizeClienteRow))
       } else {
         setEquipos(readLs(LS_EQUIPOS, []))
         setClientes(readLs(LS_CLIENTES, []).map(normalizeClienteRow))
@@ -402,6 +401,76 @@ export default function ServiciosEquipos({
     }
   }
 
+  function equipoYaRegistrado(excludeId = null) {
+    const coincidencias = buscarEquiposPorSerieExacta(equipos, {
+      serie,
+      excludeId,
+    })
+    if (coincidencias.length === 0) return null
+    const completos = coincidencias.map((m) => equipos.find((e) => sameId(e.id, m.id)) ?? m)
+    const clienteId = clienteDesdeModuloClientes?.id ?? null
+    if (clienteId != null) {
+      const delCliente = completos.find((e) => sameId(e.cliente_id, clienteId))
+      if (delCliente) return delCliente
+    }
+    return completos[0]
+  }
+
+  async function usarEquipoRegistrado(eq) {
+    const cliVinculo = clienteDesdeModuloClientes?.id != null ? clienteDesdeModuloClientes : null
+    if (cliVinculo && (eq.cliente_id == null || eq.cliente_id === '' || sameId(eq.cliente_id, cliVinculo.id))) {
+      if (eq.cliente_id == null || eq.cliente_id === '') {
+        const ok = await vincularEquipoClienteYReparaciones(eq, cliVinculo)
+        if (ok) onConsumeClienteVinculo?.()
+        setDialogoEquipo(false)
+        return
+      }
+      setDialogoEquipo(false)
+      onOpenReparaciones(
+        payloadReparacionesSesion(
+          cliVinculo,
+          {
+            serie: eq.serie,
+            tipo_equipo: eq.tipo_equipo,
+            descripcion: eq.descripcion,
+            tipo_reparacion: eq.tipo_reparacion,
+          },
+          eq.id,
+        ),
+      )
+      onConsumeClienteVinculo?.()
+      return
+    }
+
+    let cli = null
+    if (eq.cliente_id != null && eq.cliente_id !== '') {
+      const lista = clientes.length > 0 ? clientes : await cargarClientesLista()
+      cli = lista.find((c) => sameId(c.id, eq.cliente_id)) ?? (await fetchCliente(eq.cliente_id))
+    }
+    if (!cli?.id) {
+      setDialogoEquipo(false)
+      setEquipoPendiente(eq)
+      setClienteMotivo('asociar')
+      setBusqCliente('')
+      setDialogoCliente(true)
+      void cargarClientesLista()
+      return
+    }
+    setDialogoEquipo(false)
+    onOpenReparaciones(
+      payloadReparacionesSesion(
+        normalizeClienteRow(cli),
+        {
+          serie: eq.serie,
+          tipo_equipo: eq.tipo_equipo,
+          descripcion: eq.descripcion,
+          tipo_reparacion: eq.tipo_reparacion,
+        },
+        eq.id,
+      ),
+    )
+  }
+
   function lineasConfirmacionEquipo() {
     const lineas = [
       { label: 'Serie', value: String(serie).trim().toUpperCase() },
@@ -425,24 +494,30 @@ export default function ServiciosEquipos({
       onError('El tipo de equipo es requerido')
       return
     }
-    const serieExacta = buscarEquiposPorSerieExacta(equipos, {
-      serie: serie,
-      excludeId: editandoId ?? null,
-    }).slice(0, 4)
-    if (serieExacta.length > 0) {
+    const registrado = equipoYaRegistrado(editandoId ?? null)
+    if (registrado && !editandoId) {
       setConfirmDatos({
         tituloGrupo: 'Serie ya registrada',
         lineas: [
-          { label: 'Pregunta', value: 'Es el mismo equipo?' },
-          { label: 'Serie nueva', value: String(serie).trim().toUpperCase() },
-          ...serieExacta.map((e, i) => ({
-            label: `Coincidencia ${i + 1}`,
-            value: `${String(e.serie ?? '').toUpperCase()} · ${String(e.tipo_equipo ?? '').toUpperCase()}${e.descripcion ? ` · ${String(e.descripcion).toUpperCase()}` : ''}`,
-          })),
+          { label: 'Serie', value: String(registrado.serie ?? serie).trim().toUpperCase() },
+          {
+            label: 'Equipo',
+            value: `${String(registrado.tipo_equipo ?? '').toUpperCase()}${registrado.descripcion ? ` · ${String(registrado.descripcion).toUpperCase()}` : ''}`,
+          },
+          {
+            label: 'Acción',
+            value: 'Se usará este equipo para la nueva orden. La serie no se modifica.',
+          },
         ],
-        run: ejecutarGuardarEquipo,
-        textoConfirmar: 'No, es diferente. Guardar',
+        run: () => usarEquipoRegistrado(registrado),
+        textoConfirmar: 'Usar equipo registrado',
       })
+      return
+    }
+    if (registrado && editandoId) {
+      onError(
+        `La serie ${String(serie).trim().toUpperCase()} ya está en otro equipo. No se modificó; use ese equipo para la nueva orden.`,
+      )
       return
     }
 
