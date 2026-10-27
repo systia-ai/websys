@@ -1232,7 +1232,7 @@ export default function ClientesModulo({
 
       {modalRepActivas && clienteAccion && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalRepActivas(false)}>
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-wide modal-ordenes-cliente" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{repTitle}</h3>
             </div>

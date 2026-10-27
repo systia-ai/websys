@@ -6,6 +6,7 @@ import { sincronizarEquipoParaOrden } from './ordenServicioSync.js'
 import { NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './catalogos.js'
 import AlertaPermiso from './AlertaPermiso.jsx'
 import ModalAlerta from './ModalAlerta.jsx'
+import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import { cargarTecnicosUnificados, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReparacionFotosPanel, { revocarPendientesFotos } from './ReparacionFotosPanel.jsx'
@@ -31,6 +32,7 @@ import {
   esOrdenDuplicada,
   estatusEsEntregado,
   estatusEsBaja,
+  isReparacionActiva,
   estatusPermiteVerificacionEntrega,
   estatusEsSinReparacion,
   estatusListoParaVerificacionEntrega,
@@ -294,6 +296,11 @@ export default function ReparacionesOrden({
   const [consultandoCuentaWa, setConsultandoCuentaWa] = useState(false)
   const [abriendoCuentaCliente, setAbriendoCuentaCliente] = useState(false)
   const [abriendoCotizacionesCliente, setAbriendoCotizacionesCliente] = useState(false)
+  const [historialEquipoAbierto, setHistorialEquipoAbierto] = useState(false)
+  const [historialCargando, setHistorialCargando] = useState(false)
+  const [historialReps, setHistorialReps] = useState([])
+  const [historialCuentas, setHistorialCuentas] = useState({})
+  const [historialPagos, setHistorialPagos] = useState({})
   /** Evita reenviar el mismo tipo de mensaje WA en la misma sesión de orden. */
   const [waEnviados, setWaEnviados] = useState({ orden: false, anticipo: false, liquidacion: false })
   const [waExitoVisible, setWaExitoVisible] = useState(false)
@@ -1888,6 +1895,88 @@ export default function ReparacionesOrden({
     }
   }
 
+  async function abrirHistorialEquipo() {
+    const eid = equipoIdSesion
+    if (eid == null) {
+      onError?.('Esta orden no tiene un equipo asociado.')
+      return
+    }
+    setHistorialCargando(true)
+    setHistorialEquipoAbierto(true)
+    setHistorialReps([])
+    setHistorialCuentas({})
+    setHistorialPagos({})
+    try {
+      let reps = []
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('reparaciones')
+          .select('*')
+          .eq('equipo_id', eid)
+          .order('id', { ascending: false })
+        if (error) throw error
+        reps = data ?? []
+      } else {
+        reps = readLs(LS_REP, []).filter((r) => Number(r.equipo_id) === Number(eid))
+      }
+      reps.sort((a, b) => {
+        const aa = isReparacionActiva(a) ? 0 : 1
+        const bb = isReparacionActiva(b) ? 0 : 1
+        if (aa !== bb) return aa - bb
+        return (Number(b.id) || 0) - (Number(a.id) || 0)
+      })
+      setHistorialReps(reps)
+
+      const idsRep = new Set(reps.map((r) => String(r.id)))
+      let todasCuentas = []
+      let todosPagos = []
+      if (supabase && reps.length > 0) {
+        const ids = reps.map((r) => r.id).filter((id) => id != null)
+        const { data: cuData, error: cuErr } = await supabase.from('cuentas').select('*').in('repara_id', ids)
+        if (cuErr) throw cuErr
+        todasCuentas = cuData ?? []
+        const cuentaIds = todasCuentas.map((c) => c.id).filter((id) => id != null)
+        if (cuentaIds.length > 0) {
+          const { data: pagData, error: pagErr } = await supabase
+            .from('pagosclientes')
+            .select('*')
+            .in('cuenta_id', cuentaIds)
+          if (pagErr) throw pagErr
+          todosPagos = pagData ?? []
+        }
+      } else if (!supabase) {
+        todasCuentas = readLs(LS_CUENTAS, [])
+        todosPagos = readLs(LS_PAGOS, [])
+      }
+
+      const cuentaMap = {}
+      const idsCuenta = new Set()
+      for (const c of todasCuentas) {
+        const rid = c?.repara_id ?? c?.reparacion_id
+        if (rid == null || !idsRep.has(String(rid))) continue
+        cuentaMap[String(rid)] = c
+        if (c.id != null) idsCuenta.add(String(c.id))
+      }
+      const ymdPorCuenta = {}
+      for (const p of todosPagos) {
+        const cid = p?.cuenta_id
+        if (cid == null || !idsCuenta.has(String(cid))) continue
+        const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+        if (!y) continue
+        const key = String(cid)
+        const prev = ymdPorCuenta[key]
+        if (!prev || y > prev) ymdPorCuenta[key] = y
+      }
+      setHistorialCuentas(cuentaMap)
+      setHistorialPagos(ymdPorCuenta)
+    } catch (e) {
+      onError?.(`Error al buscar el historial: ${e.message}`)
+      setHistorialEquipoAbierto(false)
+    } finally {
+      setHistorialCargando(false)
+    }
+  }
+
   async function imprimirEtiquetas() {
     const ord = idReparacion != null ? String(idReparacion) : numeroOrden || '—'
     const nombre = nombreClienteUi || '—'
@@ -2807,6 +2896,17 @@ export default function ReparacionesOrden({
               {abriendoCotizacionesCliente ? 'Abriendo cotizaciones…' : '📋 Cotizaciones del cliente'}
             </button>
           )}
+          {equipoIdSesion != null && (
+            <button
+              type="button"
+              className="btn-historial-ordenes wide"
+              disabled={historialCargando}
+              onClick={() => void abrirHistorialEquipo()}
+              title="Consultar las órdenes de este equipo, sin abrirlas"
+            >
+              {historialCargando ? 'Cargando historial…' : '📋 Historial del equipo'}
+            </button>
+          )}
           <button type="button" className="btn-success wide" disabled={!puedeAccionesPdf} onClick={imprimirEtiquetas}>
             🏷️ Imprimir etiqueta (PDF)
           </button>
@@ -3070,6 +3170,76 @@ export default function ReparacionesOrden({
                 disabled={eliminandoOrden}
               >
                 {eliminandoOrden ? 'Eliminando…' : 'Sí, eliminar definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historialEquipoAbierto && (
+        <div className="modal-backdrop" role="presentation" onClick={() => !historialCargando && setHistorialEquipoAbierto(false)}>
+          <div
+            className="modal modal-wide modal-ordenes-cliente"
+            role="dialog"
+            aria-labelledby="historial-equipo-titulo"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="historial-equipo-titulo">Historial del equipo</h3>
+              <p className="equipo-modal-resumen muted small">
+                <span>
+                  <strong>Serie:</strong> {serieEquipo || '—'}
+                </span>
+                <span>
+                  <strong>Cliente:</strong> {nombreClienteUi || '—'}
+                </span>
+                <span>
+                  <strong>Tipo:</strong> {tipoEquipo || '—'}
+                </span>
+              </p>
+              <p className="muted small">Solo consulta. Esta ventana no abre ni modifica otras órdenes.</p>
+            </div>
+            <div className="modal-body modal-body--ordenes-cliente">
+              {historialCargando || historialReps.length > 0 ? (
+                <ClientesOrdenesServicioPanel
+                  loading={historialCargando}
+                  soloConsulta
+                  ordenActualId={idReparacion}
+                  repResumen={
+                    historialReps.length > 0
+                      ? {
+                          nombre: (nombreClienteUi || '').trim() || (serieEquipo ? `Serie ${serieEquipo}` : 'Equipo'),
+                          total: historialReps.length,
+                          enTaller: historialReps.filter(isReparacionActiva).length,
+                          entregadas:
+                            historialReps.length - historialReps.filter(isReparacionActiva).length,
+                        }
+                      : null
+                  }
+                  reparaciones={historialReps}
+                  equiposPorId={
+                    equipoIdSesion != null
+                      ? {
+                          [String(equipoIdSesion)]: {
+                            id: equipoIdSesion,
+                            serie: serieEquipo,
+                            tipo_equipo: tipoEquipo,
+                            descripcion: descripcionEquipo,
+                            cliente_id: clienteIdNum,
+                          },
+                        }
+                      : {}
+                  }
+                  cuentasPorReparaId={historialCuentas}
+                  pagosPorCuentaId={historialPagos}
+                />
+              ) : (
+                <p className="warn-inline">No hay reparaciones registradas para este equipo</p>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary" onClick={() => setHistorialEquipoAbierto(false)}>
+                Cerrar
               </button>
             </div>
           </div>

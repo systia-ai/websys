@@ -6,13 +6,16 @@ import AlertaPermiso from './AlertaPermiso.jsx'
 import ConfirmarDatosModal from './ConfirmarDatosModal.jsx'
 import { buscarClientesSimilares, buscarEquiposPorSerieExacta } from './duplicadosUtils.js'
 import TablaScrollSuperior from './TablaScrollSuperior.jsx'
+import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
 import { fetchAllRows } from './supabaseFetchAll.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
-import { fechasHitosOrdenLegibles } from './reparacionUtils.js'
+import { aYmdLocalDesdeRaw, isReparacionActiva } from './reparacionUtils.js'
 
 const LS_EQUIPOS = 'sistefix_local_equipos'
 const LS_CLIENTES = 'sistefix_local_clientes'
 const LS_REP = 'sistefix_local_reparaciones'
+const LS_CUENTAS = 'sistefix_local_cuentas'
+const LS_PAGOS = 'sistefix_local_pagosclientes'
 const LS_DATOS = 'sistefix_local_datos'
 const LS_VISTA_EQUIPOS = 'sistefix_equipos_vista'
 
@@ -34,10 +37,6 @@ function readLs(key, fallback) {
 
 function writeLs(key, val) {
   localStorage.setItem(key, JSON.stringify(val))
-}
-
-function fechasReparacionEtiquetas(rep) {
-  return fechasHitosOrdenLegibles(rep)
 }
 
 function snapshotEquipoRetorno(eq) {
@@ -131,6 +130,8 @@ export default function ServiciosEquipos({
   const [modalRep, setModalRep] = useState(null)
   const [repsEquipo, setRepsEquipo] = useState([])
   const [repsLoading, setRepsLoading] = useState(false)
+  const [cuentasPorReparaEquipo, setCuentasPorReparaEquipo] = useState({})
+  const [pagosPorCuentaEquipo, setPagosPorCuentaEquipo] = useState({})
 
   const [dialogoCliente, setDialogoCliente] = useState(false)
   const [clienteMotivo, setClienteMotivo] = useState('guardar')
@@ -196,6 +197,26 @@ export default function ServiciosEquipos({
     }
     return m
   }, [clientes])
+
+  const resumenOrdenesEquipo = useMemo(() => {
+    if (!modalRep || repsEquipo.length === 0) return null
+    const nAct = repsEquipo.filter(isReparacionActiva).length
+    const cid = modalRep.cliente_id
+    const cli = cid != null && cid !== '' ? clientePorId.get(String(cid)) : null
+    const nombreCli = String(cli?.nombre ?? '').trim()
+    const nombre = nombreCli || (modalRep.serie ? `Serie ${modalRep.serie}` : 'Equipo')
+    return {
+      nombre,
+      total: repsEquipo.length,
+      enTaller: nAct,
+      entregadas: repsEquipo.length - nAct,
+    }
+  }, [modalRep, repsEquipo, clientePorId])
+
+  const equiposPorIdModal = useMemo(() => {
+    if (modalRep?.id == null) return {}
+    return { [String(modalRep.id)]: modalRep }
+  }, [modalRep])
 
   function nombreClienteEquipo(eq) {
     const cid = eq?.cliente_id
@@ -619,7 +640,11 @@ export default function ServiciosEquipos({
 
   async function cargarReparacionesDeEquipo(equipoId) {
     setRepsLoading(true)
+    setRepsEquipo([])
+    setCuentasPorReparaEquipo({})
+    setPagosPorCuentaEquipo({})
     try {
+      let reps = []
       if (supabase) {
         const { data, error } = await supabase
           .from('reparaciones')
@@ -627,14 +652,65 @@ export default function ServiciosEquipos({
           .eq('equipo_id', equipoId)
           .order('id', { ascending: false })
         if (error) throw error
-        setRepsEquipo(data ?? [])
+        reps = data ?? []
       } else {
-        const all = readLs(LS_REP, [])
-        setRepsEquipo(all.filter((r) => Number(r.equipo_id) === Number(equipoId)).sort((a, b) => Number(b.id) - Number(a.id)))
+        reps = readLs(LS_REP, []).filter((r) => Number(r.equipo_id) === Number(equipoId))
       }
+      reps.sort((a, b) => {
+        const aa = isReparacionActiva(a) ? 0 : 1
+        const bb = isReparacionActiva(b) ? 0 : 1
+        if (aa !== bb) return aa - bb
+        return (Number(b.id) || 0) - (Number(a.id) || 0)
+      })
+      setRepsEquipo(reps)
+
+      const idsRep = new Set(reps.map((r) => String(r.id)))
+      let todasCuentas = []
+      let todosPagos = []
+      if (supabase && reps.length > 0) {
+        const ids = reps.map((r) => r.id).filter((id) => id != null)
+        const { data: cuData, error: cuErr } = await supabase.from('cuentas').select('*').in('repara_id', ids)
+        if (cuErr) throw cuErr
+        todasCuentas = cuData ?? []
+        const cuentaIds = todasCuentas.map((c) => c.id).filter((id) => id != null)
+        if (cuentaIds.length > 0) {
+          const { data: pagData, error: pagErr } = await supabase
+            .from('pagosclientes')
+            .select('*')
+            .in('cuenta_id', cuentaIds)
+          if (pagErr) throw pagErr
+          todosPagos = pagData ?? []
+        }
+      } else if (!supabase) {
+        todasCuentas = readLs(LS_CUENTAS, [])
+        todosPagos = readLs(LS_PAGOS, [])
+      }
+
+      const cuentaMap = {}
+      const idsCuenta = new Set()
+      for (const c of todasCuentas) {
+        const rid = c?.repara_id ?? c?.reparacion_id
+        if (rid == null || !idsRep.has(String(rid))) continue
+        cuentaMap[String(rid)] = c
+        if (c.id != null) idsCuenta.add(String(c.id))
+      }
+      const ymdPorCuenta = {}
+      for (const p of todosPagos) {
+        const cid = p?.cuenta_id
+        if (cid == null || !idsCuenta.has(String(cid))) continue
+        const y = aYmdLocalDesdeRaw(p?.created_at ?? p?.fecha ?? p?.fecha_pago)
+        if (!y) continue
+        const key = String(cid)
+        const prev = ymdPorCuenta[key]
+        if (!prev || y > prev) ymdPorCuenta[key] = y
+      }
+      setCuentasPorReparaEquipo(cuentaMap)
+      setPagosPorCuentaEquipo(ymdPorCuenta)
     } catch (e) {
       onError(`Error al buscar reparaciones: ${e.message}`)
       setRepsEquipo([])
+      setCuentasPorReparaEquipo({})
+      setPagosPorCuentaEquipo({})
     } finally {
       setRepsLoading(false)
     }
@@ -1175,7 +1251,7 @@ export default function ServiciosEquipos({
 
       {modalRep && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalRep(null)}>
-          <div className="modal modal-wide" role="dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-wide modal-ordenes-cliente" role="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Reparaciones del Equipo</h3>
               <p className="equipo-modal-resumen muted small">
@@ -1189,48 +1265,21 @@ export default function ServiciosEquipos({
                   <strong>Tipo:</strong> {modalRep.tipo_equipo || '—'}
                 </span>
               </p>
-              <p className="muted small">
-                {repsLoading
-                  ? 'Buscando…'
-                  : repsEquipo.length > 0
-                    ? `Se encontraron ${repsEquipo.length} reparación(es) para este equipo`
-                    : 'No se encontraron reparaciones para este equipo'}
-              </p>
             </div>
-            <div className="modal-body">
-              {repsLoading ? <p>Cargando…</p> : null}
-              {!repsLoading &&
-                repsEquipo.map((rep) => {
-                  const fechas = fechasReparacionEtiquetas(rep)
-                  return (
-                  <button
-                    key={rep.id}
-                    type="button"
-                    className="rep-card"
-                    onClick={() => {
-                      void irReparacionExistente(modalRep, rep)
-                    }}
-                  >
-                    <strong>Reparación #{rep.id}</strong>
-                    {rep.tipo_reparacion ? <span>Tipo: {rep.tipo_reparacion}</span> : null}
-                    {rep.descripcion_equipo ? <span>{rep.descripcion_equipo}</span> : null}
-                    {rep.problemas_reportados ? <span>{rep.problemas_reportados}</span> : null}
-                    <span className="rep-card-fechas">
-                      {fechas.map((f) => (
-                        <span key={f.clave}>
-                          {f.etiqueta}: {f.texto}
-                        </span>
-                      ))}
-                    </span>
-                    <span className={`estatus estatus-${String(rep.estatus ?? '').replace(/\s+/g, '_')}`}>
-                      Estado: {rep.estatus ?? 'Sin estado'}
-                    </span>
-                  </button>
-                  )
-                })}
-              {!repsLoading && repsEquipo.length === 0 ? (
+            <div className="modal-body modal-body--ordenes-cliente">
+              {repsLoading || repsEquipo.length > 0 ? (
+                <ClientesOrdenesServicioPanel
+                  loading={repsLoading}
+                  repResumen={resumenOrdenesEquipo}
+                  reparaciones={repsEquipo}
+                  equiposPorId={equiposPorIdModal}
+                  cuentasPorReparaId={cuentasPorReparaEquipo}
+                  pagosPorCuentaId={pagosPorCuentaEquipo}
+                  onSelectRep={(rep) => void irReparacionExistente(modalRep, rep)}
+                />
+              ) : (
                 <p className="warn-inline">No hay reparaciones registradas para este equipo</p>
-              ) : null}
+              )}
             </div>
             <div className="modal-footer">
               {repsEquipo.length === 0 && !repsLoading ? (

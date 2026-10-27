@@ -7,9 +7,9 @@ const LS_VISTA_ORDENES_CLIENTE = 'sistefix_clientes_ordenes_vista'
 
 function leerVistaOrdenes() {
   try {
-    return localStorage.getItem(LS_VISTA_ORDENES_CLIENTE) === 'tabla' ? 'tabla' : 'tarjetas'
+    return localStorage.getItem(LS_VISTA_ORDENES_CLIENTE) === 'tarjetas' ? 'tarjetas' : 'tabla'
   } catch {
-    return 'tarjetas'
+    return 'tabla'
   }
 }
 
@@ -36,6 +36,8 @@ export default function ClientesOrdenesServicioPanel({
   cuentasPorReparaId = {},
   pagosPorCuentaId = {},
   onSelectRep,
+  soloConsulta = false,
+  ordenActualId = null,
 }) {
   const [vista, setVista] = useState(leerVistaOrdenes)
 
@@ -83,6 +85,7 @@ export default function ClientesOrdenesServicioPanel({
         tipo: rep.tipo_reparacion ? String(rep.tipo_reparacion) : null,
         equipo: rep.descripcion_equipo ? String(rep.descripcion_equipo) : null,
         problema: rep.problemas_reportados ? String(rep.problemas_reportados) : null,
+        solucion: rep.descripcion_solucion ? String(rep.descripcion_solucion) : null,
         estatus: rep.estatus ?? 'Sin estado',
       }
     })
@@ -172,26 +175,37 @@ export default function ClientesOrdenesServicioPanel({
                     <th>Estado</th>
                     <th>Tipo</th>
                     <th>Equipo</th>
-                    <th aria-label="Abrir orden">Abrir</th>
+                    <th>Problema reportado</th>
+                    <th>Solución</th>
+                    {soloConsulta ? null : <th aria-label="Abrir orden">Abrir</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {filas.map((f) => (
+                  {filas.map((f) => {
+                    const esActual = ordenActualId != null && String(f.rep.id) === String(ordenActualId)
+                    return (
                     <tr
                       key={f.rep.id}
-                      className={`clientes-ordenes-tabla-fila clientes-ordenes-tabla-fila--clic${f.baja ? '' : f.activa ? '' : ' clientes-ordenes-fila--entregada'}`}
-                      role="button"
-                      tabIndex={0}
-                      title={`Abrir orden #${f.ordenId}`}
-                      onClick={() => onSelectRep?.(f.rep)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          onSelectRep?.(f.rep)
-                        }
-                      }}
+                      className={`clientes-ordenes-tabla-fila${soloConsulta ? '' : ' clientes-ordenes-tabla-fila--clic'}${f.baja ? '' : f.activa ? '' : ' clientes-ordenes-fila--entregada'}${esActual ? ' clientes-ordenes-tabla-fila--actual' : ''}`}
+                      role={soloConsulta ? undefined : 'button'}
+                      tabIndex={soloConsulta ? undefined : 0}
+                      title={soloConsulta ? (esActual ? 'Orden en pantalla' : undefined) : `Abrir orden #${f.ordenId}`}
+                      onClick={soloConsulta ? undefined : () => onSelectRep?.(f.rep)}
+                      onKeyDown={
+                        soloConsulta
+                          ? undefined
+                          : (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                onSelectRep?.(f.rep)
+                              }
+                            }
+                      }
                     >
-                      <td className="cuentas-cliente-tabla-orden">{f.ordenId}</td>
+                      <td className="cuentas-cliente-tabla-orden">
+                        {f.ordenId}
+                        {esActual ? <span className="clientes-ordenes-marca-actual"> Actual</span> : null}
+                      </td>
                       <td>{f.serie}</td>
                       <td className="cuentas-cliente-tabla-fecha">{f.fechaIngreso}</td>
                       <td
@@ -208,6 +222,17 @@ export default function ClientesOrdenesServicioPanel({
                       </td>
                       <td>{f.tipo || '—'}</td>
                       <td className="clientes-ordenes-col-texto">{f.equipo || '—'}</td>
+                      <td>
+                        <span className="clientes-ordenes-col-detalle" title={f.problema || undefined}>
+                          {f.problema || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="clientes-ordenes-col-detalle" title={f.solucion || undefined}>
+                          {f.solucion || '—'}
+                        </span>
+                      </td>
+                      {soloConsulta ? null : (
                       <td className="cuentas-cliente-tabla-acciones">
                         <button
                           type="button"
@@ -220,24 +245,23 @@ export default function ClientesOrdenesServicioPanel({
                           Ver →
                         </button>
                       </td>
+                      )}
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </TablaScrollSuperior>
           ) : (
             <ul className="rep-activa-list">
-              {filas.map((f) => (
-                <li key={f.rep.id}>
-                  <button
-                    type="button"
-                    className={`rep-activa-card cuentas-cliente-tile${f.baja ? '' : f.activa ? '' : ' rep-orden-entregada'}`}
-                    onClick={() => onSelectRep?.(f.rep)}
-                  >
+              {filas.map((f) => {
+                const esActual = ordenActualId != null && String(f.rep.id) === String(ordenActualId)
+                const cuerpo = (
+                  <>
                     <span className={`rep-orden-badge ${claseBadgeEstatusOrden(f.rep?.estatus)}`}>
                       {f.baja ? 'Baja' : f.activa ? 'En taller' : 'Entregada'}
                     </span>
-                    <strong>🔧 Orden #{f.ordenId}</strong>
+                    <strong>🔧 Orden #{f.ordenId}{esActual ? ' · actual' : ''}</strong>
                     <span className="rep-activa-dato">
                       <span className="rep-activa-etiqueta">Serie:</span> {f.serie}
                     </span>
@@ -250,10 +274,26 @@ export default function ClientesOrdenesServicioPanel({
                     {f.tipo ? <span className="small">🔧 Tipo: {f.tipo}</span> : null}
                     {f.equipo ? <span className="small">📝 {f.equipo}</span> : null}
                     {f.problema ? <span className="small">⚠️ {f.problema}</span> : null}
+                    {f.solucion ? <span className="small">✅ {f.solucion}</span> : null}
                     <span className="small">📊 Estado: {f.estatus}</span>
-                  </button>
-                </li>
-              ))}
+                  </>
+                )
+                const clase = `rep-activa-card cuentas-cliente-tile${soloConsulta ? ' rep-activa-card--consulta' : ''}${f.baja ? '' : f.activa ? '' : ' rep-orden-entregada'}${esActual ? ' rep-activa-card--actual' : ''}`
+                if (soloConsulta) {
+                  return (
+                    <li key={f.rep.id}>
+                      <div className={clase}>{cuerpo}</div>
+                    </li>
+                  )
+                }
+                return (
+                  <li key={f.rep.id}>
+                    <button type="button" className={clase} onClick={() => onSelectRep?.(f.rep)}>
+                      {cuerpo}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>

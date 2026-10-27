@@ -6449,7 +6449,18 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
 }
 
 .clientes-ordenes-tabla {
-  min-width: 920px;
+  min-width: 1280px;
+}
+
+.clientes-ordenes-col-detalle {
+  display: -webkit-box;
+  max-width: 280px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .clientes-ordenes-col-texto {
@@ -6478,6 +6489,29 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
 
 .clientes-ordenes-tabla-fila--clic:hover td {
   border-color: #90caf9;
+}
+
+.clientes-ordenes-tabla-fila--actual td {
+  background: #e8f5e9;
+}
+
+.clientes-ordenes-marca-actual {
+  margin-left: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #2e7d32;
+}
+
+.rep-activa-card--actual {
+  outline: 2px solid #2e7d32;
+}
+
+.rep-activa-card.rep-activa-card--consulta,
+.rep-activa-card.rep-activa-card--consulta:hover,
+.rep-activa-card.rep-activa-card--consulta:focus-visible {
+  cursor: default;
 }
 
 .rep-orden-badge--tabla {
@@ -7389,6 +7423,14 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
 
 .modal-wide {
   max-width: 560px;
+}
+
+.modal.modal-ordenes-cliente {
+  max-width: min(1520px, calc(100vw - 32px));
+}
+
+.modal-ordenes-cliente .clientes-ordenes-col-texto {
+  max-width: 320px;
 }
 
 .form-stack {
@@ -8518,6 +8560,21 @@ button.inventario-card-main:focus-visible .inventario-card-precio--compra {
 
 .rep-actions .btn-cotizaciones-cliente-orden.wide:disabled {
   background: #80cbc4;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.rep-actions .btn-historial-ordenes.wide {
+  background: #1565c0;
+  color: #fff;
+}
+
+.rep-actions .btn-historial-ordenes.wide:hover:not(:disabled) {
+  background: #0d47a1;
+}
+
+.rep-actions .btn-historial-ordenes.wide:disabled {
+  background: #90caf9;
   color: #fff;
   cursor: not-allowed;
 }
