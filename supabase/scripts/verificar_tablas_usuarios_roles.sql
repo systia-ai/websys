@@ -35,6 +35,7 @@ WHERE n.nspname = 'public'
     'es_admin_actual',
     'listar_usuarios_con_roles',
     'asignar_rol_usuario',
+    'guardar_nombre_tecnico',
     'obtener_permisos_roles',
     'guardar_permisos_rol'
   )
@@ -46,7 +47,8 @@ SELECT
   u.email,
   u.created_at,
   u.last_sign_in_at,
-  COALESCE(ur.rol, '(sin fila → TECNICO por defecto)') AS rol
+  COALESCE(ur.rol, '(sin fila → TECNICO por defecto)') AS rol,
+  ur.nombre_tecnico
 FROM auth.users u
 LEFT JOIN public.user_roles ur ON ur.user_id = u.id
 ORDER BY u.created_at DESC;

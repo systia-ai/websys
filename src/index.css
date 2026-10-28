@@ -10844,6 +10844,56 @@ input.full {
   width: 1%;
 }
 
+.administracion-tabla-acciones-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.administracion-btn-contrasena {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.administracion-btn-contrasena:hover:not(:disabled) {
+  background: #bbdefb;
+  border-color: #64b5f6;
+}
+
+.administracion-btn-contrasena:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.administracion-contrasena-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.administracion-nombre-input {
+  width: 100%;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #cfd8dc;
+  font-size: 0.9rem;
+}
+
 .administracion-btn-borrar-rol {
   display: inline-flex;
   align-items: center;
@@ -13279,6 +13329,17 @@ input.full {
   background: #991b1b !important;
   color: #ffffff !important;
   border-color: #b91c1c !important;
+}
+
+:root[data-theme='dark'] .administracion-btn-contrasena {
+  background: #1e3a5f !important;
+  color: #dbeafe !important;
+  border-color: #3b82f6 !important;
+}
+
+:root[data-theme='dark'] .administracion-btn-contrasena:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  color: #ffffff !important;
 }
 
 :root[data-theme='dark'] .icon-back,

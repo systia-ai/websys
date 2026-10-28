@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.eliminar-usuario]
 verify_jwt = true
+
+[functions.cambiar-contrasena-usuario]
+verify_jwt = true

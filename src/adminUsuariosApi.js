@@ -4,8 +4,9 @@ async function mensajeErrorInvoke(error) {
   if (error instanceof FunctionsHttpError) {
     try {
       const payload = await error.context.json()
-      if (payload && typeof payload === 'object' && payload.error) {
-        return String(payload.error)
+      if (payload && typeof payload === 'object') {
+        if (payload.error) return String(payload.error)
+        if (payload.message) return String(payload.message)
       }
     } catch {
       /* respuesta no JSON */
@@ -38,9 +39,9 @@ function humanizarErrorCrearUsuario(errorMsg) {
 /**
  * Crea un usuario en Supabase Auth y le asigna rol en user_roles (solo ADMIN).
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
- * @param {{ email: string, password: string, rol: string }} params
+ * @param {{ email: string, password: string, rol: string, nombreTecnico?: string }} params
  */
-export async function crearUsuarioAdmin(supabase, { email, password, rol }) {
+export async function crearUsuarioAdmin(supabase, { email, password, rol, nombreTecnico }) {
   if (!supabase) {
     return { ok: false, errorMsg: 'Supabase no está configurado.' }
   }
@@ -50,6 +51,7 @@ export async function crearUsuarioAdmin(supabase, { email, password, rol }) {
       email: String(email ?? '').trim().toLowerCase(),
       password: String(password ?? ''),
       rol: String(rol ?? 'TECNICO').trim().toUpperCase(),
+      nombre_tecnico: String(nombreTecnico ?? '').trim(),
     },
   })
 
@@ -108,6 +110,65 @@ export async function eliminarUsuarioAdmin(supabase, { userId }) {
 
   if (data && typeof data === 'object' && 'error' in data && data.error) {
     return { ok: false, errorMsg: humanizarErrorEliminarUsuario(String(data.error)) }
+  }
+
+  return { ok: true, data }
+}
+
+function humanizarErrorCambiarContrasena(errorMsg) {
+  const m = String(errorMsg ?? '').toLowerCase()
+  if (
+    m.includes('not desplegada') ||
+    m.includes('failed to fetch') ||
+    m.includes('not found') ||
+    m.includes('404')
+  ) {
+    return 'La función para cambiar contraseñas no está disponible. Despliegue la Edge Function cambiar-contrasena-usuario en Supabase.'
+  }
+  if (m.includes('solo administradores')) {
+    return 'Solo administradores pueden cambiar contraseñas.'
+  }
+  if (m.includes('al menos 6')) {
+    return 'La contraseña debe tener al menos 6 caracteres.'
+  }
+  if (m.includes('72')) {
+    return 'La contraseña no puede superar 72 caracteres.'
+  }
+  if (m.includes('no encontrado')) {
+    return 'Usuario no encontrado.'
+  }
+  return String(errorMsg ?? 'No se pudo cambiar la contraseña.')
+}
+
+/**
+ * Cambia la contraseña de acceso de un usuario (solo ADMIN).
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {{ userId: string, password: string }} params
+ */
+export async function cambiarContrasenaUsuarioAdmin(supabase, { userId, password }) {
+  if (!supabase) {
+    return { ok: false, errorMsg: 'Supabase no está configurado.' }
+  }
+
+  const id = String(userId ?? '').trim()
+  if (!id) {
+    return { ok: false, errorMsg: 'Usuario no válido.' }
+  }
+
+  const { data, error } = await supabase.functions.invoke('cambiar-contrasena-usuario', {
+    body: {
+      user_id: id,
+      password: String(password ?? ''),
+    },
+  })
+
+  if (error) {
+    const msg = await mensajeErrorInvoke(error)
+    return { ok: false, errorMsg: humanizarErrorCambiarContrasena(msg) }
+  }
+
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { ok: false, errorMsg: humanizarErrorCambiarContrasena(String(data.error)) }
   }
 
   return { ok: true, data }

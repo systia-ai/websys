@@ -6,7 +6,7 @@ import { usePermisoEliminar } from './usePermisoEliminar.js'
 import { MENSAJE_SIN_PERMISO_CREAR_USUARIO } from './permisosUtils.js'
 import { ETIQUETAS_ROL, ROLES_SISTEMA } from './permisosConfig.js'
 import AdministracionConfiguracionTabs from './AdministracionConfiguracionTabs.jsx'
-import { crearUsuarioAdmin, eliminarUsuarioAdmin } from './adminUsuariosApi.js'
+import { cambiarContrasenaUsuarioAdmin, crearUsuarioAdmin, eliminarUsuarioAdmin } from './adminUsuariosApi.js'
 
 function formatearFecha(raw) {
   if (!raw) return '—'
@@ -19,6 +19,41 @@ function formatearFecha(raw) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function CampoNombreTecnico({ valor, disabled, onGuardar }) {
+  const [texto, setTexto] = useState(valor ?? '')
+
+  useEffect(() => {
+    setTexto(valor ?? '')
+  }, [valor])
+
+  async function confirmar() {
+    const limpio = texto.trim()
+    if (limpio === String(valor ?? '').trim()) return
+    const ok = await onGuardar(limpio)
+    if (!ok) setTexto(valor ?? '')
+  }
+
+  return (
+    <input
+      type="text"
+      className="administracion-nombre-input"
+      value={texto}
+      maxLength={80}
+      placeholder="Nombre del técnico"
+      disabled={disabled}
+      aria-label="Nombre del técnico"
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => void confirmar()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
 }
 
 export default function AdministracionModulo({
@@ -42,8 +77,13 @@ export default function AdministracionModulo({
   const [nuevoPassword, setNuevoPassword] = useState('')
   const [nuevoPassword2, setNuevoPassword2] = useState('')
   const [nuevoRol, setNuevoRol] = useState('TECNICO')
+  const [nuevoNombreTecnico, setNuevoNombreTecnico] = useState('')
   const [crearUsuarioExpandido, setCrearUsuarioExpandido] = useState(false)
   const [usuarioEliminarConfirm, setUsuarioEliminarConfirm] = useState(null)
+  const [usuarioContrasena, setUsuarioContrasena] = useState(null)
+  const [nuevaContrasena, setNuevaContrasena] = useState('')
+  const [nuevaContrasena2, setNuevaContrasena2] = useState('')
+  const [cambiandoContrasena, setCambiandoContrasena] = useState(false)
   const { alertaPermiso, mostrarSinPermiso } = usePermisoEliminar(puedeCambiarRoles)
 
   const cargarUsuarios = useCallback(async () => {
@@ -62,6 +102,7 @@ export default function AdministracionModulo({
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
         rol: String(u.rol ?? 'TECNICO').toUpperCase(),
+        nombre_tecnico: String(u.nombre_tecnico ?? '').trim(),
       }))
       setUsuarios(lista)
     } catch (e) {
@@ -104,6 +145,36 @@ export default function AdministracionModulo({
     }
   }
 
+  async function guardarNombreTecnico(userId, nombre) {
+    if (!puedeCambiarRoles) {
+      mostrarSinPermiso('Su usuario no tiene permisos para cambiar el nombre del técnico.')
+      return false
+    }
+    const limpio = String(nombre ?? '').trim()
+    if (limpio.length > 80) {
+      onError?.('El nombre del técnico no puede superar 80 caracteres.')
+      return false
+    }
+    setGuardandoId(userId)
+    try {
+      const { error } = await supabase.rpc('guardar_nombre_tecnico', {
+        p_user_id: userId,
+        p_nombre: limpio,
+      })
+      if (error) throw error
+      setUsuarios((prev) =>
+        prev.map((u) => (String(u.user_id) === String(userId) ? { ...u, nombre_tecnico: limpio } : u)),
+      )
+      onNotice?.(limpio ? `Nombre del técnico actualizado a ${limpio}.` : 'Nombre del técnico eliminado.')
+      return true
+    } catch (e) {
+      onError?.(`No se pudo guardar el nombre del técnico: ${e.message}`)
+      return false
+    } finally {
+      setGuardandoId(null)
+    }
+  }
+
   async function crearNuevoUsuario(e) {
     e.preventDefault()
     if (!puedeCambiarRoles) {
@@ -111,6 +182,11 @@ export default function AdministracionModulo({
       return
     }
     const email = nuevoEmail.trim()
+    const nombreTecnico = nuevoNombreTecnico.trim()
+    if (!nombreTecnico) {
+      onError?.('Ingrese el nombre del técnico.')
+      return
+    }
     if (!email) {
       onError?.('Ingrese el correo del nuevo usuario.')
       return
@@ -129,17 +205,32 @@ export default function AdministracionModulo({
         email,
         password: nuevoPassword,
         rol: nuevoRol,
+        nombreTecnico,
       })
       if (!result.ok) {
         onError?.(result.errorMsg)
         return
       }
+      const userId = result.data?.user_id
+      let errorNombre = null
+      if (userId) {
+        const { error } = await supabase.rpc('guardar_nombre_tecnico', {
+          p_user_id: userId,
+          p_nombre: nombreTecnico,
+        })
+        if (error) errorNombre = error.message
+      }
       setNuevoEmail('')
       setNuevoPassword('')
       setNuevoPassword2('')
+      setNuevoNombreTecnico('')
       setNuevoRol('TECNICO')
       setCrearUsuarioExpandido(false)
-      onNotice?.(`Usuario ${email} creado con rol ${nuevoRol}.`)
+      if (errorNombre) {
+        onError?.(`Usuario creado, pero no se guardó el nombre del técnico: ${errorNombre}`)
+      } else {
+        onNotice?.(`Usuario ${nombreTecnico} (${email}) creado con rol ${nuevoRol}.`)
+      }
       await cargarUsuarios()
     } finally {
       setCreandoUsuario(false)
@@ -152,6 +243,60 @@ export default function AdministracionModulo({
       return
     }
     setCrearUsuarioExpandido((v) => !v)
+  }
+
+  function abrirCambioContrasena(fila) {
+    if (!puedeCambiarRoles) {
+      mostrarSinPermiso('Su usuario no tiene permisos para cambiar contraseñas.')
+      return
+    }
+    if (!fila?.user_id) return
+    setNuevaContrasena('')
+    setNuevaContrasena2('')
+    setUsuarioContrasena(fila)
+  }
+
+  function cerrarCambioContrasena() {
+    if (cambiandoContrasena) return
+    setUsuarioContrasena(null)
+    setNuevaContrasena('')
+    setNuevaContrasena2('')
+  }
+
+  async function ejecutarCambioContrasena(e) {
+    e.preventDefault()
+    const fila = usuarioContrasena
+    if (!fila || !puedeCambiarRoles) return
+    if (nuevaContrasena.length < 6) {
+      onError?.('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+    if (nuevaContrasena.length > 72) {
+      onError?.('La contraseña no puede superar 72 caracteres.')
+      return
+    }
+    if (nuevaContrasena !== nuevaContrasena2) {
+      onError?.('Las contraseñas no coinciden.')
+      return
+    }
+    setCambiandoContrasena(true)
+    try {
+      const result = await cambiarContrasenaUsuarioAdmin(supabase, {
+        userId: fila.user_id,
+        password: nuevaContrasena,
+      })
+      if (!result.ok) {
+        onError?.(result.errorMsg)
+        return
+      }
+      const quien = fila.nombre_tecnico || fila.email
+      setUsuarioContrasena(null)
+      setNuevaContrasena('')
+      setNuevaContrasena2('')
+      onNotice?.(`Contraseña de ${quien} actualizada.`)
+    } finally {
+      setCambiandoContrasena(false)
+    }
   }
 
   function solicitarEliminarUsuario(fila) {
@@ -243,7 +388,8 @@ export default function AdministracionModulo({
                 Roles: <strong>ADMIN</strong> (acceso total, incluye eliminar),{' '}
                 <strong>COORDINADOR</strong> (todos los módulos como admin, sin eliminar registros ni cambiar
                 roles/permisos), <strong>TECNICO</strong> y <strong>OPERADOR</strong> (acceso reducido). Los permisos
-                detallados se configuran en la pestaña Configuración.
+                detallados se configuran en la pestaña Configuración. Un administrador puede cambiar la contraseña
+                de acceso de cualquier usuario desde Acciones.
               </p>
             </section>
 
@@ -275,6 +421,19 @@ export default function AdministracionModulo({
                     <p className="warn-inline">Sin Supabase no se pueden crear usuarios desde aquí.</p>
                   ) : (
                     <form className="administracion-crear-usuario-form" onSubmit={(e) => void crearNuevoUsuario(e)}>
+                      <label className="administracion-crear-usuario-campo">
+                        <span>Nombre del técnico</span>
+                        <input
+                          type="text"
+                          value={nuevoNombreTecnico}
+                          onChange={(e) => setNuevoNombreTecnico(e.target.value)}
+                          placeholder="Ej. Juan Pérez"
+                          autoComplete="off"
+                          maxLength={80}
+                          disabled={creandoUsuario}
+                          required
+                        />
+                      </label>
                       <label className="administracion-crear-usuario-campo">
                         <span>Correo</span>
                         <input
@@ -354,6 +513,7 @@ export default function AdministracionModulo({
                   <thead>
                     <tr>
                       <th>Correo</th>
+                      <th>Nombre del técnico</th>
                       <th>Rol</th>
                       <th>Creado</th>
                       <th>Último acceso</th>
@@ -364,6 +524,17 @@ export default function AdministracionModulo({
                     {usuarios.map((u) => (
                       <tr key={u.user_id}>
                         <td>{u.email}</td>
+                        <td>
+                          {puedeCambiarRoles ? (
+                            <CampoNombreTecnico
+                              valor={u.nombre_tecnico}
+                              disabled={guardandoId === u.user_id}
+                              onGuardar={(nombre) => guardarNombreTecnico(u.user_id, nombre)}
+                            />
+                          ) : (
+                            u.nombre_tecnico || '—'
+                          )}
+                        </td>
                         <td>
                           <select
                             value={u.rol}
@@ -382,6 +553,18 @@ export default function AdministracionModulo({
                         <td>{formatearFecha(u.last_sign_in_at)}</td>
                         {puedeCambiarRoles ? (
                           <td className="administracion-tabla-acciones">
+                            <div className="administracion-tabla-acciones-btns">
+                            <button
+                              type="button"
+                              className="administracion-btn-contrasena"
+                              onClick={() => abrirCambioContrasena(u)}
+                              disabled={guardandoId === u.user_id || cambiandoContrasena}
+                              title="Cambiar contraseña de acceso"
+                              aria-label={`Cambiar contraseña de ${u.nombre_tecnico || u.email}`}
+                            >
+                              <span aria-hidden="true">🔑</span>
+                              <span>Contraseña</span>
+                            </button>
                             <button
                               type="button"
                               className="administracion-btn-borrar-rol"
@@ -399,6 +582,7 @@ export default function AdministracionModulo({
                               </span>
                               <span>Eliminar</span>
                             </button>
+                            </div>
                           </td>
                         ) : null}
                       </tr>
@@ -419,6 +603,68 @@ export default function AdministracionModulo({
           />
         )}
       </div>
+
+      <ModalAlerta
+        open={Boolean(usuarioContrasena)}
+        onClose={cerrarCambioContrasena}
+        titulo="Cambiar contraseña"
+        mensaje={
+          usuarioContrasena
+            ? `Nueva contraseña de acceso para ${usuarioContrasena.nombre_tecnico || usuarioContrasena.email}.`
+            : ''
+        }
+        variante="info"
+        icono="🔑"
+        backdropClose={!cambiandoContrasena}
+        tituloId="cambiar-contrasena-admin-titulo"
+        role="dialog"
+        footer={
+          <>
+            <button type="button" className="secondary" disabled={cambiandoContrasena} onClick={cerrarCambioContrasena}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="form-cambiar-contrasena"
+              className="btn-primary modal-alerta-btn"
+              disabled={cambiandoContrasena}
+            >
+              {cambiandoContrasena ? 'Guardando…' : 'Guardar contraseña'}
+            </button>
+          </>
+        }
+      >
+        <form id="form-cambiar-contrasena" className="administracion-contrasena-form" onSubmit={(e) => void ejecutarCambioContrasena(e)}>
+          <label className="administracion-crear-usuario-campo">
+            <span>Nueva contraseña</span>
+            <input
+              type="password"
+              value={nuevaContrasena}
+              onChange={(e) => setNuevaContrasena(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
+              disabled={cambiandoContrasena}
+              required
+            />
+          </label>
+          <label className="administracion-crear-usuario-campo">
+            <span>Confirmar contraseña</span>
+            <input
+              type="password"
+              value={nuevaContrasena2}
+              onChange={(e) => setNuevaContrasena2(e.target.value)}
+              placeholder="Repita la contraseña"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
+              disabled={cambiandoContrasena}
+              required
+            />
+          </label>
+        </form>
+      </ModalAlerta>
 
       <ModalAlerta
         open={Boolean(usuarioEliminarConfirm)}

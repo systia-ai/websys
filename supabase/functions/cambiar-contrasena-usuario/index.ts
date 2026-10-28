@@ -1,0 +1,90 @@
+/**
+ * Edge Function: cambia la contraseña de acceso de un usuario.
+ * Solo invocable por sesión ADMIN (es_admin_actual).
+ */
+
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function json(status: number, body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+  if (req.method !== 'POST') {
+    return json(405, { error: 'Method not allowed' })
+  }
+
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return json(401, { error: 'Sesión no válida. Inicie sesión de nuevo.' })
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  if (!supabaseUrl || !serviceKey || !anonKey) {
+    return json(500, { error: 'Configuración del servidor incompleta.' })
+  }
+
+  let body: { user_id?: string; password?: string } = {}
+  try {
+    body = (await req.json()) as typeof body
+  } catch {
+    return json(400, { error: 'Cuerpo JSON inválido.' })
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  })
+
+  const { data: userData, error: userErr } = await userClient.auth.getUser()
+  if (userErr || !userData.user) {
+    return json(401, { error: 'Sesión no válida. Inicie sesión de nuevo.' })
+  }
+
+  const { data: isAdmin, error: adminErr } = await userClient.rpc('es_admin_actual')
+  if (adminErr || !isAdmin) {
+    return json(403, { error: 'Solo administradores pueden cambiar contraseñas.' })
+  }
+
+  const userId = String(body.user_id ?? '').trim()
+  const password = String(body.password ?? '')
+  if (!userId) {
+    return json(400, { error: 'Falta el identificador del usuario.' })
+  }
+  if (password.length < 6) {
+    return json(400, { error: 'La contraseña debe tener al menos 6 caracteres.' })
+  }
+  if (password.length > 72) {
+    return json(400, { error: 'La contraseña no puede superar 72 caracteres.' })
+  }
+
+  const adminClient = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const { data: target, error: targetErr } = await adminClient.auth.admin.getUserById(userId)
+  if (targetErr || !target.user) {
+    return json(404, { error: 'Usuario no encontrado.' })
+  }
+
+  const { error: updateErr } = await adminClient.auth.admin.updateUserById(userId, { password })
+  if (updateErr) {
+    return json(400, { error: updateErr.message || 'No se pudo cambiar la contraseña.' })
+  }
+
+  return json(200, { ok: true, user_id: userId })
+})

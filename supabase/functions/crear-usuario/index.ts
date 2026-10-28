@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     return json(500, { error: 'Configuración del servidor incompleta.' })
   }
 
-  let body: { email?: string; password?: string; rol?: string } = {}
+  let body: { email?: string; password?: string; rol?: string; nombre_tecnico?: string } = {}
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -65,9 +65,13 @@ Deno.serve(async (req) => {
   const email = String(body.email ?? '').trim().toLowerCase()
   const password = String(body.password ?? '')
   const rol = String(body.rol ?? 'TECNICO').trim().toUpperCase()
+  const nombreTecnico = String(body.nombre_tecnico ?? '').trim()
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json(400, { error: 'Correo electrónico no válido.' })
+  }
+  if (nombreTecnico.length > 80) {
+    return json(400, { error: 'El nombre del técnico no puede superar 80 caracteres.' })
   }
   if (password.length < 6) {
     return json(400, { error: 'La contraseña debe tener al menos 6 caracteres.' })
@@ -103,6 +107,7 @@ Deno.serve(async (req) => {
     {
       user_id: newUserId,
       rol,
+      nombre_tecnico: nombreTecnico || null,
       assigned_by: userData.user.id,
       assigned_at: new Date().toISOString(),
     },
@@ -121,5 +126,6 @@ Deno.serve(async (req) => {
     user_id: newUserId,
     email,
     rol,
+    nombre_tecnico: nombreTecnico,
   })
 })

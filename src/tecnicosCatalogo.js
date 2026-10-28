@@ -74,6 +74,30 @@ export async function leerTecnicosRemotos(supabase) {
   }
 }
 
+/**
+ * Nombres de técnico registrados en Administración → Usuarios y roles.
+ * No incluye el catálogo histórico: solo usuarios con nombre capturado.
+ */
+export async function cargarTecnicosDesdeUsuarios(supabase) {
+  if (!supabase?.rpc) return []
+  try {
+    const { data, error } = await supabase.rpc('listar_usuarios_con_roles')
+    if (error) throw error
+    return unificarListas((data ?? []).map((u) => u?.nombre_tecnico))
+  } catch (e) {
+    console.warn('No se pudieron cargar los técnicos desde usuarios:', e?.message ?? e)
+    return []
+  }
+}
+
+/**
+ * Opciones del combo de una orden: usuarios con rol y, si hace falta,
+ * el técnico ya guardado en la reparación aunque ya no esté en usuarios.
+ */
+export function opcionesTecnicosOrden(catalogo, asignados = []) {
+  return unificarListas(catalogo, asignados)
+}
+
 /** Defaults + servidor + localStorage de esta PC. */
 export async function cargarTecnicosUnificados(supabase) {
   const remoto = await leerTecnicosRemotos(supabase)

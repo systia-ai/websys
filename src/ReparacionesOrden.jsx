@@ -7,7 +7,7 @@ import { NIVELES_TINTA_PCT, TIPOS_EQUIPO_REPARACION, TIPOS_REPARACION } from './
 import AlertaPermiso from './AlertaPermiso.jsx'
 import ModalAlerta from './ModalAlerta.jsx'
 import ClientesOrdenesServicioPanel from './ClientesOrdenesServicioPanel.jsx'
-import { cargarTecnicosUnificados, combinarTecnicos, separarTecnicos } from './tecnicosCatalogo.js'
+import { cargarTecnicosDesdeUsuarios, combinarTecnicos, opcionesTecnicosOrden, separarTecnicos } from './tecnicosCatalogo.js'
 import { usePermisoEliminar } from './usePermisoEliminar.js'
 import ReparacionFotosPanel, { revocarPendientesFotos } from './ReparacionFotosPanel.jsx'
 import {
@@ -341,6 +341,10 @@ export default function ReparacionesOrden({
   const esOrdenExistente = repIdStrEsOrdenExistente(repIdStr)
 
   const entradasBitacora = useMemo(() => parseBitacora(bitacora), [bitacora])
+  const opcionesTecnico = useMemo(
+    () => opcionesTecnicosOrden(tecnicosCatalogo, [tecnico1, tecnico2]),
+    [tecnicosCatalogo, tecnico1, tecnico2],
+  )
 
   const puedeEnviarPagoTotalWa = puedeEnviarPagoTotalWhatsApp(cuentaOrden, estatus)
 
@@ -754,7 +758,7 @@ export default function ReparacionesOrden({
 
   useEffect(() => {
     let cancelado = false
-    void cargarTecnicosUnificados(supabase).then((lista) => {
+    void cargarTecnicosDesdeUsuarios(supabase).then((lista) => {
       if (!cancelado) setTecnicosCatalogo(lista)
     })
     return () => {
@@ -2699,7 +2703,7 @@ export default function ReparacionesOrden({
           <div className="tecnicos-selects">
             <select value={tecnico1} onChange={(e) => setTecnico1(e.target.value)}>
               <option value="">— Técnico 1 —</option>
-              {tecnicosCatalogo.map((t) => (
+              {opcionesTecnico.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -2708,7 +2712,7 @@ export default function ReparacionesOrden({
             <span className="tecnicos-amp" aria-hidden="true">&amp;</span>
             <select value={tecnico2} onChange={(e) => setTecnico2(e.target.value)}>
               <option value="">— Técnico 2 (opcional) —</option>
-              {tecnicosCatalogo
+              {opcionesTecnico
                 .filter((t) => t !== tecnico1)
                 .map((t) => (
                   <option key={t} value={t}>
