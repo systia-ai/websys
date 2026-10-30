@@ -4154,6 +4154,33 @@ td {
   gap: 4px;
 }
 
+.monitor-ordenes-notif-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  white-space: normal;
+  max-width: none;
+}
+
+.monitor-ordenes-notif-fecha {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #4e342e;
+  background: #fff8e1;
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.monitor-ordenes-tabla tbody tr.monitor-ordenes-tabla-fila--verificada .monitor-ordenes-notif-fecha,
+.monitor-ordenes-tabla tbody tr.monitor-ordenes-tabla-fila--verificada:hover .monitor-ordenes-notif-fecha {
+  color: #4e342e;
+  background: #fff8e1;
+}
+
 .monitor-ordenes-tipo-servicio-inner {
   display: flex;
   flex-direction: column;
@@ -9676,6 +9703,23 @@ input.full {
   background: #00695c;
 }
 
+.ventas-acciones .btn-whatsapp-cuenta {
+  background: #4caf50;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(76, 175, 80, 0.35);
+}
+
+.ventas-acciones .btn-whatsapp-cuenta:hover:not(:disabled) {
+  background: #43a047;
+}
+
+.ventas-acciones .btn-whatsapp-cuenta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .cuenta-notificacion-mensaje {
   width: 100%;
   margin-top: 10px;
@@ -12328,6 +12372,12 @@ input.full {
 :root[data-theme='dark'] .monitor-ordenes-tabla tbody tr.monitor-ordenes-tabla-fila--verificada td {
   border-color: rgba(66, 165, 245, 0.35) !important;
   color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .monitor-ordenes-tabla tbody tr.monitor-ordenes-tabla-fila--verificada .monitor-ordenes-notif-fecha,
+:root[data-theme='dark'] .monitor-ordenes-tabla tbody tr.monitor-ordenes-tabla-fila--verificada:hover .monitor-ordenes-notif-fecha {
+  color: #4e342e !important;
+  background: #ffe0b2 !important;
 }
 
 :root[data-theme='dark'] .monitor-ordenes-tabla-fila--verificada.monitor-ordenes-tabla-fila--clic:hover {

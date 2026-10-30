@@ -656,6 +656,13 @@ export function contarNotificacionesClienteBitacora(raw) {
   return parseBitacora(raw).filter((e) => esEntradaNotificacionCliente(e?.texto)).length
 }
 
+/** Fecha de la última confirmación de notificación al cliente (marca de bitácora), o null. */
+export function fechaUltimaNotificacionClienteBitacora(raw) {
+  const entradas = parseBitacora(raw).filter((e) => esEntradaNotificacionCliente(e?.texto) && e?.fecha)
+  if (!entradas.length) return null
+  return entradas[entradas.length - 1].fecha
+}
+
 /** Texto de bitácora al confirmar notificación al cliente (con número secuencial). */
 export function textoNotaBitacoraNotificacionCliente(numero) {
   const n = Number(numero)

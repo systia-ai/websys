@@ -8,6 +8,8 @@ import { fetchAllRows } from './supabaseFetchAll.js'
 import {
   aYmdLocalDesdeRaw,
   contarNotificacionesClienteBitacora,
+  fechaUltimaNotificacionClienteBitacora,
+  formatFechaBitacora,
   estaVerificadoEntrega,
   estatusParaFiltroMonitor,
   ESTATUS_BAJA,
@@ -21,6 +23,7 @@ import {
   fechaIngresoYmd,
   nombresTecnicosEnOrden,
   ordenUsaSistemaWeb,
+  repEsVerificadaListaEntrega,
   repCoincideFiltroMonitor,
   repCoincideBusquedaProblemaSolucionMonitor,
   tecnicoRepCoincideFiltro,
@@ -959,6 +962,12 @@ export default function MonitorOrdenesModulo({
   function badgeEstatus(rep) {
     const verificada = estaVerificadoEntrega(rep)
     const numNotificaciones = contarNotificacionesClienteBitacora(rep?.bitacora)
+    const fechaUltimaNotificacion = repEsVerificadaListaEntrega(rep)
+      ? fechaUltimaNotificacionClienteBitacora(rep?.bitacora)
+      : null
+    const fechaNotificacionTxt = fechaUltimaNotificacion
+      ? formatFechaBitacora(fechaUltimaNotificacion)
+      : ''
     const st = String(rep?.estatus ?? '—').trim()
     return (
       <span className="monitor-ordenes-estatus-celda">
@@ -970,10 +979,17 @@ export default function MonitorOrdenesModulo({
         ) : null}
         {numNotificaciones > 0 ? (
           <span
-            className="rep-orden-badge rep-orden-badge--tabla rep-orden-badge--notificada"
-            title={`${numNotificaciones} notificación${numNotificaciones === 1 ? '' : 'es'} al cliente`}
+            className={`rep-orden-badge rep-orden-badge--tabla rep-orden-badge--notificada${fechaNotificacionTxt ? ' monitor-ordenes-notif-badge' : ''}`}
+            title={
+              fechaNotificacionTxt
+                ? `${numNotificaciones} notificación${numNotificaciones === 1 ? '' : 'es'} al cliente. Última: ${fechaNotificacionTxt}`
+                : `${numNotificaciones} notificación${numNotificaciones === 1 ? '' : 'es'} al cliente`
+            }
           >
-            NOTIFICACIÓN({numNotificaciones})
+            <span>NOTIFICACIÓN({numNotificaciones})</span>
+            {fechaNotificacionTxt ? (
+              <span className="monitor-ordenes-notif-fecha">{fechaNotificacionTxt}</span>
+            ) : null}
           </span>
         ) : null}
       </span>
